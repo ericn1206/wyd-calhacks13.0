@@ -22,15 +22,5 @@ Open app → join session → consent (webcam, active app, phone) → set 2–3 
 
 Current code differs on several values; see `../status.md#mismatches`.
 
-## Screens
-Join · Consent · Goals · Focus (timer + own status + group presence) · Nudge · Incoming call / call · Break (goal check-off) · Private summary · Replay (opt-in).
-
 ## Summary (private, per person)
 % on task · goals completed · deep-work blocks · interruptions · opt-in replay with one-line captions (one Claude call per session).
-
-## Demo must show
-1. Two+ people join one session and consent.
-2. One person drifts (e.g. YouTube) → status flips off-task after smoothing.
-3. Group call pops for everyone, auto-ends.
-4. Second drift inside cooldown → nudge, not call.
-5. Session end → private summary.
