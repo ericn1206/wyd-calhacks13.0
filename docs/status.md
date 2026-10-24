@@ -55,7 +55,6 @@ Last updated: 2026-10-24. Biggest gap: **nothing connects to SpacetimeDB yet**. 
 
 Kevin-specific (his machine/setup only):
 - Node v20.19.5 installed; worker needs Node 24, so `npm run fixtures` likely fails until upgraded.
-- `.gitignore` ignores `**/package-lock.json`, but lockfiles are tracked.
 - Empty untracked `desktop/src/` folder at root; desktop code lives in `src/`.
 
 ## Reorganize procedure
