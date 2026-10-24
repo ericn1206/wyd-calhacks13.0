@@ -51,9 +51,12 @@ Last updated: 2026-10-24. Biggest gap: **nothing connects to SpacetimeDB yet**. 
 - Desktop has no `.env` loader: `ANTHROPIC_API_KEY` must be in the shell env for `npm run dev`.
 - Worker runs `.ts` directly: needs Node 24 (`node -v`).
 - `osascript` needs Accessibility/Automation permission for System Events; window titles need Screen Recording.
+- SpacetimeDB `init` seeds only on first publish; after a schema publish run `seed_defaults`.
+
+Kevin-specific (his machine/setup only):
+- Node v20.19.5 installed; worker needs Node 24, so `npm run fixtures` likely fails until upgraded.
 - `.gitignore` ignores `**/package-lock.json`, but lockfiles are tracked.
 - Empty untracked `desktop/src/` folder at root; desktop code lives in `src/`.
-- SpacetimeDB `init` seeds only on first publish; after a schema publish run `seed_defaults`.
 
 ## Reorganize procedure
 When asked to "reorganize" (or "update the docs"), Claude:
