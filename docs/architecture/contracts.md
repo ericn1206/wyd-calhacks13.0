@@ -89,8 +89,25 @@ Other reducers: `../components/spacetimedb-schema.md#reducers`.
 | `sessionAPI.submitResponse` | `session:user-response` | renderer → main (invoke) | transcript string |
 | `sessionAPI.onPhase` | `session:phase` | main → renderer | `idle`/`speaking`/`listening`/`processing`/`done` |
 | `sessionAPI.onContextReady` | `session:context-ready` | main → renderer | `SessionContext {subject, goals[], notes}` |
+| `circleAPI.requestMediaAccess` | `media:request-access` | renderer → main (invoke) | → `{camera, microphone}` booleans (macOS prompt) |
+| `circleAPI.getCallToken` | `call:token` | renderer → main (invoke) | `(code, identity, name)` → `{url, token, room}` |
+| `circleAPI.setCallMode` | `window:call-mode` | renderer → main (invoke) | `boolean`: always-on-top + focus during a call |
 
 Types: `ActivityState` in `src/main/activityMonitor.ts`; renderer typings in `src/renderer/src/global.d.ts`.
+
+## LiveKit room
+Owner: `src/renderer/src/useCircleCall.ts`; token: `src/main/livekitToken.ts`.
+- Room: `lockin-<CODE>` (`CODE` = session code, A–Z0–9, 4–8 chars). One room per session; joined on entering the session, media published only during a call.
+- Identity: random UUID per app run. Name: lobby name (≤ 24 chars).
+- Token grants: `roomJoin`, `canPublish`, `canSubscribe`, `canPublishData`, `canUpdateOwnMetadata`; TTL 6 h.
+- Participant attributes:
+
+| Key | Value | Set when |
+|---|---|---|
+| `callEndsAt` | ms epoch as string; `''` = none | call started or joined; cleared at call end |
+| `inCall` | `'1'` or `''` | media published / left |
+
+Active call = max `callEndsAt` over all participants, if in the future. Everyone in the call copies it, so the call survives the starter leaving.
 
 ## Worker functions
 - `judge(topic, events: FocusEvent[], phase='work'|'break') → {status, confidence, reason}` (`worker/judge.ts`)

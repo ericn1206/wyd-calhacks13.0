@@ -1,7 +1,7 @@
 # Spec
 
 ## User flow
-Open app → join session → consent (webcam, active app, phone) → set 2–3 goals → Pomodoro work block → tracking.
+Open app → join session → consent (webcam, active app, phone (optional)) → typed questionnaire: subject + 2–3 goals (no AI voice) → Pomodoro work block → tracking.
 - Off task ≥ 2 min?
   - No → continue.
   - Yes → group call in last 30 min? Yes → gentle nudge (to that person only). No → surprise group call, auto-ends ~60 s.
