@@ -9,7 +9,7 @@ Last updated: 2026-10-24. Biggest gap: **nothing connects to SpacetimeDB yet**. 
 | Desktop activity tracking | `src/main/activityMonitor.ts` | Polls front app + window title + browser URL (Chrome/Safari/Arc/Brave) every 2 s via `osascript`. macOS only. |
 | Desktop categorization | `src/main/categorize.ts` | Rules + cache → contract categories (`coding`…`unknown`). Fills `activity.category`. |
 | Desktop judge | `src/main/claudeJudge.ts` | Claude call every 8 s once session context exists; output drives local alerts (30 s warning, 60 s alert). |
-| Desktop UI | `src/renderer/src/` (+ `docs/ui_integration.md`) | New Figma-Make UI: entry, intro, goals, focus workspace, dock, check-in windows, break, summary. All data hardcoded/local; Demo menu simulates events. Goals submit calls `wyd:tracking:start`. |
+| Desktop UI | `src/renderer/src/` (+ `docs/ui_integration.md`) · dock + check-ins in full-screen overlay window (`overlay/OverlayApp.tsx`) | New Figma-Make UI: entry, intro, goals, focus workspace, dock, check-in windows, break, summary. All data hardcoded/local; Demo menu simulates events. Goals submit calls `wyd:tracking:start`. |
 | Worker judge | `worker/judge.ts` | Text-only judge over 2-min window → `{status, confidence, reason}`; failure → confidence 0 (neutral). |
 | Worker categorizer | `worker/categorizeUnknown.ts` | Model categorization for `unknown` titles, cached. |
 | Worker fixtures | `worker/runFixtures.ts` | 15 scenarios, `npm run fixtures`. |
@@ -45,7 +45,7 @@ Last updated: 2026-10-24. Biggest gap: **nothing connects to SpacetimeDB yet**. 
 | Private summary | Hardcoded %, minutes, rhythm chart; compute from session records; Claude summary (1 call/session). |
 | Camera-on disclosure / vision | MediaPipe not built. |
 | Phone sensor, replay clips | Not built. |
-| Native overlays | Dock/check-ins render inside main window; need separate transparent always-on-top windows (`moveToCorner`, `setIgnoreMouseEvents` exist). |
+| Overlay polish | Overlay covers one display (the main window's work area, below the menu bar); no multi-display. "Apple desktop preview" demo is obsolete. Overlay window is hidden, not destroyed, outside focus. |
 | Demo menu + Apple desktop preview | Hide behind dev flag for final build. |
 | Voice AI | Archived in `outdated/`; re-add only if wanted. |
 

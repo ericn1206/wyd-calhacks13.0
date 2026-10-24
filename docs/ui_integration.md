@@ -113,8 +113,8 @@ The items below exist to demonstrate intended product behavior. Future agents mu
 #### Electron desktop behavior
 
 - The Electron shell, preload bridge, permissions, preference file, build configuration, and native window APIs are implemented.
-- The React prototype still renders dock and check-in overlays inside the main renderer window.
-- Separate transparent native overlay windows, true cross-application placement, active-application monitoring, and real screen streams remain integration work.
+- The dock, notifications and check-in windows render in a separate transparent, click-through, always-on-top Electron window covering the main window's display work area (`src/renderer/src/overlay/OverlayApp.tsx`, loaded as `index.html?overlay=1`). It exists only while the focus screen is showing. The main window keeps the timer, goals, role, Demo menu and modals, and syncs to the overlay through the bridge in `src/renderer/src/overlay/bridge.ts`.
+- Remaining integration work: multi-display placement, active-application monitoring, and real screen streams. The "Apple desktop preview" demo is superseded by the real overlay.
 
 ### Demo code removal rule
 

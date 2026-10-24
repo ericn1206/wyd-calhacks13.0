@@ -13,6 +13,15 @@ contextBridge.exposeInMainWorld('wydDesktop', {
   moveToCorner: (corner: CheckInCorner, size?: { width?: number; height?: number }) =>
     ipcRenderer.invoke('wyd:window:move-to-corner', corner, size),
   getDisplays: () => ipcRenderer.invoke('wyd:displays:get'),
+  // Full-screen overlay window (dock + check-in windows). `send` goes to the other window.
+  setOverlayVisible: (visible: boolean) => ipcRenderer.invoke('wyd:overlay:set-visible', visible),
+  bridge: {
+    send: (message: unknown) => ipcRenderer.send('wyd:bridge:send', message),
+    onMessage: (cb: (message: unknown) => void) => {
+      ipcRenderer.on('wyd:bridge:message', (_e, message) => cb(message))
+    },
+    removeListeners: () => ipcRenderer.removeAllListeners('wyd:bridge:message')
+  },
   // Activity tracking (src/main/activityMonitor.ts); UI does not consume these yet.
   startTracking: (context: { subject: string; goals: string[] }) => ipcRenderer.invoke('wyd:tracking:start', context),
   onActivityUpdate: (cb: (state: ActivityState) => void) => {

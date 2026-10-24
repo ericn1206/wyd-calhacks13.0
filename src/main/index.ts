@@ -7,8 +7,10 @@ import { loadEnv } from './env'
 import { createCallToken } from './livekitToken'
 
 loadEnv()
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 
 let mainWindow: BrowserWindow | null = null
+let overlayWindow: BrowserWindow | null = null
 let monitor: ActivityMonitor | null = null
 
 type CheckInCorner = 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left'
@@ -57,6 +59,7 @@ function createWindow(): void {
     }
   })
 
+  mainWindow.on('closed', () => { overlayWindow?.close(); mainWindow = null })
   mainWindow.once('ready-to-show', () => mainWindow?.show())
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('https://')) shell.openExternal(url)
@@ -68,6 +71,40 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+}
+
+/** Transparent, click-through window covering the main window's display; renders the dock and check-ins. */
+function createOverlayWindow(): BrowserWindow {
+  const display = screen.getDisplayMatching(mainWindow?.getBounds() ?? screen.getPrimaryDisplay().bounds)
+  const { x, y, width, height } = display.workArea
+  const win = new BrowserWindow({
+    x, y, width, height,
+    transparent: true,
+    frame: false,
+    hasShadow: false,
+    resizable: false,
+    movable: false,
+    fullscreenable: false,
+    focusable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    show: false,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  })
+  win.setAlwaysOnTop(true, 'screen-saver')
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  win.setIgnoreMouseEvents(true, { forward: true })
+  if (process.env['ELECTRON_RENDERER_URL']) {
+    win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}?overlay=1`)
+  } else {
+    win.loadFile(join(__dirname, '../renderer/index.html'), { query: { overlay: '1' } })
+  }
+  win.on('closed', () => { overlayWindow = null })
+  return win
 }
 
 function sendToRenderer(channel: string, payload?: unknown): void {
@@ -111,6 +148,20 @@ function registerDesktopApi(): void {
   ipcMain.handle('wyd:displays:get', () =>
     screen.getAllDisplays().map(({ id, bounds, workArea, scaleFactor }) => ({ id, bounds, workArea, scaleFactor }))
   )
+
+  ipcMain.handle('wyd:overlay:set-visible', (_e, visible: boolean) => {
+    if (visible) {
+      overlayWindow = overlayWindow ?? createOverlayWindow()
+      overlayWindow.showInactive()
+    } else {
+      overlayWindow?.hide()
+    }
+  })
+  // Relay between the main window and the overlay window: each side's messages go to the other.
+  ipcMain.on('wyd:bridge:send', (event, message) => {
+    const target = overlayWindow && event.sender === overlayWindow.webContents ? mainWindow : overlayWindow
+    if (target && !target.webContents.isDestroyed()) target.webContents.send('wyd:bridge:message', message)
+  })
 
   // LiveKit call plumbing for src/renderer/src/useCircleCall.ts (not wired into the UI yet).
   ipcMain.handle('call:token', (_e, code: string, identity: string, name: string) => createCallToken(code, identity, name))

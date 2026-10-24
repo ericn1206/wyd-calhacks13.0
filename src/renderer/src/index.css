@@ -535,3 +535,6 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
   .dock-actions svg { width: 15px; height: 15px; }
   .demo-menu { right: 12px; bottom: 12px; }
 }
+
+/* Transparent full-screen overlay window (index.html?overlay=1) */
+.overlay-mode, .overlay-mode body { background: transparent; min-width: 0; overflow: hidden; }
