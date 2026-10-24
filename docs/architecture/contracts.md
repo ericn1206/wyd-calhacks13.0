@@ -73,7 +73,7 @@ Wire format: in module code / TS bindings a value is `{ tag: 'Focused' }`. Raw J
 | idle_secs | u32 | desktop | |
 | client_version | string | desktop | |
 
-Consent enforcement: no `consent_webcam` → vision fields zeroed; no `consent_activity` → app `"hidden"`, title/domain dropped, category `Other`; no `consent_phone` → phone_state `Unknown`.
+Consent enforcement (UI has no consent screen; client must set all consents `true` on join or fields are dropped): no `consent_webcam` → vision fields zeroed; no `consent_activity` → app `"hidden"`, title/domain dropped, category `Other`; no `consent_phone` → phone_state `Unknown`.
 
 ## write_judgment (worker only)
 `event_id, label: StatusLabel, reason: ReasonCode, confidence: f32, model: ModelName, latency_ms, input_tokens, output_tokens, cost_usd`. One per event; replaces a fallback judgment for the same event.
@@ -81,16 +81,19 @@ Consent enforcement: no `consent_webcam` → vision fields zeroed; no `consent_a
 Other reducers: `../components/spacetimedb-schema.md#reducers`.
 
 ## Desktop IPC (`src/preload/index.ts`)
-| API | Channel | Direction | Payload |
+`window.wydDesktop` (typings: `src/renderer/src/electron.d.ts`):
+| Method | Channel | Direction | Payload |
 |---|---|---|---|
-| `activityAPI.onUpdate` | `activity:update` | main → renderer | `ActivityState` (every 2 s) |
-| `activityAPI.onAlert` | `activity:alert` | main → renderer | `ActivityState` when `alertLevel` is `warning`/`alert` |
-| `sessionAPI.start` | `session:start` | renderer → main (invoke) | — |
-| `sessionAPI.submitResponse` | `session:user-response` | renderer → main (invoke) | transcript string |
-| `sessionAPI.onPhase` | `session:phase` | main → renderer | `idle`/`speaking`/`listening`/`processing`/`done` |
-| `sessionAPI.onContextReady` | `session:context-ready` | main → renderer | `SessionContext {subject, goals[], notes}` |
+| `getPreferences` / `setPreferences` | `wyd:preferences:get` / `:set` | renderer → main (invoke) | `{checkInCorner}` in userData `preferences.json` |
+| `requestMediaPermissions` | `wyd:media:request` | invoke | `{camera, microphone}` |
+| `setAlwaysOnTop` / `setIgnoreMouseEvents` / `moveToCorner` / `getDisplays` | `wyd:window:*`, `wyd:displays:get` | invoke | window/display control |
+| `startTracking` | `wyd:tracking:start` | invoke | `{subject, goals[]}` → `monitor.setSessionContext` + `start()`; called on Goals submit |
+| `onActivityUpdate` | `activity:update` | main → renderer | `ActivityState` (every 2 s); no UI consumer yet |
+| `onActivityAlert` | `activity:alert` | main → renderer | `ActivityState` when `alertLevel` is `warning`/`alert`; no UI consumer yet |
 
-Types: `ActivityState` in `src/main/activityMonitor.ts`; renderer typings in `src/renderer/src/global.d.ts`.
+`window.circleAPI` (LiveKit, unwired; typings `src/renderer/src/circle.d.ts`): `requestMediaAccess`, `getCallToken` (`call:token`), `setCallMode` (`window:call-mode`).
+
+Removed: `activityAPI`, `sessionAPI` (voice onboarding, archived in `outdated/`). Type: `ActivityState` in `src/main/activityMonitor.ts`.
 
 ## Worker functions
 - `judge(topic, events: FocusEvent[], phase='work'|'break') → {status, confidence, reason}` (`worker/judge.ts`)

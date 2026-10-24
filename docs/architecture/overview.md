@@ -26,4 +26,4 @@ SpacetimeDB owns session state, smoothing, cooldowns, call/nudge triggers, and P
 | Summary text, captions | AI worker (Claude) |
 
 ## Current reality
-Desktop runs standalone: `osascript` polling → `categorize.ts` + `claudeJudge.ts` in main → IPC → React UI. Worker runs only as a fixtures CLI. No SpacetimeDB client anywhere. Details: `../status.md`.
+Desktop runs standalone: Goals submit → `wyd:tracking:start` → `osascript` polling → `categorize.ts` + `claudeJudge.ts` in main → `activity:*` IPC (UI does not consume yet). Renderer is the new Figma-Make UI with hardcoded demo data; spec in `../ui_integration.md`. Worker runs only as a fixtures CLI. No SpacetimeDB client anywhere. Details: `../status.md`.

@@ -1,632 +1,310 @@
-import React, { useState, useEffect, useRef } from 'react'
-import type { ActivityState, ActivityEntry } from '../../main/activityMonitor'
-import type { OnboardingPhase } from '../../main/sessionManager'
-import { useCartesiaCall, type AgentCredentials } from './cartesiaCall'
-import { VideoCallOverlay } from './VideoCall'
-import { useCircleCall, type CircleRoom } from './useCircleCall'
+import { useEffect, useRef, useState } from 'react'
+import { EntryScreen } from './components/onboarding/EntryScreen'
+import { GoalsScreen } from './components/onboarding/GoalsScreen'
+import { IntroductionScreen } from './components/onboarding/IntroductionScreen'
+import { DesktopPreview } from './components/session/DesktopPreview'
+import { BreakScreen } from './components/session/BreakScreen'
+import { SessionSidebar } from './components/session/SessionSidebar'
+import { SummaryScreen } from './components/session/SummaryScreen'
+import { FocusDock } from './components/overlays/FocusDock'
+import { Icon } from './components/ui/Icon'
+import { people } from './data/people'
 
-const AUTO_CALL_COOLDOWN_MS = 5 * 60 * 1000
-
-const COLORS = {
-  productive: '#22c55e',
-  distracted: '#ef4444',
-  neutral: '#f97316',
-  unknown: '#6b7280'
-}
-
-const LABELS = {
-  productive: 'Focused',
-  distracted: 'Distracted',
-  neutral: 'Neutral',
-  unknown: 'Unknown'
-}
-
-function formatTime(ts: number) {
-  return new Date(ts).toLocaleTimeString('en-US', { hour12: false })
-}
-
-function formatDuration(s: number) {
-  if (s < 60) return `${Math.floor(s)}s`
-  return `${Math.floor(s / 60)}m ${Math.floor(s % 60)}s`
-}
-
-function Badge({ category }: { category: ActivityEntry['category'] }) {
-  const c = COLORS[category]
-  return (
-    <span style={{
-      padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600,
-      background: c + '22', color: c, border: `1px solid ${c}44`
-    }}>
-      {LABELS[category]}
-    </span>
-  )
-}
-
-// ── Landing / Onboarding ────────────────────────────────────────────────────
-
-function cleanCode(value: string): string {
-  return value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)
-}
-
-function makeSessionCode(): string {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  const bytes = new Uint8Array(4)
-  crypto.getRandomValues(bytes)
-  return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join('')
-}
-
-function saved(key: string, fallback: string): string {
-  try {
-    return localStorage.getItem(key) || fallback
-  } catch {
-    return fallback
-  }
-}
-
-const fieldStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '12px 14px',
-  borderRadius: 10,
-  border: '1px solid #2a2a2a',
-  background: '#1a1a1a',
-  color: '#f5f5f5',
-  fontSize: 15,
-  outline: 'none',
-}
-
-function SessionLobby({ onJoin }: { onJoin: (room: CircleRoom) => void }) {
-  const [name, setName] = useState(() => saved('lockin:name', ''))
-  const [code, setCode] = useState(() => saved('lockin:code', ''))
-
-  const sessionCode = cleanCode(code)
-  const canJoin = name.trim().length > 0 && sessionCode.length >= 4
-
-  const submit = () => {
-    if (!canJoin) return
-    const room = {
-      name: name.trim().slice(0, 24),
-      sessionCode,
-    }
-    try {
-      localStorage.setItem('lockin:name', room.name)
-      localStorage.setItem('lockin:code', room.sessionCode)
-    } catch {
-      // private mode
-    }
-    onJoin(room)
-  }
-
-  return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center',
-      justifyContent: 'center', minHeight: '100vh', gap: 18, padding: 32,
-    }}>
-      <div style={{ fontSize: 48 }}>🔒</div>
-      <h1 style={{ fontSize: 32, fontWeight: 800, color: '#f5f5f5', margin: 0 }}>Lock In</h1>
-      <p style={{ color: '#6b7280', fontSize: 15, margin: 0, textAlign: 'center', maxWidth: 380 }}>
-        Share a study session code. When someone drifts, the circle pops into a short video check-in.
-      </p>
-
-      <form
-        onSubmit={(event) => { event.preventDefault(); submit() }}
-        style={{ width: '100%', maxWidth: 380, display: 'flex', flexDirection: 'column', gap: 12 }}
-      >
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <span style={{ color: '#9ca3af', fontSize: 12, fontWeight: 600 }}>Your name</span>
-          <input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="Alex"
-            style={fieldStyle}
-            autoFocus
-          />
-        </label>
-
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <span style={{ color: '#9ca3af', fontSize: 12, fontWeight: 600 }}>Study session code</span>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input
-              value={code}
-              onChange={(event) => setCode(cleanCode(event.target.value))}
-              placeholder="K7MQ"
-              style={{ ...fieldStyle, letterSpacing: 2, fontWeight: 700 }}
-            />
-            <button
-              type="button"
-              onClick={() => setCode(makeSessionCode())}
-              style={{
-                padding: '0 14px', borderRadius: 10, border: '1px solid #2a2a2a',
-                background: '#1a1a1a', color: '#d1d5db', cursor: 'pointer', fontWeight: 600,
-              }}
-            >
-              New
-            </button>
-          </div>
-        </label>
-
-        <button type="submit" disabled={!canJoin} style={{
-          marginTop: 4, padding: '14px 20px', borderRadius: 12, border: 'none',
-          background: canJoin ? '#6366f1' : '#27272a',
-          color: canJoin ? '#fff' : '#6b7280',
-          fontSize: 16, fontWeight: 700,
-          cursor: canJoin ? 'pointer' : 'default',
-        }}>
-          Join session
-        </button>
-      </form>
-
-      <p style={{ color: '#4b5563', fontSize: 12, margin: 0, textAlign: 'center', maxWidth: 380, lineHeight: 1.5 }}>
-        Share this code with your circle. Anyone who enters it joins you, on any network.
-      </p>
-    </div>
-  )
-}
-
-function OnboardingScreen({
-  phase,
-  creds,
-  stream,
-  startError,
-  onTranscript,
-  onSettled,
-  onBack
-}: {
-  phase: OnboardingPhase
-  creds: AgentCredentials | null
-  stream: MediaStream | null
-  startError: string
-  onTranscript: (t: string) => void
-  onSettled: () => void
-  onBack: () => void
-}) {
-  const call = useCartesiaCall(creds, stream, onTranscript, onSettled)
-  const error = startError || call.error
-  const speaking = call.status === 'speaking'
-  const transcriptRef = useRef<HTMLDivElement>(null)
-  const label = error
-    ? error
-    : phase === 'processing'
-      ? 'Setting up your session...'
-      : speaking
-        ? 'Agent is speaking...'
-        : creds
-          ? 'Listening — answer when you are ready'
-          : 'Connecting to the voice agent...'
-
-  useEffect(() => {
-    const el = transcriptRef.current
-    if (el) el.scrollTop = el.scrollHeight
-  }, [call.transcript])
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 20, padding: 40 }}>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end', height: 40 }}>
-        {[0, 1, 2, 3, 4].map(i => (
-          <div key={i} style={{
-            width: 6, borderRadius: 3,
-            background: error ? '#ef4444' : '#6366f1',
-            animation: speaking ? `wave 1s ease-in-out ${i * 0.1}s infinite alternate` : undefined,
-            height: speaking ? `${20 + i * 5}px` : '8px'
-          }} />
-        ))}
-      </div>
-      <p style={{ color: error ? '#fca5a5' : '#d1d5db', fontSize: 15, textAlign: 'center', maxWidth: 420, margin: 0 }}>
-        {label}
-      </p>
-      {call.transcript.length > 0 && (
-        <div
-          ref={transcriptRef}
-          style={{
-            width: '100%', maxWidth: 440, maxHeight: 280, overflowY: 'auto',
-            background: '#141414', border: '1px solid #2a2a2a', borderRadius: 12,
-            padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 12,
-          }}
-        >
-          {call.transcript.map(turn => (
-            <div key={turn.id}>
-              <div style={{ fontSize: 11, color: '#6b7280', letterSpacing: 0.6, textTransform: 'uppercase' }}>
-                {turn.role === 'user' ? 'You' : 'Lock In'}
-              </div>
-              <div style={{
-                color: turn.role === 'user' ? '#f5f5f5' : '#c7d2fe',
-                fontSize: 14, lineHeight: 1.45, marginTop: 2,
-              }}>
-                {turn.text || '…'}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-      <button type="button" onClick={onBack} style={{
-        background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: 12,
-      }}>
-        Wrong session code?
-      </button>
-    </div>
-  )
-}
-
-// ── Active Dashboard ────────────────────────────────────────────────────────
-
-const defaultState: ActivityState = {
-  appName: 'Loading...', windowTitle: '', category: 'unknown', reason: '',
-  judgedByClaude: false, consecutiveDistractedSeconds: 0, alertLevel: 'none',
-  sessionStartTime: Date.now(), sessionContext: null, history: [], activity: { app: 'Unknown', title: '', category: 'unknown' }
-}
-
-function Dashboard({ state, room, connection, connectionError, peers, callActive, inCall, onCall, onLeaveSession }: {
-  state: ActivityState
-  room: CircleRoom
-  connection: 'idle' | 'connecting' | 'connected' | 'error'
-  connectionError: string
-  peers: { peerId: string; name: string }[]
-  callActive: boolean
-  inCall: boolean
-  onCall: () => void
-  onLeaveSession: () => void
-}) {
-  const color = COLORS[state.category]
-  const showTimer = state.consecutiveDistractedSeconds > 0
-  const timerColor = state.alertLevel === 'alert' ? '#ef4444' : '#f97316'
-  const history = [...state.history].reverse().slice(0, 10)
-
-  return (
-    <div style={{ padding: '24px', maxWidth: 860, margin: '0 auto' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-        <span style={{ fontSize: 24 }}>🔒</span>
-        <h1 style={{ fontSize: 20, fontWeight: 700, color: '#f5f5f5', margin: 0 }}>Lock In</h1>
-        <span style={{ marginLeft: 'auto', fontSize: 11, color: '#4b5563' }}>
-          {formatTime(state.sessionStartTime)}
-        </span>
-        <button type="button" onClick={onLeaveSession} style={{
-          background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: 12,
-        }}>
-          Leave
-        </button>
-      </div>
-
-      <div style={{
-        background: '#141414', border: '1px solid #2a2a2a', borderRadius: 12,
-        padding: '12px 14px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 12,
-      }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 11, color: '#6b7280', letterSpacing: 1, textTransform: 'uppercase' }}>Study session</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, minWidth: 0 }}>
-            <span style={{ fontSize: 18, fontWeight: 800, letterSpacing: 2, color: '#f5f5f5' }}>{room.sessionCode}</span>
-            <button
-              type="button"
-              onClick={() => { void navigator.clipboard.writeText(room.sessionCode).catch(() => undefined) }}
-              style={{
-                border: 'none', background: '#27272a', color: '#d1d5db', borderRadius: 999,
-                padding: '3px 8px', fontSize: 11, cursor: 'pointer',
-              }}
-            >
-              Copy
-            </button>
-            <span style={{
-              width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-              background: connection === 'connected' ? '#22c55e' : connection === 'error' ? '#ef4444' : '#f97316',
-            }} />
-            <span style={{ color: '#9ca3af', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {[room.name, ...peers.map((peer) => peer.name)].join(' · ')}
-            </span>
-          </div>
-          {connectionError && (
-            <div style={{ color: '#fdba74', fontSize: 12, marginTop: 6 }}>{connectionError}</div>
-          )}
-          {peers.length === 0 && connection === 'connected' && (
-            <div style={{ color: '#6b7280', fontSize: 12, marginTop: 6, lineHeight: 1.45 }}>
-              Waiting for your circle. They open Lock In and enter {room.sessionCode}.
-            </div>
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={onCall}
-          disabled={connection !== 'connected'}
-          style={{
-            padding: '10px 14px', borderRadius: 10, border: 'none', flexShrink: 0,
-            background: connection === 'connected' ? '#6366f1' : '#27272a',
-            color: connection === 'connected' ? '#fff' : '#6b7280',
-            fontWeight: 700, cursor: connection === 'connected' ? 'pointer' : 'default',
-          }}
-        >
-          {callActive && !inCall ? 'Rejoin call' : 'Call circle'}
-        </button>
-      </div>
-
-      {/* Session context pill */}
-      {state.sessionContext && (
-        <div style={{
-          background: '#1a1a2e', border: '1px solid #6366f133', borderRadius: 10,
-          padding: '10px 14px', marginBottom: 16, display: 'flex', gap: 12, alignItems: 'flex-start'
-        }}>
-          <span style={{ fontSize: 16, lineHeight: '18px' }}>🎯</span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 11, color: '#6b7280', letterSpacing: 0.6, textTransform: 'uppercase' }}>Studying</div>
-            <div style={{ color: '#a5b4fc', fontWeight: 600, fontSize: 13, marginTop: 2, lineHeight: 1.4 }}>
-              {state.sessionContext.subject}
-            </div>
-            {state.sessionContext.goals.length > 0 && (
-              <div style={{ color: '#9ca3af', fontSize: 12, marginTop: 2, lineHeight: 1.4 }}>
-                {state.sessionContext.goals.join(' · ')}
-              </div>
-            )}
-            <div style={{ fontSize: 11, color: '#6b7280', letterSpacing: 0.6, textTransform: 'uppercase', marginTop: 10 }}>Sites</div>
-            <div style={{ color: '#e5e7eb', fontSize: 13, marginTop: 2, lineHeight: 1.4 }}>
-              {state.sessionContext.sites || 'None named'}
-            </div>
-          </div>
-          {state.judgedByClaude && (
-            <span style={{ flexShrink: 0, fontSize: 11, color: '#6366f1', background: '#6366f111', padding: '2px 8px', borderRadius: 999 }}>
-              Claude judge
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Alert banner */}
-      {state.alertLevel === 'alert' && (
-        <div style={{
-          background: '#7f1d1d', border: '1px solid #ef4444', borderRadius: 10,
-          padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10
-        }}>
-          <span style={{ fontSize: 18 }}>🚨</span>
-          <span style={{ color: '#fca5a5', fontWeight: 600, fontSize: 14 }}>
-            Sustained distraction — your circle gets a short check-in
-          </span>
-        </div>
-      )}
-
-      {/* Status card */}
-      <div style={{
-        background: '#1a1a1a', border: `1px solid ${color}33`, borderRadius: 14,
-        padding: '18px 22px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 18
-      }}>
-        <div style={{
-          width: 64, height: 64, borderRadius: '50%',
-          background: color + '22', border: `3px solid ${color}`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-          animation: state.category === 'distracted' ? 'pulse-ring 2s infinite' : undefined
-        }}>
-          <div style={{ width: 34, height: 34, borderRadius: '50%', background: color, opacity: 0.9 }} />
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 3 }}>Currently Active</div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: '#f5f5f5', marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {state.appName}
-          </div>
-          {state.windowTitle && state.windowTitle !== state.appName && (
-            <div style={{ fontSize: 12, color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 6 }}>
-              {state.windowTitle}
-            </div>
-          )}
-          {state.url && (
-            <div style={{ fontSize: 11, color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 6 }}>
-              {state.url}
-            </div>
-          )}
-          <Badge category={state.category} />
-          {state.reason && state.reason !== state.appName && (
-            <span style={{ marginLeft: 8, fontSize: 12, color: '#6b7280' }}>{state.reason}</span>
-          )}
-        </div>
-      </div>
-
-      {/* Distraction timer */}
-      {showTimer && (
-        <div style={{
-          background: timerColor + '11', border: `1px solid ${timerColor}44`, borderRadius: 10,
-          padding: '10px 16px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10
-        }}>
-          <span>{state.alertLevel === 'alert' ? '🔴' : '🟠'}</span>
-          <span style={{ color: timerColor, fontWeight: 600, fontSize: 14 }}>
-            Distracted for {formatDuration(state.consecutiveDistractedSeconds)}
-          </span>
-          {state.alertLevel === 'warning' && (
-            <span style={{ color: '#9ca3af', fontSize: 12, marginLeft: 'auto' }}>
-              Alert in {formatDuration(60 - state.consecutiveDistractedSeconds)}
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Activity log */}
-      <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 14, overflow: 'hidden' }}>
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid #2a2a2a', fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 1 }}>
-          Activity Log
-        </div>
-        {history.length === 0 ? (
-          <div style={{ padding: '18px 16px', color: '#4b5563', textAlign: 'center', fontSize: 13 }}>
-            Waiting for activity...
-          </div>
-        ) : history.map((entry, i) => (
-          <div key={`${entry.timestamp}-${i}`} style={{
-            padding: '9px 16px', borderBottom: i < history.length - 1 ? '1px solid #1f1f1f' : undefined,
-            display: 'flex', alignItems: 'center', gap: 10
-          }}>
-            <span style={{ color: '#4b5563', fontSize: 11, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
-              {formatTime(entry.timestamp)}
-            </span>
-            <div style={{ width: 7, height: 7, borderRadius: '50%', background: COLORS[entry.category], flexShrink: 0 }} />
-            <span style={{ flex: 1, color: '#d1d5db', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13 }}>
-              {entry.appName}
-              {entry.reason !== entry.appName && (
-                <span style={{ color: '#6b7280', marginLeft: 6 }}>— {entry.reason}</span>
-              )}
-            </span>
-            <Badge category={entry.category} />
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ── Root ────────────────────────────────────────────────────────────────────
-
-type AppPhase = 'landing' | OnboardingPhase | 'active'
+type Screen = 'join' | 'consent' | 'goals' | 'focus' | 'break' | 'summary'
 
 export default function App() {
-  const [appPhase, setAppPhase] = useState<AppPhase>('landing')
-  const [activityState, setActivityState] = useState<ActivityState>(defaultState)
-  const [lobby, setLobby] = useState<CircleRoom | null>(null)
-  const [creds, setCreds] = useState<AgentCredentials | null>(null)
-  const [micStream, setMicStream] = useState<MediaStream | null>(null)
-  const [startError, setStartError] = useState('')
-  const [contextReady, setContextReady] = useState(false)
-  const [callSettled, setCallSettled] = useState(false)
-  const circle = useCircleCall(lobby)
-  const lastAutoCall = useRef(0)
-
-  const startCallRef = useRef(circle.startCall)
-  startCallRef.current = circle.startCall
+  const [screen, setScreen] = useState<Screen>('join')
+  const [entryMode, setEntryMode] = useState<'join' | 'create'>('join')
+  const [code, setCode] = useState('STUDY25')
+  const [sessionName, setSessionName] = useState('Chapter Six Study Crew')
+  const [codeCopied, setCodeCopied] = useState(false)
+  const [goals, setGoals] = useState(['Finish chapter 6 notes', 'Draft chemistry lab intro', ''])
+  const [callOpen, setCallOpen] = useState(false)
+  const [callSeconds, setCallSeconds] = useState(30)
+  const [lastCall, setLastCall] = useState<number | null>(null)
+  const [nudge, setNudge] = useState(false)
+  const [complete, setComplete] = useState(false)
+  const [pomodoroMinutes, setPomodoroMinutes] = useState(25)
+  const [focusSeconds, setFocusSeconds] = useState(25 * 60)
+  const [timerRunning, setTimerRunning] = useState(false)
+  const [pomodorosDone, setPomodorosDone] = useState(0)
+  const [upcomingBreakMinutes, setUpcomingBreakMinutes] = useState(5)
+  const [distraction, setDistraction] = useState('')
+  const [savedDistractions, setSavedDistractions] = useState<string[]>([])
+  const [checked, setChecked] = useState<boolean[]>([true, false, false])
+  const [breakSeconds, setBreakSeconds] = useState(300)
+  const [dockHidden, setDockHidden] = useState(true)
+  const [isTired, setIsTired] = useState(false)
+  const [tiredNotice, setTiredNotice] = useState(false)
+  const [selfOffTask, setSelfOffTask] = useState(false)
+  const [demoOpen, setDemoOpen] = useState(false)
+  const [desktopPreview, setDesktopPreview] = useState(false)
+  const [incoming, setIncoming] = useState<number | null>(null)
+  const [checkInTarget, setCheckInTarget] = useState<'me' | 'teammate' | null>(null)
+  const [returnPrompt, setReturnPrompt] = useState(false)
+  const [checkInCorner, setCheckInCorner] = useState<'top-right' | 'top-left' | 'bottom-right' | 'bottom-left'>('top-right')
+  const [selfJoinScenario, setSelfJoinScenario] = useState<'none' | 'people'>('none')
+  const [visibleVideos, setVisibleVideos] = useState(1)
+  const [closedVideos, setClosedVideos] = useState<Set<string>>(new Set())
+  const [teammateWindowOffset, setTeammateWindowOffset] = useState({ x: 0, y: 0 })
+  const hideTimer = useRef<number | null>(null)
+  const dockHovered = useRef(false)
+  const dockPinned = useRef(false)
+  const teammateWindowDrag = useRef<{ x: number; y: number; startX: number; startY: number } | null>(null)
 
   useEffect(() => {
-    if (!window.activityAPI || !window.sessionAPI) return
-    window.activityAPI.onUpdate(setActivityState)
-    window.sessionAPI.onPhase(phase => {
-      if (phase !== 'done') setAppPhase(phase)
+    window.wydDesktop?.getPreferences().then((preferences) => {
+      if (preferences.checkInCorner) setCheckInCorner(preferences.checkInCorner)
     })
-    window.sessionAPI.onContextReady(() => setContextReady(true))
-    return () => {
-      window.activityAPI.removeAllListeners()
-      window.sessionAPI.removeAllListeners()
-    }
   }, [])
 
   useEffect(() => {
-    if (appPhase !== 'active') return
-    if (activityState.alertLevel !== 'alert') return
-    if (circle.inCall || circle.joining || circle.callActive) {
-      lastAutoCall.current = Date.now()
-      return
-    }
-    if (circle.status !== 'connected') return
-    if (Date.now() - lastAutoCall.current < AUTO_CALL_COOLDOWN_MS) return
-    lastAutoCall.current = Date.now()
-    startCallRef.current()
-  }, [activityState.alertLevel, appPhase, circle.status, circle.callActive, circle.inCall, circle.joining])
+    if (!callOpen) return
+    const id = window.setInterval(() => setCallSeconds((s) => {
+      if (s <= 1) {
+        window.clearInterval(id)
+        setCallOpen(false)
+        setLastCall(Date.now())
+        dockPinned.current = false
+        hideTimer.current = window.setTimeout(() => {
+          if (!dockHovered.current) setDockHidden(true)
+          hideTimer.current = null
+        }, 600)
+        if (checkInTarget === 'me') setReturnPrompt(true)
+        else setCheckInTarget(null)
+        return 30
+      }
+      return s - 1
+    }), 1000)
+    return () => window.clearInterval(id)
+  }, [callOpen, checkInTarget])
 
-  const callModeOn = useRef(false)
   useEffect(() => {
-    const onCall = circle.inCall || circle.joining || Boolean(circle.callError)
-    if (onCall === callModeOn.current) return
-    callModeOn.current = onCall
-    void window.circleAPI?.setCallMode(onCall)
-  }, [circle.inCall, circle.joining, circle.callError])
-
-  useEffect(() => {
-    if (contextReady && callSettled) {
-      micStream?.getTracks().forEach(track => track.stop())
-      setAppPhase('active')
-    }
-  }, [contextReady, callSettled, micStream])
-
-  const handleStart = async () => {
-    setStartError('')
-    setAppPhase('speaking')
+    if (!callOpen) return
+    dockPinned.current = true
+    if (hideTimer.current) window.clearTimeout(hideTimer.current)
+    hideTimer.current = null
+    setDockHidden(false)
+    setVisibleVideos(1)
+    setClosedVideos(new Set())
+    setTeammateWindowOffset({ x: 0, y: 0 })
+    const totalVideos = checkInTarget === 'teammate' || selfJoinScenario === 'none' ? 1 : 3
+    const joinTimers = Array.from({ length: totalVideos - 1 }, (_, index) => window.setTimeout(() => setVisibleVideos(index + 2), (index + 1) * 650))
     try {
-      const sessionCreds = await window.sessionAPI.start()
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-      })
-      setCreds(sessionCreds)
-      setMicStream(stream)
-    } catch (err) {
-      const name = err instanceof DOMException ? err.name : ''
-      const message = err instanceof Error ? err.message : 'Could not start the voice agent'
-      const denied = name === 'NotAllowedError' || /permission|notallowed|denied/i.test(message)
-      setStartError(
-        denied
-          ? 'Microphone access is off. Turn it on for Electron in System Settings, then start the session again.'
-          : message
-      )
-      setAppPhase('listening')
+      const audio = new AudioContext()
+      const gain = audio.createGain()
+      const oscillator = audio.createOscillator()
+      oscillator.frequency.setValueAtTime(620, audio.currentTime)
+      oscillator.frequency.exponentialRampToValueAtTime(820, audio.currentTime + .18)
+      gain.gain.setValueAtTime(.025, audio.currentTime)
+      gain.gain.exponentialRampToValueAtTime(.001, audio.currentTime + .3)
+      oscillator.connect(gain).connect(audio.destination)
+      oscillator.start()
+      oscillator.stop(audio.currentTime + .3)
+    } catch {
+      // Browsers may block audio outside a direct interaction.
     }
-  }
+    return () => joinTimers.forEach(window.clearTimeout)
+  }, [callOpen, checkInTarget, selfJoinScenario])
 
-  const handleTranscript = (t: string) => {
-    setAppPhase('processing')
-    window.sessionAPI.submitResponse(t)
-  }
+  useEffect(() => {
+    if (screen !== 'break') return
+    const id = window.setInterval(() => setBreakSeconds((s) => s > 0 ? s - 1 : 0), 1000)
+    return () => window.clearInterval(id)
+  }, [screen])
 
-  const handleJoin = (room: CircleRoom) => {
-    setLobby(room)
-    if (!window.sessionAPI) {
-      setAppPhase('active')
+  useEffect(() => {
+    if (screen !== 'focus' || !timerRunning || focusSeconds <= 0) return
+    const id = window.setInterval(() => setFocusSeconds((seconds) => Math.max(0, seconds - 1)), 1000)
+    return () => window.clearInterval(id)
+  }, [screen, timerRunning, focusSeconds])
+
+  useEffect(() => {
+    if (timerRunning && focusSeconds === 0) finishPomodoro()
+  }, [focusSeconds, timerRunning])
+
+  useEffect(() => {
+    if (screen !== 'focus') return
+    const scheduleHide = () => {
+      if (dockPinned.current) return
+      if (hideTimer.current) return
+      hideTimer.current = window.setTimeout(() => {
+        if (!dockHovered.current) setDockHidden(true)
+        hideTimer.current = null
+      }, 600)
+    }
+    const onMove = (event: MouseEvent) => {
+      if (event.clientY <= 40) {
+        if (hideTimer.current) window.clearTimeout(hideTimer.current)
+        hideTimer.current = null
+        setDockHidden(false)
+      } else if (!dockHovered.current) {
+        scheduleHide()
+      }
+    }
+    window.addEventListener('mousemove', onMove)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      if (hideTimer.current) window.clearTimeout(hideTimer.current)
+    }
+  }, [screen])
+
+  useEffect(() => {
+    if (incoming === null) return
+    if (incoming === 0) {
+      if (checkInTarget === 'teammate') {
+        dockPinned.current = false
+        setIncoming(null)
+        setCheckInTarget(null)
+        hideTimer.current = window.setTimeout(() => {
+          if (!dockHovered.current) setDockHidden(true)
+          hideTimer.current = null
+        }, 600)
+        return
+      }
+      setIncoming(null)
+      setCallSeconds(30)
+      setCallOpen(true)
       return
     }
-    void handleStart()
-  }
+    const id = window.setTimeout(() => setIncoming(incoming - 1), 1000)
+    return () => window.clearTimeout(id)
+  }, [incoming, checkInTarget])
 
-  const backToLobby = () => {
-    micStream?.getTracks().forEach(track => track.stop())
-    setMicStream(null)
-    setCreds(null)
-    setStartError('')
-    setContextReady(false)
-    setCallSettled(false)
-    setLobby(null)
-    setAppPhase('landing')
+  const activeGoals = goals.filter((goal) => goal.trim())
+  const finishPomodoro = () => {
+    setTimerRunning(false)
+    const completed = pomodorosDone + 1
+    const breakMinutes = completed % 4 === 0 ? 20 : 5
+    setPomodorosDone(completed)
+    setUpcomingBreakMinutes(breakMinutes)
+    setBreakSeconds(breakMinutes * 60)
+    setComplete(true)
   }
-
-  const onCircleCall = () => {
-    if (circle.callActive && !circle.inCall) circle.joinCall()
-    else circle.startCall()
+  const selectPomodoroLength = (minutes: number) => {
+    setPomodoroMinutes(minutes)
+    setFocusSeconds(minutes * 60)
+    setTimerRunning(false)
   }
-
+  const resetPomodoro = () => {
+    setTimerRunning(false)
+    setFocusSeconds(pomodoroMinutes * 60)
+  }
+  const saveDistraction = () => {
+    if (!distraction.trim()) return
+    setSavedDistractions([...savedDistractions, distraction.trim()])
+    setDistraction('')
+  }
+  const signalTired = () => {
+    setIsTired(true)
+    setTiredNotice(true)
+    window.setTimeout(() => setTiredNotice(false), 4000)
+  }
+  const leaveSession = () => {
+    setTimerRunning(false)
+    setCallOpen(false)
+    setIncoming(null)
+    setComplete(false)
+    dockPinned.current = false
+    setScreen('summary')
+  }
+  const beginSessionSetup = () => {
+    try {
+      setScreen(localStorage.getItem('wyd:tutorial-complete') === 'true' ? 'goals' : 'consent')
+    } catch {
+      setScreen('consent')
+    }
+  }
+  const finishTutorial = () => {
+    try {
+      localStorage.setItem('wyd:tutorial-complete', 'true')
+    } catch {
+      // The tutorial still works when storage is unavailable.
+    }
+    setScreen('goals')
+  }
+  const revealDock = () => {
+    if (hideTimer.current) window.clearTimeout(hideTimer.current)
+    hideTimer.current = null
+    setDockHidden(false)
+  }
+  const triggerCheckIn = (target: 'me' | 'teammate', scenario: 'none' | 'people' = 'none') => {
+    setCallOpen(false)
+    setCallSeconds(30)
+    setReturnPrompt(false)
+    setClosedVideos(new Set())
+    setTeammateWindowOffset({ x: 0, y: 0 })
+    dockPinned.current = target === 'teammate'
+    if (target === 'teammate') revealDock()
+    setNudge(false)
+    setCheckInTarget(target)
+    setSelfJoinScenario(scenario)
+    setSelfOffTask(target === 'me')
+    setIncoming(3)
+  }
+  const joinCheckIn = () => {
+    if (checkInTarget !== 'teammate' || incoming === null) return
+    setIncoming(null)
+    setCallSeconds(30)
+    setCallOpen(true)
+  }
   const closeCall = () => {
-    if (circle.callError) circle.dismissCallError()
-    else circle.leaveCall()
+    setCallOpen(false)
+    setLastCall(Date.now())
+    setCallSeconds(30)
+    dockPinned.current = false
+    hideTimer.current = window.setTimeout(() => {
+      if (!dockHovered.current) setDockHidden(true)
+      hideTimer.current = null
+    }, 600)
+    if (checkInTarget === 'me') setReturnPrompt(true)
+    else setCheckInTarget(null)
   }
+  const closeVideo = (name: string) => {
+    const next = new Set(closedVideos).add(name)
+    setClosedVideos(next)
+    if (checkInTarget === 'me' && people.every((person) => next.has(person.name))) {
+      setSelfJoinScenario('none')
+      setTeammateWindowOffset({ x: 0, y: 0 })
+    }
+  }
+  if (screen === 'join') return <EntryScreen mode={entryMode} setMode={setEntryMode} code={code} setCode={setCode} sessionName={sessionName} setSessionName={setSessionName} codeCopied={codeCopied} copyCode={() => { navigator.clipboard?.writeText(code); setCodeCopied(true); window.setTimeout(() => setCodeCopied(false), 1600) }} continueSetup={beginSessionSetup} />
 
-  const showCall = appPhase === 'active' && Boolean(lobby) && (circle.inCall || circle.joining || Boolean(circle.callError))
+  if (screen === 'consent') return <IntroductionScreen onComplete={finishTutorial} />
 
-  return (
-    <>
-      {!lobby && <SessionLobby onJoin={handleJoin} />}
-      {lobby && appPhase !== 'active' && (
-        <OnboardingScreen
-          phase={appPhase === 'landing' ? 'speaking' : appPhase}
-          creds={creds}
-          stream={micStream}
-          startError={startError}
-          onTranscript={handleTranscript}
-          onSettled={() => setCallSettled(true)}
-          onBack={backToLobby}
-        />
-      )}
-      {lobby && appPhase === 'active' && (
-        <Dashboard
-          state={activityState}
-          room={lobby}
-          connection={circle.status}
-          connectionError={circle.error}
-          peers={circle.peers}
-          callActive={circle.callActive}
-          inCall={circle.inCall}
-          onCall={onCircleCall}
-          onLeaveSession={backToLobby}
-        />
-      )}
-      {showCall && lobby && (
-        <VideoCallOverlay
-          sessionCode={lobby.sessionCode}
-          endsAt={circle.callEndsAt}
-          localStream={circle.localStream}
-          localName={lobby.name}
-          remotes={circle.remotes}
-          muted={circle.muted}
-          cameraOn={circle.cameraOn}
-          joining={circle.joining}
-          error={circle.callError}
-          onToggleMute={circle.toggleMute}
-          onToggleCamera={circle.toggleCamera}
-          onLeave={closeCall}
-        />
-      )}
-    </>
-  )
+  if (screen === 'goals') return <GoalsScreen goals={goals} setGoals={setGoals} onStart={() => { window.wydDesktop?.startTracking({ subject: sessionName, goals: activeGoals }); if (entryMode === 'join') setTimerRunning(true); setScreen('focus') }} />
+
+  if (screen === 'break') return <BreakScreen minutes={upcomingBreakMinutes} seconds={breakSeconds} goals={activeGoals} checked={checked} setChecked={setChecked} onReturn={() => { setBreakSeconds(upcomingBreakMinutes * 60); setFocusSeconds(pomodoroMinutes * 60); setIsTired(false); setScreen('focus') }} />
+
+  if (screen === 'summary') return <SummaryScreen checked={checked} goalCount={activeGoals.length} />
+
+  return <main className={`focus-page ${desktopPreview ? 'desktop-preview' : ''}`}>
+    <FocusDock hidden={dockHidden} host={entryMode === 'create'} focusSeconds={focusSeconds} pomodoroMinutes={pomodoroMinutes} pomodorosDone={pomodorosDone} timerRunning={timerRunning} setTimerRunning={setTimerRunning} resetPomodoro={resetPomodoro} selfOffTask={selfOffTask} people={people} checked={checked} setChecked={setChecked} currentGoal={activeGoals[0] || ''} isTired={isTired} signalTired={signalTired} takeBreak={() => { setTimerRunning(false); setScreen('break') }} leaveSession={leaveSession} nudge={nudge} dismissNudge={() => setNudge(false)} tiredNotice={tiredNotice} dismissTiredNotice={() => setTiredNotice(false)} incoming={incoming} checkInTarget={checkInTarget} joinCheckIn={joinCheckIn} onMouseEnter={() => { dockHovered.current = true; if (hideTimer.current) window.clearTimeout(hideTimer.current); hideTimer.current = null }} onMouseLeave={() => { dockHovered.current = false; if (dockPinned.current) return; if (hideTimer.current) window.clearTimeout(hideTimer.current); hideTimer.current = window.setTimeout(() => { setDockHidden(true); hideTimer.current = null }, 600) }} />
+    <div className="demo-menu">
+      <button className="demo-trigger" onClick={() => setDemoOpen(!demoOpen)}>Demo <Icon name="arrow" /></button>
+      {demoOpen && <div className="demo-popover"><span>Prototype controls</span><button onClick={() => { setDesktopPreview(!desktopPreview); setDemoOpen(false); revealDock() }}>{desktopPreview ? 'Return to WYD!! app' : 'Apple desktop preview'}</button><button onClick={() => { triggerCheckIn('me', 'none'); setDemoOpen(false) }}>I go off task · no one joins</button><button onClick={() => { triggerCheckIn('me', 'people'); setDemoOpen(false) }}>I go off task · people join</button><button onClick={() => { triggerCheckIn('teammate'); setDemoOpen(false) }}>Teammate goes off task</button><div className="corner-setting"><small>Check-in corner</small><div>{(['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const).map((corner) => <button className={checkInCorner === corner ? 'active' : ''} key={corner} onClick={() => { setCheckInCorner(corner); window.wydDesktop?.setPreferences({ checkInCorner: corner }) }} aria-label={corner}>{corner.split('-').map((part) => part[0].toUpperCase()).join('')}</button>)}</div></div>{entryMode === 'create' && <button onClick={() => { finishPomodoro(); setDemoOpen(false) }}>Finish Pomodoro</button>}<button onClick={() => setScreen('summary')}>End session</button></div>}
+    </div>
+    {desktopPreview ? <DesktopPreview onReturn={() => setDesktopPreview(false)} /> : <section className="focus-grid">
+      <div className="timer-panel"><div className="eyebrow">Focus session · Round {(pomodorosDone % 4) + 1} of 4</div><div className="pomodoro-rounds">{[0, 1, 2, 3].map((round) => <span className={round < pomodorosDone % 4 ? 'done' : round === pomodorosDone % 4 ? 'current' : ''} key={round}><Icon name="check" /></span>)}</div><div className="timer-ring"><svg viewBox="0 0 180 180"><circle cx="90" cy="90" r="80" /><circle className="timer-progress" cx="90" cy="90" r="80" style={{ strokeDashoffset: 502 * (1 - focusSeconds / (pomodoroMinutes * 60)) }} /></svg><div><strong>{String(Math.floor(focusSeconds / 60)).padStart(2, '0')}:{String(focusSeconds % 60).padStart(2, '0')}</strong><span>{timerRunning ? 'focus time' : focusSeconds === pomodoroMinutes * 60 ? entryMode === 'create' ? 'ready when you are' : 'waiting for host' : 'paused by host'}</span></div></div><h2>{timerRunning ? 'Stay with it.' : entryMode === 'create' ? 'Choose one task.' : 'Your host sets the pace.'}</h2><p>{activeGoals[0] || 'Pick something that deserves your full attention.'}</p>{entryMode === 'create' ? <div className="pomodoro-console host-console"><div className="console-role"><span className="host-control-badge"><Icon name="users" />Host controls</span><small>Everyone’s timer stays in sync with yours.</small></div><div className="time-select"><span>Focus length</span>{[15, 25, 45].map((minutes) => <button className={pomodoroMinutes === minutes ? 'active' : ''} onClick={() => selectPomodoroLength(minutes)} key={minutes}>{minutes} min</button>)}</div><div className="timer-controls"><button className="timer-stop" onClick={resetPomodoro}><Icon name="x" />Stop</button><button className="timer-start" onClick={() => setTimerRunning(!timerRunning)}><Icon name={timerRunning ? 'clock' : 'arrow'} />{timerRunning ? 'Pause for everyone' : focusSeconds < pomodoroMinutes * 60 ? 'Resume session' : 'Start session'}</button></div><div className="focus-oath"><Icon name="target" /><span><strong>My focus promise</strong>I’ll give this task my full attention until the timer rings.</span></div><div className="distraction-capture"><input value={distraction} onChange={(event) => setDistraction(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && saveDistraction()} placeholder="Something else came to mind? Park it here." /><button onClick={saveDistraction}>Save</button>{savedDistractions.length > 0 && <small>{savedDistractions.length} item{savedDistractions.length === 1 ? '' : 's'} saved for later</small>}</div></div> : <div className="pomodoro-console participant-console"><div className="participant-host"><span className="avatar bg-[#dbe9ff]">MK<i /></span><div><small>Session host</small><strong>Maya controls this Pomodoro</strong><p>You’ll start, pause, and take breaks together.</p></div><span className="sync-status"><i />Synced</span></div><div className="participant-schedule"><span><small>Focus</small><strong>{pomodoroMinutes} min</strong></span><Icon name="arrow" /><span><small>Short break</small><strong>5 min</strong></span><Icon name="arrow" /><span><small>After 4 rounds</small><strong>20 min</strong></span></div><div className="focus-oath"><Icon name="lock" /><span><strong>Timer controls are host-only</strong>Your timer updates automatically when Maya starts, pauses, or stops the session.</span></div><div className="distraction-capture"><input value={distraction} onChange={(event) => setDistraction(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && saveDistraction()} placeholder="Something else came to mind? Park it here." /><button onClick={saveDistraction}>Save</button>{savedDistractions.length > 0 && <small>{savedDistractions.length} item{savedDistractions.length === 1 ? '' : 's'} saved for later</small>}</div></div>}</div>
+      <SessionSidebar sessionName={sessionName} role={entryMode === 'create' ? 'Host' : 'Participant'} goals={activeGoals} checked={checked} setChecked={setChecked} people={people} />
+    </section>}
+    {callOpen && checkInTarget === 'teammate' && <section className="teammate-share-window" style={{ transform: `translate(calc(-50% + ${teammateWindowOffset.x}px), calc(-50% + ${teammateWindowOffset.y}px))` }}>
+      <header onPointerDown={(event) => { if ((event.target as HTMLElement).closest('button')) return; event.currentTarget.setPointerCapture(event.pointerId); teammateWindowDrag.current = { x: teammateWindowOffset.x, y: teammateWindowOffset.y, startX: event.clientX, startY: event.clientY } }} onPointerMove={(event) => { if (!teammateWindowDrag.current) return; setTeammateWindowOffset({ x: teammateWindowDrag.current.x + event.clientX - teammateWindowDrag.current.startX, y: teammateWindowDrag.current.y + event.clientY - teammateWindowDrag.current.startY }) }} onPointerUp={() => { teammateWindowDrag.current = null }}><div><i /><span>Jake’s screen · group check-in</span></div><em>{callSeconds}s</em><button onClick={closeCall} aria-label="Leave Jake's check-in"><Icon name="x" />Leave</button></header>
+      <div className="shared-screen"><div className="shared-browser-bar"><span /><span /><span /><strong>Problem Set 4 — Calculus</strong></div><div className="shared-work"><aside><span>1</span><span>2</span><span>3</span><span>4</span></aside><main><small>QUESTION 4 OF 12</small><h3>Find the derivative of the function</h3><div className="equation">f(x) = 3x³ − 4x² + 7</div><div className="screen-answer">Type your answer…</div></main></div></div>
+      <div className="embedded-webcam"><div className={`avatar ${people[1].color}`}>{people[1].initials}<i /></div><span>Jake · webcam</span></div>
+      <div className="checkin-observers">{[...people.filter((person) => person.name !== 'Jake'), { name: 'You', initials: 'YO', color: 'bg-[#d9f2e5]' }].map((person) => <div key={person.name}><div className={`avatar ${person.color}`}>{person.initials}</div><span>{person.name}</span></div>)}</div>
+      <div className="window-progress"><i style={{ width: `${(callSeconds / 30) * 100}%` }} /></div>
+    </section>}
+    {callOpen && checkInTarget === 'me' && selfJoinScenario === 'people' && <div className="checkin-timer-pop"><Icon name="clock" /><strong>00:{String(callSeconds).padStart(2, '0')}</strong></div>}
+    {callOpen && checkInTarget === 'me' && selfJoinScenario === 'none' && <section className="teammate-share-window duck-reflection-window" style={{ transform: `translate(calc(-50% + ${teammateWindowOffset.x}px), calc(-50% + ${teammateWindowOffset.y}px))` }}>
+      <header onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); teammateWindowDrag.current = { x: teammateWindowOffset.x, y: teammateWindowOffset.y, startX: event.clientX, startY: event.clientY } }} onPointerMove={(event) => { if (!teammateWindowDrag.current) return; setTeammateWindowOffset({ x: teammateWindowDrag.current.x + event.clientX - teammateWindowDrag.current.startX, y: teammateWindowDrag.current.y + event.clientY - teammateWindowDrag.current.startY }) }} onPointerUp={() => { teammateWindowDrag.current = null }}><div><i /><span>Quiet accountability · reflection</span></div><em>{callSeconds}s</em></header>
+      <div className="duck-reflection-body"><svg className="studying-duck" viewBox="0 0 420 260" role="img" aria-label="A duck studying at a desk"><rect width="420" height="260" rx="24" fill="#edf7f3" /><rect x="54" y="181" width="318" height="16" rx="8" fill="#8e6953" /><rect x="75" y="194" width="15" height="55" rx="7" fill="#765642" /><rect x="338" y="194" width="15" height="55" rx="7" fill="#765642" /><g className="duck-body"><ellipse cx="210" cy="164" rx="66" ry="50" fill="#f4d872" /><ellipse cx="215" cy="101" rx="48" ry="45" fill="#f7dd7c" /><circle cx="231" cy="91" r="4" fill="#344943" /><path d="M251 104c19-8 33-3 38 5-8 10-24 13-39 6Z" fill="#e99b57" /><path d="M164 153c-18 5-25 18-21 35 17-2 28-9 35-23Z" fill="#e6c65f" /></g><g className="duck-pencil"><rect x="250" y="151" width="47" height="6" rx="3" fill="#659d98" transform="rotate(-26 250 151)" /><path d="m291 133 9-1-6 7Z" fill="#544a43" /></g><path d="M130 167c31-18 60-17 82 1v23c-26-12-53-12-82 0Z" fill="#fff" stroke="#b8d7cf" strokeWidth="3" /><path d="M290 167c-31-18-60-17-78 1v23c23-12 49-12 78 0Z" fill="#fff" stroke="#b8d7cf" strokeWidth="3" /><path d="M210 169v22" stroke="#b8d7cf" strokeWidth="3" /></svg><p>No one is here to keep you accountable. Use this time to reflect on your productivity so far.</p></div>
+      <div className="window-progress"><i style={{ width: `${(callSeconds / 30) * 100}%` }} /></div>
+    </section>}
+    {callOpen && checkInTarget === 'me' && selfJoinScenario === 'people' && <section className={`glass-checkin corner-${checkInCorner} self-glass`}>
+      {people.slice(0, visibleVideos).map((person) => <div className={`glass-video member-video ${closedVideos.has(person.name) ? 'closed-video' : ''}`} key={person.name}><div className={`avatar ${person.color}`}>{person.initials}</div><span>{person.name}</span><button className="close-video" onClick={() => closeVideo(person.name)} aria-label={`Close ${person.name}'s video`}><Icon name="x" /></button></div>)}
+    </section>}
+    {returnPrompt && <div className="return-prompt"><span className="list-icon mint"><Icon name="target" /></span><div><strong>Back to {activeGoals[0] || 'your current goal'}?</strong><p>One small step at a time.</p></div><button className="primary" onClick={() => { setReturnPrompt(false); setSelfOffTask(false); setCheckInTarget(null) }}>Let’s go</button></div>}
+    {complete && <div className="overlay"><div className="complete-modal"><div className="icon-bubble mint"><Icon name="check" /></div><div className="eyebrow">{pomodoroMinutes} minutes complete</div><h2>Pomodoro complete.</h2><p>{upcomingBreakMinutes >= 20 ? 'That’s four rounds. Take a longer 20-minute break so your brain can recharge.' : 'Mark it complete and take a five-minute break before the next round.'}</p><div className="button-row"><button className="secondary" onClick={() => { setComplete(false); setScreen('summary') }}>End session</button><button className="primary" onClick={() => { setComplete(false); setScreen('break') }}>Take {upcomingBreakMinutes} min break <Icon name="arrow" /></button></div></div></div>}
+  </main>
 }

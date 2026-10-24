@@ -16,7 +16,7 @@ Opt-in group focus app: sustained drift → rare, short surprise group check-in 
 | Unsettled questions | `docs/product/decisions.md` |
 
 ## Hard rules
-- **Privacy:** webcam frames/video never leave the laptop. Only small text events go to SpacetimeDB. Replay clips are opt-in, local, deleted at session end. Explicit consent at join. Details: `docs/product/privacy.md`.
+- **Privacy:** webcam frames/video never leave the laptop. Only small text events go to SpacetimeDB. Replay clips are local, deleted at session end. No consent screen (hackathon scope). Details: `docs/product/privacy.md`.
 - **AI calls:** rules + cache first; only unknown/ambiguous titles go to a model. Judgment input is text only. Calls run in the background, never block UI. One Claude call per session for summary + replay captions.
 - **Contract:** don't change `contracts.md` items (event fields, enums) without telling the team.
 - **Open decisions** (`decisions.md`): ask, don't assume.

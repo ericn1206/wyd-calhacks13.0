@@ -9,25 +9,45 @@ Last updated: 2026-10-24. Biggest gap: **nothing connects to SpacetimeDB yet**. 
 | Desktop activity tracking | `src/main/activityMonitor.ts` | Polls front app + window title + browser URL (Chrome/Safari/Arc/Brave) every 2 s via `osascript`. macOS only. |
 | Desktop categorization | `src/main/categorize.ts` | Rules + cache → contract categories (`coding`…`unknown`). Fills `activity.category`. |
 | Desktop judge | `src/main/claudeJudge.ts` | Claude call every 8 s once session context exists; output drives local alerts (30 s warning, 60 s alert). |
-| Desktop onboarding | `src/main/sessionManager.ts`, `App.tsx` | Spoken prompt (macOS `say`) → Web Speech API transcript → Claude extracts subject/goals. |
-| Desktop UI | `src/renderer/src/App.tsx` | Single file, inline styles: start screen, onboarding, live status + history. |
+| Desktop UI | `src/renderer/src/` (+ `docs/ui_integration.md`) | New Figma-Make UI: entry, intro, goals, focus workspace, dock, check-in windows, break, summary. All data hardcoded/local; Demo menu simulates events. Goals submit calls `wyd:tracking:start`. |
 | Worker judge | `worker/judge.ts` | Text-only judge over 2-min window → `{status, confidence, reason}`; failure → confidence 0 (neutral). |
 | Worker categorizer | `worker/categorizeUnknown.ts` | Model categorization for `unknown` titles, cached. |
 | Worker fixtures | `worker/runFixtures.ts` | 15 scenarios, `npm run fixtures`. |
 
 ## Stubbed
-- Voice: `src/main/cartesiaTTS.ts` uses macOS `say`; Cartesia request sketched in a comment.
+- Voice AI onboarding: archived in `outdated/` (see `outdated/README.md`); goals now come from the Goals screen.
+- LiveKit call: `src/main/livekitToken.ts`, `src/renderer/src/useCircleCall.ts`, `circleAPI` preload exist but are **unwired**. **Important next step:** replace the UI's placeholder check-in tiles with real LiveKit video.
 - Call room: `call_room_base_url` setting is `""`; no provider chosen.
 
 ## Missing
+- UI wiring: `activity:update`/`activity:alert` not consumed (UI uses Demo-menu triggers); real people/timer/session codes/summary stats (see `ui_integration.md` demo-only inventory).
 - Desktop ↔ SpacetimeDB: no client bindings, no `spacetimedb` client dep, no `ingest_signal` calls.
 - Worker ↔ SpacetimeDB: no subscription to `worker_pending_signal_events`, no `write_judgment`.
 - Vision (MediaPipe), phone sensor page (`phone/`), replay clips.
 - Check-in call UI.
-- Screens: join/consent, goals, Pomodoro timer, nudge, private summary, replay.
+- Screens: replay (no consent screen by decision; see `product/privacy.md`).
 - Worker: summary + replay captions.
 - Inferentia small model (Claude Haiku is the only judge).
 - Integrations: Creao/Slack, Notability export.
+
+## UI features still to integrate (UI is hardcoded/local; spec: `ui_integration.md`)
+| Feature | Needs |
+|---|---|
+| Session create/join | Real invite codes + room lookup (SpacetimeDB sessions); host/participant role from server membership. `STUDY25` is hardcoded. |
+| Pomodoro sync | Host publishes `PomodoroTimerEvent`; participants derive time from `startedAt`. Reducers exist; no client. |
+| Teammates / focus dots | `people.ts` is hardcoded; use session members + smoothed status. |
+| Off-task detection → check-in | Replace Demo menu with `activity:update`/`alert` + DB call trigger (`CallIncoming`). |
+| Check-in video | Wire LiveKit (`useCircleCall.ts`, `circleAPI`) into placeholder tiles. **Important.** |
+| Screen share in check-in | Hardcoded calculus mock; use `desktopCapturer` source. |
+| "I'm tired" signal | Local only; send `ParticipantFatigueSignal`; host reads. |
+| Leave / host leave | Presence update; host leave policy (end room vs transfer) undecided. |
+| Goals / distraction capture | Local React state; persist as session records (private). |
+| Private summary | Hardcoded %, minutes, rhythm chart; compute from session records; Claude summary (1 call/session). |
+| Camera-on disclosure / vision | MediaPipe not built. |
+| Phone sensor, replay clips | Not built. |
+| Native overlays | Dock/check-ins render inside main window; need separate transparent always-on-top windows (`moveToCorner`, `setIgnoreMouseEvents` exist). |
+| Demo menu + Apple desktop preview | Hide behind dev flag for final build. |
+| Voice AI | Archived in `outdated/`; re-add only if wanted. |
 
 ## Mismatches (unresolved; decisions tracked in `product/decisions.md`)
 | Area | Variants in code |
@@ -44,10 +64,13 @@ Last updated: 2026-10-24. Biggest gap: **nothing connects to SpacetimeDB yet**. 
 1. Generate SpacetimeDB TS bindings; desktop joins session and sends `ingest_signal` every 10 s.
 2. Worker subscribes to `worker_pending_signal_events` → `write_judgment`. (DB fallback judge covers the demo meanwhile.)
 3. Pick call provider; set `call_room_base_url`; desktop opens room on `CallIncoming` alert.
-4. Consent/goals/summary screens.
+4. Back summary screen with real stats.
 5. Resolve judge + category mismatches.
 
 ## Gotchas
+- `npm install` fails with `Cannot read properties of null (reading 'edgesOut')` unless `vite` is an explicit devDependency (added). Used `--legacy-peer-deps` to add Tailwind.
+- Renderer CSS imports Google Fonts: needs network. No CSP is set (old UI had none; `ui_to_integrate` CSP omitted because it blocks LiveKit/SpacetimeDB sockets).
+- `ui_to_integrate/` is the untouched UI source; safe to delete once the team confirms.
 - Desktop has no `.env` loader: `ANTHROPIC_API_KEY` must be in the shell env for `npm run dev`.
 - Worker runs `.ts` directly: needs Node 24 (`node -v`).
 - `osascript` needs Accessibility/Automation permission for System Events; window titles need Screen Recording.

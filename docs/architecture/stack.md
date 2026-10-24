@@ -3,11 +3,11 @@
 ## Packages
 | Part | Path | Runtime | Key deps |
 |---|---|---|---|
-| Desktop | `/` (`src/`) | Electron ^28, electron-vite ^2 | react ^18.2, react-dom, @vitejs/plugin-react ^4, typescript ^5, @anthropic-ai/sdk ^0.27 |
+| Desktop | `/` (`src/`) | Electron ^28, electron-vite ^2 | react ^18.2, react-dom, @vitejs/plugin-react ^4, tailwindcss ^4 + @tailwindcss/vite ^4 (renderer), vite ^5.4 (explicit; `npm install` without it breaks), typescript ^5, @anthropic-ai/sdk ^0.27 |
 | Worker | `worker/` | Node 24, ESM, runs `.ts` directly (no build) | @anthropic-ai/sdk ^0.27 |
 | SpacetimeDB module | `spacetimedb/` | SpacetimeDB TS module (V8) | spacetimedb 2.13.*, typescript ~5.6 |
 
-Desktop build: `electron.vite.config.ts` (main/preload externalize deps; renderer uses React plugin). Root `tsconfig.json`: ES2020, CommonJS, strict.
+Desktop build: `electron.vite.config.ts` (main/preload externalize deps; renderer uses React + Tailwind plugins). Root `tsconfig.json`: ES2020, CommonJS, strict.
 
 ## Models
 | Use | Model | Where |
@@ -20,15 +20,14 @@ Desktop build: `electron.vite.config.ts` (main/preload externalize deps; rendere
 | Service | Status |
 |---|---|
 | SpacetimeDB maincloud, db `calhacks-13-wyd` | `spacetime.json`, `spacetime.local.json` |
-| Cartesia TTS | stub (macOS `say`) |
-| Web Speech API (renderer) | used for onboarding transcript |
+| Cartesia TTS / voice onboarding | archived in `outdated/` |
 | Call provider | undecided |
 
 ## Env vars (`.env`, gitignored)
 | Var | Used by |
 |---|---|
 | `ANTHROPIC_API_KEY` | desktop (shell env, no `.env` loader), worker (`--env-file-if-exists=../.env`) |
-| `CARTESIA_API_KEY`, `CARTESIA_VOICE_ID` | reserved for `cartesiaTTS.ts`; unused |
+| `CARTESIA_API_KEY`, `CARTESIA_VOICE_ID` | used only by archived `outdated/` voice code |
 
 ## Commands
 | Do | Run |

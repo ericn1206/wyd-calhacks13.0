@@ -1,8 +1,9 @@
-# Privacy (non-negotiable)
+# Privacy (hackathon scope)
 
-- Webcam processing runs on the user's laptop only. Never upload frames, images, video, or audio to any API or to SpacetimeDB.
-- Only small text events are shared (SpacetimeDB). AI judgment input is text only (signals + activity summary).
-- Explicit consent at join, per sensor: webcam, activity, phone, replay clips. The DB enforces it in `ingest_signal` (non-consented fields are zeroed/dropped; see `../architecture/contracts.md#signalinput`).
-- Replay clips: opt-in, stored locally, deleted when the session closes. DB holds only metadata + a hash of the local path.
-- Summaries are private to their owner. Anything shown to the group (e.g. a call reason) must be friendly and non-shaming.
-- Window titles can contain sensitive text; only the AI worker and DB see them, never other members.
+Demo-only project, not going live. Privacy is not a priority; no consent screen or legal flow required.
+
+- Webcam processing stays on the user's laptop. Frames/video/audio are not uploaded (keeps the demo simple and cheap, not a compliance rule).
+- Only small text events go to SpacetimeDB. AI judgment input is text only.
+- No explicit consent step. The intro popup (`../ui_integration.md`) is the only onboarding. The DB still has per-sensor consent flags: the client must set them all `true` on join, else `ingest_signal` zeroes the fields (see `../architecture/contracts.md#signalinput`).
+- Replay clips (if built): local, deleted at session end.
+- Summaries are private to their owner. Anything shown to the group (e.g. a call reason) stays friendly and non-shaming (product tone, not privacy).
