@@ -1,4 +1,4 @@
-// Mirrors the shared event format in claude.md — do not change without telling the team.
+// Mirrors the shared event format in docs/architecture/contracts.md — do not change without telling the team.
 
 export type ActivityCategory =
   | 'coding' | 'notes' | 'docs' | 'school' | 'chat'

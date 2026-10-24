@@ -5,7 +5,7 @@ import { categorize, ActivityCategory } from './categorize'
 
 export type { Category, ActivityCategory }
 
-// Matches the `activity` field of the shared event format (see claude.md)
+// Matches the `activity` field of the shared event format (see docs/architecture/contracts.md)
 export interface Activity {
   app: string
   title: string

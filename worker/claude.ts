@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 
-// Fallback judge per claude.md (primary is the small model on Inferentia).
+// Fallback judge per docs/architecture/stack.md (primary is the small model on Inferentia).
 export const MODEL = 'claude-haiku-5-5'
 
 let client: Anthropic | null = null

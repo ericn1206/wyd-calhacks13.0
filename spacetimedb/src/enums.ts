@@ -1,7 +1,7 @@
 // Shared enums for the SpacetimeDB module, desktop app, and AI worker.
 // Plain TypeScript only (no spacetimedb imports) so any package can import it.
 // Over the wire, each enum value is a tagged object: { tag: 'Focused' }.
-// Mirrored in docs/event.md — keep both in sync.
+// Mirrored in docs/architecture/contracts.md — keep both in sync.
 
 export const SessionState = ['Lobby', 'Active', 'Break', 'Ended'] as const;
 export type SessionState = (typeof SessionState)[number];
