@@ -166,7 +166,7 @@ function OnboardingScreen({ phase, onTranscript }: {
 const defaultState: ActivityState = {
   appName: 'Loading...', windowTitle: '', category: 'unknown', reason: '',
   judgedByClaude: false, consecutiveDistractedSeconds: 0, alertLevel: 'none',
-  sessionStartTime: Date.now(), sessionContext: null, history: []
+  sessionStartTime: Date.now(), sessionContext: null, history: [], activity: { app: 'Unknown', title: '', category: 'unknown' }
 }
 
 function Dashboard({ state }: { state: ActivityState }) {
