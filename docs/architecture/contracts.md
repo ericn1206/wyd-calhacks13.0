@@ -81,7 +81,7 @@ No consent gating: all fields are stored as sent (consent flags and `set_consent
 Other reducers: `../components/spacetimedb-schema.md#reducers`.
 
 ## Desktop IPC (`src/preload/index.ts`)
-`window.wydDesktop` (typings: `src/renderer/src/electron.d.ts`):
+`window.wydDesktop` (typings: `src/renderer/src/desktop.d.ts`):
 | Method | Channel | Direction | Payload |
 |---|---|---|---|
 | `getPreferences` / `setPreferences` | `wyd:preferences:get` / `:set` | renderer → main (invoke) | `{checkInCorner}` in userData `preferences.json` |
@@ -90,17 +90,17 @@ Other reducers: `../components/spacetimedb-schema.md#reducers`.
 | `setOverlayVisible` | `wyd:overlay:set-visible` | invoke | `boolean`; creates/shows/hides the overlay window (shown on focus screen) |
 | `bridge.send` / `bridge.onMessage` | `wyd:bridge:send` → `wyd:bridge:message` | window ↔ window via main | `BridgeMessage` (`src/renderer/src/overlay/bridge.ts`): main→overlay `state`/`checkIn`/`reveal`/`reset`; overlay→main `ready`/`action` |
 | `startTracking` | `wyd:tracking:start` | invoke | `{subject, goals[]}` → `monitor.setSessionContext` + `start()`; called on Goals submit |
-| `onActivityUpdate` | `activity:update` | main → renderer | `ActivityState` (every 2 s); no UI consumer yet |
+| `onActivityUpdate` | `activity:update` | main → renderer | `ActivityState` (every 2 s, and on each vision update); `App.tsx` reads only `vision.focus` |
 | `onActivityAlert` | `activity:alert` | main → renderer | `ActivityState` when `alertLevel` is `warning`/`alert`; no UI consumer yet |
 
-`window.circleAPI` (LiveKit, unwired; room/identity/attributes below; typings `src/renderer/src/circle.d.ts`): `requestMediaAccess`, `getCallToken` (`call:token`), `setCallMode` (`window:call-mode`).
+`window.circleAPI` (LiveKit; room/identity/attributes below; typings `src/renderer/src/circle.d.ts`): `requestMediaAccess`, `getCallToken` (`call:token`), `setCallMode` (`window:call-mode`), `getProfile` (`app:profile` → `{demo: LOCKIN_DEMO==='1', name: macOS username}`).
 
 Removed: `activityAPI`, `sessionAPI` (voice onboarding, archived in `outdated/`). Type: `ActivityState` in `src/main/activityMonitor.ts`.
 
 ## LiveKit room
 Owner: `src/renderer/src/useCircleCall.ts`; token: `src/main/livekitToken.ts`.
-- Room: `lockin-<CODE>` (`CODE` = session code, A–Z0–9, 4–8 chars). One room per session; joined on entering the session, media published only during a call.
-- Identity: random UUID per app run. Name: lobby name (≤ 24 chars).
+- Room: `lockin-<CODE>` (`CODE` = session code, A–Z0–9, 4–8 chars). New UI joins only with `LOCKIN_DEMO=1`, on the focus/break screens. Media: video while live view or call; audio only in a call.
+- Identity: random UUID per app run. Name: `getProfile().name` (≤ 24 chars).
 - Token grants: `roomJoin`, `canPublish`, `canSubscribe`, `canPublishData`, `canUpdateOwnMetadata`; TTL 6 h.
 - Participant attributes:
 
@@ -108,12 +108,18 @@ Owner: `src/renderer/src/useCircleCall.ts`; token: `src/main/livekitToken.ts`.
 |---|---|---|
 | `callEndsAt` | ms epoch as string; `''` = none | call started or joined; cleared at call end |
 | `inCall` | `'1'` or `''` | media published / left |
+| `liveView` | `on:<ms>` / `off:<ms>` | demo switch; newest `<ms>` across participants wins; ignored without `LOCKIN_DEMO=1` |
+| `focus` | `focused` / `away` / `noface` / `off` | on connect and on each change of `ActivityState.vision.focus` |
 
 Active call = max `callEndsAt` over all participants, if in the future. Everyone in the call copies it, so the call survives the starter leaving.
 
-## Worker functions
-- `judge(topic, events: FocusEvent[], phase='work'|'break') → {status, confidence, reason}` (`worker/judge.ts`)
-- `categorizeUnknown(app, title) → ActivityCategory` (`worker/categorizeUnknown.ts`)
+## Vision sidecar
+`vision/detector.py` → stdout, one JSON line per second (`src/main/visionSidecar.ts` parses):
+```json
+{"t": 1792884675825, "face": true, "prob": 0.42, "distracted": false, "yaw": 61.3, "pitch": 74.0, "eyes": "open"}
+```
+- `prob`: mean distraction probability over the last 20 frames · `distracted`: `face && prob > 0.65` · `yaw`/`pitch`: pixel-space model features, not degrees.
+- `ActivityState.vision: VisionState | null` = `{focus, face, prob, eyes, t, reason?}`; `focus`: `focused` · `away` (distracted) · `noface` · `off` (no venv/model/camera; `reason` says why).
 
 ## Worker functions
 - `judge(topic, events: FocusEvent[], phase='work'|'break') → {status, confidence, reason}` (`worker/judge.ts`)

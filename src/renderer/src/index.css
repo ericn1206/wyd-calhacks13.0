@@ -524,3 +524,25 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
 
 /* Transparent full-screen overlay window (index.html?overlay=1) */
 .overlay-mode, .overlay-mode body { background: transparent; min-width: 0; overflow: hidden; }
+
+/* Demo live view (LOCKIN_DEMO=1): components/session/LiveGrid.tsx */
+.live-grid { width: min(960px, 100%); max-height: calc(100vh - 40px); padding: 20px; display: flex; flex-direction: column; gap: 14px; background: white; }
+.live-grid-head { display: flex; align-items: center; gap: 10px; }
+.live-grid-head > div { flex: 1; min-width: 0; display: grid; }
+.live-grid-head small { color: var(--muted); font-size: 12px; }
+.live-grid-head .primary, .live-grid-head .secondary { min-height: 38px; padding: 0 14px; font-size: 13px; }
+.live-tiles { flex: 1; min-height: 0; display: grid; gap: 10px; grid-auto-rows: minmax(160px, 1fr); }
+.live-tile { position: relative; overflow: hidden; border-radius: 16px; background: #1d2522; display: grid; place-items: center; aspect-ratio: 16 / 10; }
+.live-tile video { width: 100%; height: 100%; object-fit: cover; }
+.live-tile video.mirror { transform: scaleX(-1); }
+.live-initial { color: #cfe9e4; font: 700 30px Manrope, sans-serif; }
+.live-tile-labels { position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+.live-tile-labels span { background: rgba(0,0,0,.55); color: #f5f5f5; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 600; }
+.live-tile-labels .live-focus.focused { background: rgba(58,157,119,.9); }
+.live-tile-labels .live-focus.away { background: rgba(214,120,62,.92); }
+.live-tile-labels .live-focus.noface { background: rgba(120,128,125,.9); }
+.live-error { margin: 0; color: #b4532a; font-size: 13px; }
+.live-dot { width: 9px; height: 9px; border-radius: 50%; background: #e0463c; flex-shrink: 0; animation: live-pulse 1.4s ease-in-out infinite; }
+@keyframes live-pulse { 50% { opacity: .35; } }
+.live-banner { position: fixed; z-index: 40; top: 12px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; background: #3a1714; color: #ffd9d3; border-radius: 999px; padding: 7px 14px; font-size: 12px; font-weight: 700; box-shadow: 0 10px 30px rgba(0,0,0,.18); }
+.live-banner button { border: 0; background: #ffd9d3; color: #3a1714; border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 700; }

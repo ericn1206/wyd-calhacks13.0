@@ -12,6 +12,8 @@
 | 2026-10-24 | No roasts, spoken or written. |
 | 2026-10-24 | Phone sensor is optional; the app works fully without it. |
 | 2026-10-24 | Onboarding: typed questionnaire (subject + goals). No AI voice. |
+| 2026-10-24 | Webcam detector: Python sidecar (`vision/`) from the `webcam-activity-detection` branch; `04_screen_monitor.py` (Windows OCR + Gemini) excluded. |
+| 2026-10-24 | Demo live view: one switch shows everyone's camera to the session; behind `LOCKIN_DEMO=1`. |
 
 ## Open (ask, don't assume)
 | Question | Current direction / notes |

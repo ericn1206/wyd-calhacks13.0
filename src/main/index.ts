@@ -1,10 +1,12 @@
 import { app, BrowserWindow, desktopCapturer, ipcMain, screen, session as electronSession, shell, systemPreferences } from 'electron'
 import { promises as fs } from 'fs'
+import { userInfo } from 'os'
 import { join } from 'path'
 import { ActivityMonitor } from './activityMonitor'
 import type { SessionContext } from './claudeJudge'
 import { loadEnv } from './env'
 import { createCallToken } from './livekitToken'
+import { startVision, stopVision, visionOff } from './visionSidecar'
 
 loadEnv()
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
@@ -165,6 +167,17 @@ function registerDesktopApi(): void {
 
   // LiveKit call plumbing for src/renderer/src/useCircleCall.ts (not wired into the UI yet).
   ipcMain.handle('call:token', (_e, code: string, identity: string, name: string) => createCallToken(code, identity, name))
+  // LOCKIN_DEMO=1 unlocks the session-wide live camera view (docs/components/livekit-call.md).
+  ipcMain.handle('app:profile', () => {
+    let name = 'Friend'
+    try {
+      const user = userInfo().username
+      if (user) name = user.charAt(0).toUpperCase() + user.slice(1)
+    } catch {
+      // keep the fallback
+    }
+    return { demo: process.env['LOCKIN_DEMO'] === '1', name }
+  })
   ipcMain.handle('window:call-mode', (_e, on: boolean) => {
     if (!mainWindow) return
     mainWindow.setAlwaysOnTop(Boolean(on))
@@ -180,7 +193,17 @@ function registerDesktopApi(): void {
     const context: SessionContext = { subject: ctx.subject, goals: ctx.goals, sites: '', notes: '' }
     monitor?.setSessionContext(context)
     monitor?.start()
+    void startWebcamDetector()
   })
+}
+
+/** Ask for the camera first so macOS attributes the Python child to Electron's permission. */
+async function startWebcamDetector(): Promise<void> {
+  if (process.platform === 'darwin' && !(await systemPreferences.askForMediaAccess('camera'))) {
+    monitor?.setVision(visionOff('Camera access is off'))
+    return
+  }
+  startVision(app.getAppPath(), (state) => monitor?.setVision(state))
 }
 
 app.whenReady().then(() => {
@@ -201,7 +224,10 @@ app.whenReady().then(() => {
   })
 })
 
+app.on('before-quit', stopVision)
+
 app.on('window-all-closed', () => {
   monitor?.stop()
+  stopVision()
   if (process.platform !== 'darwin') app.quit()
 })

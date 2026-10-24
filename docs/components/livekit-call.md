@@ -27,10 +27,14 @@ Credential check without the app: `POST <https URL>/twirp/livekit.RoomService/Li
 - Call trigger is the desktop's local alert or the button, not the DB `CallIncoming` alert.
 - Leaving keeps `callEndsAt`, so "Rejoin call" works until it expires.
 
+## Demo live view
+`LOCKIN_DEMO=1` on every laptop. Demo menu → "Live camera view · everyone" sets `liveView=on:<ms>`; every laptop in the room publishes camera video (no audio) and shows `LiveGrid` with `focus` badges plus a LIVE banner. "Turn off for everyone" sets `off:<ms>`. "Hide" only hides the grid locally; the banner stays. Starting a call during live view adds audio only; ending it keeps video.
+
 ## Gotchas & don'ts
 - Don't add `livekit-server-sdk` to main: needs Node 19+, Electron 28 = Node 18.
 - Never send `LIVEKIT_API_SECRET` to the renderer; tokens come only from `call:token`.
 - `Room({ adaptiveStream: false })` is required: tiles render raw `MediaStream`s, and adaptiveStream pauses video not attached through LiveKit.
 - Camera off/on stops and restarts the camera track (new `MediaStreamTrack`); `syncLocalStream()` rebuilds the local preview.
 - A remote with camera off shows a black tile, not their initial: hiding the `<video>` would also cut their audio.
+- All publish/unpublish goes through one promise queue (`enqueue`) so live view and a call never open the camera twice.
 - A failed camera/mic open marks that call declined so attribute updates don't retry in a loop; "Call circle"/"Rejoin" clears it.

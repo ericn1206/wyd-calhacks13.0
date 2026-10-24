@@ -13,6 +13,7 @@ Opt-in group focus app: sustained drift → rare, short surprise group check-in 
 | Versions, env vars, commands | `docs/architecture/stack.md` |
 | SpacetimeDB module | `docs/components/spacetimedb.md` → `spacetimedb-schema.md`; SDK rules: `docs/reference/spacetimedb-sdk.md` |
 | Check-in calls (LiveKit) | `docs/components/livekit-call.md` |
+| Webcam detector (Python sidecar) | `docs/components/vision.md` |
 | Other components | `docs/components/<name>.md` if it exists, else `docs/status.md` |
 | Unsettled questions | `docs/product/decisions.md` |
 

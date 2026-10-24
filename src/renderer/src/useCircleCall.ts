@@ -15,10 +15,23 @@ const CALL_DURATION_MS = 90_000
 // Everyone in a call copies the end time, so it survives the starter leaving.
 const CALL_ENDS_AT = 'callEndsAt'
 const IN_CALL = 'inCall'
+// Demo live view: `on:<ms>` / `off:<ms>`; the newest switch from anyone wins.
+const LIVE_VIEW = 'liveView'
+// Webcam detector status shown as a badge on tiles: focused / away / noface / off.
+const FOCUS = 'focus'
+
+const VIDEO_OPTIONS = { resolution: VideoPresets.h720.resolution, facingMode: 'user' as const }
 
 export interface CircleRoom {
   name: string
   sessionCode: string
+}
+
+export interface CircleOptions {
+  /** This laptop's detector status, published as the `focus` attribute. */
+  focus?: string
+  /** Only with LOCKIN_DEMO=1. Without it, live view switches from others are ignored. */
+  allowLiveView?: boolean
 }
 
 export interface CirclePeer {
@@ -31,6 +44,7 @@ export interface RemoteTile {
   name: string
   stream: MediaStream | null
   connection: RTCPeerConnectionState
+  focus: string
 }
 
 export interface CircleCall {
@@ -46,6 +60,8 @@ export interface CircleCall {
   remotes: RemoteTile[]
   muted: boolean
   cameraOn: boolean
+  liveView: boolean
+  setLiveView: (on: boolean) => void
   startCall: () => void
   joinCall: () => void
   leaveCall: () => void
@@ -81,14 +97,38 @@ function endsAtOf(participant: Participant): number {
   return Number.isFinite(value) ? value : 0
 }
 
+interface LiveSwitch {
+  on: boolean
+  at: number
+}
+
+function liveSwitchOf(participant: Participant): LiveSwitch | null {
+  const match = /^(on|off):(\d+)$/.exec(participant.attributes[LIVE_VIEW] ?? '')
+  return match ? { on: match[1] === 'on', at: Number(match[2]) } : null
+}
+
+function trackOf(tracks: LocalTrack[], kind: Track.Kind): LocalTrack | undefined {
+  return tracks.find((track) => track.kind === kind)
+}
+
 /** Electron prefixes errors thrown in ipcMain handlers; keep only the message. */
 function ipcMessage(err: unknown): string {
   const text = err instanceof Error ? err.message : String(err)
   return text.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
 }
 
-export function useCircleCall(room: CircleRoom | null): CircleCall {
+export function useCircleCall(room: CircleRoom | null, options: CircleOptions = {}): CircleCall {
+  const { focus = 'off', allowLiveView = false } = options
   const selfId = useRef(crypto.randomUUID())
+  const liveViewRef = useRef(false)
+  // This laptop's last switch. Covers the gap before LiveKit echoes our attributes back.
+  const ownLive = useRef<LiveSwitch | null>(null)
+  const allowLiveRef = useRef(allowLiveView)
+  allowLiveRef.current = allowLiveView
+  const focusRef = useRef(focus)
+  focusRef.current = focus
+  // Every publish/unpublish runs in order, so a call and live view never both open the camera.
+  const mediaQueue = useRef<Promise<void>>(Promise.resolve())
   const roomRef = useRef<Room | null>(null)
   const tracksRef = useRef<LocalTrack[]>([])
   const streams = useRef<Map<string, { key: string; stream: MediaStream | null }>>(new Map())
@@ -116,6 +156,13 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
   const [remotes, setRemotes] = useState<RemoteTile[]>([])
   const [muted, setMuted] = useState(false)
   const [cameraOn, setCameraOn] = useState(true)
+  const [liveView, setLiveViewState] = useState(false)
+
+  const enqueue = useCallback((task: () => Promise<void>): Promise<void> => {
+    const next = mediaQueue.current.then(task, task)
+    mediaQueue.current = next.catch(() => undefined)
+    return next
+  }, [])
 
   const setAttributes = useCallback((attributes: Record<string, string>) => {
     const lk = roomRef.current
@@ -149,30 +196,39 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
     setLocalStream(tracks.length ? new MediaStream(tracks.map((track) => track.mediaStreamTrack)) : null)
   }, [])
 
-  const leaveMedia = useCallback((endCall: boolean) => {
-    inCallRef.current = false
-    setInCall(false)
-    setJoining(false)
+  const dropTracks = useCallback((keep: (track: LocalTrack) => boolean) => {
     const lk = roomRef.current
-    const tracks = tracksRef.current
-    tracksRef.current = []
-    for (const track of tracks) {
+    const dropped = tracksRef.current.filter((track) => !keep(track))
+    tracksRef.current = tracksRef.current.filter(keep)
+    for (const track of dropped) {
       if (lk) void lk.localParticipant.unpublishTrack(track).catch(() => undefined)
       track.stop()
     }
-    streams.current.clear()
-    setRemotes([])
-    setLocalStream(null)
+    syncLocalStream()
+  }, [syncLocalStream])
+
+  /** Leaves the call. Video stays published while live view is on, unless `everything`. */
+  const leaveMedia = useCallback((endCall: boolean, everything = false) => {
+    inCallRef.current = false
+    setInCall(false)
+    setJoining(false)
+    const keepVideo = liveViewRef.current && !everything
+    dropTracks((track) => keepVideo && track.kind === Track.Kind.Video)
     setMuted(false)
-    setCameraOn(true)
+    if (!keepVideo) {
+      streams.current.clear()
+      setRemotes([])
+      setCameraOn(true)
+    }
     if (endCall) ownEndsAt.current = null
     setAttributes(endCall ? { [IN_CALL]: '', [CALL_ENDS_AT]: '' } : { [IN_CALL]: '' })
-  }, [setAttributes])
+    if (keepVideo) handlers.current.refresh()
+  }, [dropTracks, setAttributes])
 
   const beginMedia = useCallback(async () => {
     const lk = roomRef.current
     if (!lk) return
-    if (tracksRef.current.length) {
+    if (trackOf(tracksRef.current, Track.Kind.Audio) && trackOf(tracksRef.current, Track.Kind.Video)) {
       inCallRef.current = true
       setInCall(true)
       setJoining(false)
@@ -193,7 +249,7 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
         chimedFor.current = endsAt
         playJoinChime()
       }
-      let tracks: LocalTrack[] = []
+      let created: LocalTrack[] = []
       try {
         if (window.circleAPI) {
           const access = await window.circleAPI.requestMediaAccess()
@@ -201,16 +257,26 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
             throw new Error('Camera and microphone are blocked. Allow them for Electron in System Settings, then try the call again.')
           }
         }
-        tracks = await createLocalTracks({
-          audio: { echoCancellation: true, noiseSuppression: true },
-          video: { resolution: VideoPresets.h720.resolution, facingMode: 'user' },
+        let stale = false
+        // Live view may already publish video; only open what is missing.
+        await enqueue(async () => {
+          const needAudio = !trackOf(tracksRef.current, Track.Kind.Audio)
+          const needVideo = !trackOf(tracksRef.current, Track.Kind.Video)
+          if (!needAudio && !needVideo) return
+          created = await createLocalTracks({
+            audio: needAudio ? { echoCancellation: true, noiseSuppression: true } : false,
+            video: needVideo ? VIDEO_OPTIONS : false,
+          })
+          if (roomRef.current !== lk) {
+            created.forEach((track) => track.stop())
+            created = []
+            stale = true
+            return
+          }
+          for (const track of created) await lk.localParticipant.publishTrack(track)
+          tracksRef.current = [...tracksRef.current, ...created]
         })
-        if (roomRef.current !== lk) {
-          tracks.forEach((track) => track.stop())
-          return
-        }
-        for (const track of tracks) await lk.localParticipant.publishTrack(track)
-        tracksRef.current = tracks
+        if (stale) return
         syncLocalStream()
         inCallRef.current = true
         setInCall(true)
@@ -219,7 +285,9 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
         setAttributes({ [IN_CALL]: '1', [CALL_ENDS_AT]: claimed ? String(claimed) : '' })
         handlers.current.refresh()
       } catch (err) {
-        for (const track of tracks) {
+        const failed = new Set(created)
+        tracksRef.current = tracksRef.current.filter((track) => !failed.has(track))
+        for (const track of created) {
           void lk.localParticipant.unpublishTrack(track).catch(() => undefined)
           track.stop()
         }
@@ -242,7 +310,50 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
     } finally {
       startingRef.current = null
     }
-  }, [setAttributes, syncLocalStream])
+  }, [enqueue, setAttributes, syncLocalStream])
+
+  const startLiveVideo = useCallback(() => enqueue(async () => {
+    const lk = roomRef.current
+    if (!lk || !liveViewRef.current || trackOf(tracksRef.current, Track.Kind.Video)) return
+    let video: LocalTrack | undefined
+    try {
+      if (window.circleAPI) {
+        const access = await window.circleAPI.requestMediaAccess()
+        if (!access.camera) throw new Error('Camera access is off. Allow it for Electron in System Settings.')
+      }
+      ;[video] = await createLocalTracks({ audio: false, video: VIDEO_OPTIONS })
+      if (!video || roomRef.current !== lk || !liveViewRef.current) {
+        video?.stop()
+        return
+      }
+      await lk.localParticipant.publishTrack(video)
+      tracksRef.current = [...tracksRef.current, video]
+      setCameraOn(true)
+      syncLocalStream()
+      handlers.current.refresh()
+    } catch (err) {
+      if (video && !tracksRef.current.includes(video)) video.stop()
+      setError(err instanceof Error ? err.message : 'Could not open the camera for live view.')
+    }
+  }), [enqueue, syncLocalStream])
+
+  const stopLiveVideo = useCallback(() => enqueue(async () => {
+    if (liveViewRef.current || inCallRef.current) return
+    dropTracks(() => false)
+    streams.current.clear()
+    setRemotes([])
+  }), [dropTracks, enqueue])
+
+  /** Newest live view switch from anyone in the room, including our own unechoed one. */
+  const liveViewWanted = useCallback((lk: Room): boolean => {
+    if (!allowLiveRef.current) return false
+    let latest = ownLive.current
+    for (const participant of [lk.localParticipant, ...lk.remoteParticipants.values()]) {
+      const next = liveSwitchOf(participant)
+      if (next && (!latest || next.at > latest.at)) latest = next
+    }
+    return Boolean(latest?.on)
+  }, [])
 
   const refresh = useCallback(() => {
     const lk = roomRef.current
@@ -253,13 +364,21 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
       name: participant.name || 'Friend',
     })))
 
+    const wantLive = liveViewWanted(lk)
+    if (wantLive !== liveViewRef.current) {
+      liveViewRef.current = wantLive
+      setLiveViewState(wantLive)
+      void (wantLive ? startLiveVideo() : stopLiveVideo())
+    }
+
     const reconnecting = lk.state === ConnectionState.Reconnecting || lk.state === ConnectionState.SignalReconnecting
     const tiles: RemoteTile[] = []
     const live = new Set<string>()
-    if (inCallRef.current) {
+    if (inCallRef.current || liveViewRef.current) {
       for (const participant of participants) {
+        // Live view is video only: play others' audio only while we are in the call too.
         const tracks = [...participant.trackPublications.values()]
-          .filter((pub) => pub.track && (pub.kind === Track.Kind.Video || pub.kind === Track.Kind.Audio))
+          .filter((pub) => pub.track && (pub.kind === Track.Kind.Video || (pub.kind === Track.Kind.Audio && inCallRef.current)))
           .map((pub) => pub.track!.mediaStreamTrack)
         if (participant.attributes[IN_CALL] !== '1' && tracks.length === 0) continue
         live.add(participant.identity)
@@ -275,6 +394,7 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
           name: participant.name || 'Friend',
           stream: cached.stream,
           connection: reconnecting ? 'disconnected' : cached.stream ? 'connected' : 'connecting',
+          focus: participant.attributes[FOCUS] || 'off',
         })
       }
     }
@@ -288,10 +408,24 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
     if (endsAt && !inCallRef.current && !startingRef.current && declinedEndsAt.current !== endsAt) {
       void beginMedia()
     }
-  }, [activeEndsAt, beginMedia, setCallWindow])
+  }, [activeEndsAt, beginMedia, liveViewWanted, setCallWindow, startLiveVideo, stopLiveVideo])
 
   handlers.current.refresh = refresh
-  handlers.current.stopMedia = () => leaveMedia(false)
+  handlers.current.stopMedia = () => {
+    liveViewRef.current = false
+    ownLive.current = null
+    setLiveViewState(false)
+    leaveMedia(false, true)
+  }
+
+  useEffect(() => {
+    if (status === 'connected') setAttributes({ [FOCUS]: focus })
+  }, [focus, status, setAttributes])
+
+  // Turning the demo flag off stops live view here even if someone else left it on.
+  useEffect(() => {
+    handlers.current.refresh()
+  }, [allowLiveView])
 
   useEffect(() => {
     if (!callEndsAt) return
@@ -424,6 +558,14 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
     void window.circleAPI?.setCallMode(false)
   }, [])
 
+  const setLiveView = useCallback((on: boolean) => {
+    if (!allowLiveRef.current) return
+    const next = { on, at: Date.now() }
+    ownLive.current = next
+    setAttributes({ [LIVE_VIEW]: `${on ? 'on' : 'off'}:${next.at}` })
+    handlers.current.refresh()
+  }, [setAttributes])
+
   const toggleMute = useCallback(() => {
     const audio = tracksRef.current.find((track) => track.kind === Track.Kind.Audio)
     if (!audio) return
@@ -454,6 +596,8 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
     remotes,
     muted,
     cameraOn,
+    liveView,
+    setLiveView,
     startCall,
     joinCall,
     leaveCall,

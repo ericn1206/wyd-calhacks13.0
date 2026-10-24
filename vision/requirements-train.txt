@@ -1,0 +1,6 @@
+# Only for 01_collect_data.py / 02_train_model.py (retraining the model).
+# xgboost on macOS also needs OpenMP: brew install libomp
+-r requirements.txt
+xgboost==3.4.1
+pandas==3.0.6
+scikit-learn==1.9.1

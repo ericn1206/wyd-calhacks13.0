@@ -2,8 +2,9 @@ import { exec } from 'child_process'
 import { classify, Category } from './appClassifier'
 import { judgeActivity, SessionContext } from './claudeJudge'
 import { categorize, ActivityCategory } from './categorize'
+import type { VisionState } from './visionSidecar'
 
-export type { Category, ActivityCategory }
+export type { Category, ActivityCategory, VisionState }
 
 // Matches the `activity` field of the shared event format (see docs/architecture/contracts.md)
 export interface Activity {
@@ -35,6 +36,8 @@ export interface ActivityState {
   sessionStartTime: number
   sessionContext: SessionContext | null
   history: ActivityEntry[]
+  /** Webcam detector (src/main/visionSidecar.ts); null until it reports. Not used for alerts yet. */
+  vision: VisionState | null
 }
 
 function runScript(script: string): Promise<string> {
@@ -107,7 +110,8 @@ export class ActivityMonitor {
       alertLevel: 'none',
       sessionStartTime: Date.now(),
       sessionContext: null,
-      history: []
+      history: [],
+      vision: null
     }
   }
 
@@ -116,6 +120,11 @@ export class ActivityMonitor {
     this.lastJudgment = null
     this.lastClaudeCallTime = 0
     this.state = { ...this.state, sessionContext: ctx }
+  }
+
+  setVision(vision: VisionState): void {
+    this.state = { ...this.state, vision }
+    for (const listener of this.listeners) listener(this.state)
   }
 
   start(): void {
@@ -232,7 +241,8 @@ export class ActivityMonitor {
       alertLevel,
       sessionStartTime: this.state.sessionStartTime,
       sessionContext: this.sessionContext,
-      history
+      history,
+      vision: this.state.vision
     }
 
     for (const listener of this.listeners) {

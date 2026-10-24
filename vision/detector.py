@@ -1,0 +1,177 @@
+"""Headless webcam focus detector, run as a sidecar by the Electron app (src/main/visionSidecar.ts).
+
+Prints one JSON line per second to stdout:
+  {"t": ms, "face": bool, "prob": 0-1, "distracted": bool, "yaw": f, "pitch": f, "eyes": "open"|"closed"}
+Frames never leave this process: nothing is written to disk or sent anywhere.
+Exits on SIGTERM or when stdin closes (so it dies with the app).
+
+Feature extraction must stay identical to 01_collect_data.py, or the model's inputs drift.
+The XGBoost model is evaluated in pure Python, so xgboost (and libomp) is only needed to retrain.
+"""
+
+import argparse
+import json
+import math
+import os
+import signal
+import sys
+import threading
+import time
+
+import cv2
+import mediapipe as mp
+import numpy as np
+
+HISTORY = 20             # frames averaged, as in 03_detection_server.py
+DISTRACTED_ABOVE = 0.65  # as in 03_detection_server.py
+EYES_CLOSED_BELOW = 0.008  # mean normalized lid gap; rough, tune with real data
+
+stop = threading.Event()
+
+
+class TreeModel:
+    """Evaluates an XGBoost binary:logistic model saved with save_model(*.json)."""
+
+    def __init__(self, path):
+        with open(path) as f:
+            learner = json.load(f)['learner']
+        objective = learner['objective']['name']
+        if objective != 'binary:logistic':
+            raise ValueError(f'unsupported objective {objective}')
+        base = float(learner['learner_model_param']['base_score'].strip('[]'))
+        self.base_margin = math.log(base / (1 - base))
+        self.trees = learner['gradient_booster']['model']['trees']
+        self.feature_names = learner['feature_names']
+
+    def prob(self, x):
+        margin = self.base_margin
+        for t in self.trees:
+            left, right = t['left_children'], t['right_children']
+            cond, idx, default_left = t['split_conditions'], t['split_indices'], t['default_left']
+            n = 0
+            while left[n] != -1:
+                v = x[idx[n]]
+                if v != v:  # NaN goes the default way
+                    n = left[n] if default_left[n] else right[n]
+                else:
+                    n = left[n] if v < cond[n] else right[n]
+            margin += cond[n]  # leaf value
+        return 1 / (1 + math.exp(-margin))
+
+
+def features(face_landmarks, pose_results, w, h):
+    """Same 8 features, same order, as 01_collect_data.py."""
+    nose = np.array([face_landmarks[1].x * w, face_landmarks[1].y * h])
+    chin = np.array([face_landmarks[152].x * w, face_landmarks[152].y * h])
+    left_eye = np.array([face_landmarks[33].x * w, face_landmarks[33].y * h])
+    right_eye = np.array([face_landmarks[263].x * w, face_landmarks[263].y * h])
+    face_center = (left_eye + right_eye) / 2
+
+    pitch = chin[1] - nose[1]
+    yaw = right_eye[0] - left_eye[0]
+    roll = np.arctan2(right_eye[1] - left_eye[1], right_eye[0] - left_eye[0])
+    nose_x_offset = nose[0] - face_center[0]
+    nose_y_offset = nose[1] - face_center[1]
+    left_eye_ratio = abs(face_landmarks[159].y - face_landmarks[145].y)
+    right_eye_ratio = abs(face_landmarks[386].y - face_landmarks[374].y)
+
+    shoulder_dist = 0
+    if pose_results.pose_landmarks:
+        pose_landmarks = pose_results.pose_landmarks.landmark
+        l_shoulder = np.array([pose_landmarks[11].x * w, pose_landmarks[11].y * h])
+        r_shoulder = np.array([pose_landmarks[12].x * w, pose_landmarks[12].y * h])
+        shoulder_center = (l_shoulder + r_shoulder) / 2
+        shoulder_dist = np.linalg.norm(nose - shoulder_center)
+
+    return [float(v) for v in (
+        pitch, yaw, roll,
+        nose_x_offset, nose_y_offset,
+        left_eye_ratio, right_eye_ratio,
+        shoulder_dist,
+    )]
+
+
+def watch_stdin():
+    for _ in sys.stdin:
+        pass
+    stop.set()
+
+
+def emit(payload):
+    sys.stdout.write(json.dumps(payload) + '\n')
+    sys.stdout.flush()
+
+
+def main():
+    here = os.path.dirname(os.path.abspath(__file__))
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--model', default=os.path.join(here, 'distraction_model.json'))
+    parser.add_argument('--camera', type=int, default=0)
+    parser.add_argument('--fps', type=float, default=10)
+    args = parser.parse_args()
+
+    signal.signal(signal.SIGTERM, lambda *_: stop.set())
+    threading.Thread(target=watch_stdin, daemon=True).start()
+
+    model = TreeModel(args.model)
+    face_mesh = mp.solutions.face_mesh.FaceMesh(max_num_faces=1, refine_landmarks=True)
+    pose = mp.solutions.pose.Pose()
+
+    cap = cv2.VideoCapture(args.camera)
+    if not cap.isOpened():
+        print(f'could not open camera {args.camera} (check Camera permission)', file=sys.stderr)
+        return 2
+
+    history = []
+    frame_gap = 1 / max(1.0, args.fps)
+    last_emit = 0.0
+    face_seen = False
+    last = {'yaw': 0.0, 'pitch': 0.0, 'eyes': 'open'}
+
+    try:
+        while not stop.is_set():
+            started = time.monotonic()
+            ok, frame = cap.read()
+            if not ok:
+                print('camera stopped returning frames', file=sys.stderr)
+                return 3
+
+            h, w, _ = frame.shape
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            face_results = face_mesh.process(rgb)
+            if face_results.multi_face_landmarks:
+                face_seen = True
+                pose_results = pose.process(rgb)
+                x = features(face_results.multi_face_landmarks[0].landmark, pose_results, w, h)
+                history.append(model.prob(x))
+                if len(history) > HISTORY:
+                    history.pop(0)
+                last = {
+                    'yaw': round(x[1], 2),
+                    'pitch': round(x[0], 2),
+                    'eyes': 'closed' if (x[5] + x[6]) / 2 < EYES_CLOSED_BELOW else 'open',
+                }
+
+            now = time.monotonic()
+            if now - last_emit >= 1:
+                avg = float(np.mean(history)) if history else 0.0
+                emit({
+                    't': int(time.time() * 1000),
+                    'face': face_seen,
+                    'prob': round(avg, 3),
+                    'distracted': face_seen and avg > DISTRACTED_ABOVE,
+                    **last,
+                })
+                last_emit = now
+                face_seen = False
+
+            rest = frame_gap - (time.monotonic() - started)
+            if rest > 0:
+                stop.wait(rest)
+    finally:
+        cap.release()
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

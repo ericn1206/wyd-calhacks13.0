@@ -41,5 +41,6 @@ contextBridge.exposeInMainWorld('circleAPI', {
   requestMediaAccess: () => ipcRenderer.invoke('wyd:media:request') as Promise<{ camera: boolean; microphone: boolean }>,
   getCallToken: (code: string, identity: string, name: string) =>
     ipcRenderer.invoke('call:token', code, identity, name) as Promise<{ url: string; token: string; room: string }>,
-  setCallMode: (on: boolean) => ipcRenderer.invoke('window:call-mode', on)
+  setCallMode: (on: boolean) => ipcRenderer.invoke('window:call-mode', on),
+  getProfile: () => ipcRenderer.invoke('app:profile') as Promise<{ demo: boolean; name: string }>
 })

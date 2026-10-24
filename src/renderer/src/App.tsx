@@ -1,13 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { EntryScreen } from './components/onboarding/EntryScreen'
 import { GoalsScreen } from './components/onboarding/GoalsScreen'
 import { IntroductionScreen } from './components/onboarding/IntroductionScreen'
 import { BreakScreen } from './components/session/BreakScreen'
+import { LiveBanner, LiveGrid } from './components/session/LiveGrid'
 import { SessionSidebar } from './components/session/SessionSidebar'
 import { SummaryScreen } from './components/session/SummaryScreen'
 import type { OverlayState, ToMain, ToOverlay } from './overlay/bridge'
 import { Icon } from './components/ui/Icon'
 import { people } from './data/people'
+import { useCircleCall } from './useCircleCall'
 
 type Screen = 'join' | 'consent' | 'goals' | 'focus' | 'break' | 'summary'
 
@@ -38,6 +40,22 @@ export default function App() {
       if (preferences.checkInCorner) setCheckInCorner(preferences.checkInCorner)
     })
   }, [])
+
+  // Demo live view (LOCKIN_DEMO=1): LiveKit room per session code + webcam detector badge.
+  const [profile, setProfile] = useState({ demo: false, name: 'Friend' })
+  const [cameraFocus, setCameraFocus] = useState('off')
+  const [liveGridHidden, setLiveGridHidden] = useState(false)
+  useEffect(() => {
+    window.circleAPI?.getProfile().then(setProfile).catch(() => undefined)
+    window.wydDesktop?.onActivityUpdate((state) => setCameraFocus(state.vision?.focus ?? 'off'))
+    return () => window.wydDesktop?.removeActivityListeners()
+  }, [])
+  const inSession = screen === 'focus' || screen === 'break'
+  const circleRoom = useMemo(
+    () => (profile.demo && inSession && code.trim() ? { name: profile.name, sessionCode: code } : null),
+    [profile.demo, profile.name, inSession, code]
+  )
+  const circle = useCircleCall(circleRoom, { focus: cameraFocus, allowLiveView: profile.demo })
 
 
   useEffect(() => {
@@ -150,19 +168,25 @@ export default function App() {
 
   if (screen === 'goals') return <GoalsScreen goals={goals} setGoals={setGoals} onStart={() => { window.wydDesktop?.startTracking({ subject: sessionName, goals: activeGoals }); if (entryMode === 'join') setTimerRunning(true); setScreen('focus') }} />
 
-  if (screen === 'break') return <BreakScreen minutes={upcomingBreakMinutes} seconds={breakSeconds} goals={activeGoals} checked={checked} setChecked={setChecked} onReturn={() => { setBreakSeconds(upcomingBreakMinutes * 60); setFocusSeconds(pomodoroMinutes * 60); setIsTired(false); setScreen('focus') }} />
+  const liveLayer = circle.liveView && <>
+    <LiveBanner gridHidden={liveGridHidden} onShow={() => setLiveGridHidden(false)} />
+    {!liveGridHidden && <LiveGrid localName={profile.name} localStream={circle.localStream} localFocus={cameraFocus} remotes={circle.remotes} error={circle.error} onHide={() => setLiveGridHidden(true)} onTurnOff={() => circle.setLiveView(false)} />}
+  </>
+
+  if (screen === 'break') return <>{liveLayer}<BreakScreen minutes={upcomingBreakMinutes} seconds={breakSeconds} goals={activeGoals} checked={checked} setChecked={setChecked} onReturn={() => { setBreakSeconds(upcomingBreakMinutes * 60); setFocusSeconds(pomodoroMinutes * 60); setIsTired(false); setScreen('focus') }} /></>
 
   if (screen === 'summary') return <SummaryScreen checked={checked} goalCount={activeGoals.length} />
 
   return <main className="focus-page">
     <div className="demo-menu">
       <button className="demo-trigger" onClick={() => setDemoOpen(!demoOpen)}>Demo <Icon name="arrow" /></button>
-      {demoOpen && <div className="demo-popover"><span>Prototype controls</span><button onClick={() => { triggerCheckIn('me', 'none'); setDemoOpen(false) }}>I go off task · no one joins</button><button onClick={() => { triggerCheckIn('me', 'people'); setDemoOpen(false) }}>I go off task · people join</button><button onClick={() => { triggerCheckIn('teammate'); setDemoOpen(false) }}>Teammate goes off task</button><div className="corner-setting"><small>Check-in corner</small><div>{(['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const).map((corner) => <button className={checkInCorner === corner ? 'active' : ''} key={corner} onClick={() => { setCheckInCorner(corner); window.wydDesktop?.setPreferences({ checkInCorner: corner }) }} aria-label={corner}>{corner.split('-').map((part) => part[0].toUpperCase()).join('')}</button>)}</div></div>{entryMode === 'create' && <button onClick={() => { finishPomodoro(); setDemoOpen(false) }}>Finish Pomodoro</button>}<button onClick={() => setScreen('summary')}>End session</button></div>}
+      {demoOpen && <div className="demo-popover"><span>Prototype controls</span><button onClick={() => { triggerCheckIn('me', 'none'); setDemoOpen(false) }}>I go off task · no one joins</button><button onClick={() => { triggerCheckIn('me', 'people'); setDemoOpen(false) }}>I go off task · people join</button><button onClick={() => { triggerCheckIn('teammate'); setDemoOpen(false) }}>Teammate goes off task</button><div className="corner-setting"><small>Check-in corner</small><div>{(['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const).map((corner) => <button className={checkInCorner === corner ? 'active' : ''} key={corner} onClick={() => { setCheckInCorner(corner); window.wydDesktop?.setPreferences({ checkInCorner: corner }) }} aria-label={corner}>{corner.split('-').map((part) => part[0].toUpperCase()).join('')}</button>)}</div></div>{entryMode === 'create' && <button onClick={() => { finishPomodoro(); setDemoOpen(false) }}>Finish Pomodoro</button>}{profile.demo && <button disabled={circle.status !== 'connected'} onClick={() => { circle.setLiveView(!circle.liveView); setLiveGridHidden(false); setDemoOpen(false) }}>{circle.liveView ? 'Turn off live camera view' : circle.status === 'connected' ? 'Live camera view · everyone' : 'Live camera view (connecting…)'}</button>}<button onClick={() => setScreen('summary')}>End session</button></div>}
     </div>
     <section className="focus-grid">
       <div className="timer-panel"><div className="eyebrow">Focus session · Round {(pomodorosDone % 4) + 1} of 4</div><div className="pomodoro-rounds">{[0, 1, 2, 3].map((round) => <span className={round < pomodorosDone % 4 ? 'done' : round === pomodorosDone % 4 ? 'current' : ''} key={round}><Icon name="check" /></span>)}</div><div className="timer-ring"><svg viewBox="0 0 180 180"><circle cx="90" cy="90" r="80" /><circle className="timer-progress" cx="90" cy="90" r="80" style={{ strokeDashoffset: 502 * (1 - focusSeconds / (pomodoroMinutes * 60)) }} /></svg><div><strong>{String(Math.floor(focusSeconds / 60)).padStart(2, '0')}:{String(focusSeconds % 60).padStart(2, '0')}</strong><span>{timerRunning ? 'focus time' : focusSeconds === pomodoroMinutes * 60 ? entryMode === 'create' ? 'ready when you are' : 'waiting for host' : 'paused by host'}</span></div></div><h2>{timerRunning ? 'Stay with it.' : entryMode === 'create' ? 'Choose one task.' : 'Your host sets the pace.'}</h2><p>{activeGoals[0] || 'Pick something that deserves your full attention.'}</p>{entryMode === 'create' ? <div className="pomodoro-console host-console"><div className="console-role"><span className="host-control-badge"><Icon name="users" />Host controls</span><small>Everyone’s timer stays in sync with yours.</small></div><div className="time-select"><span>Focus length</span>{[15, 25, 45].map((minutes) => <button className={pomodoroMinutes === minutes ? 'active' : ''} onClick={() => selectPomodoroLength(minutes)} key={minutes}>{minutes} min</button>)}</div><div className="timer-controls"><button className="timer-stop" onClick={resetPomodoro}><Icon name="x" />Stop</button><button className="timer-start" onClick={() => setTimerRunning(!timerRunning)}><Icon name={timerRunning ? 'clock' : 'arrow'} />{timerRunning ? 'Pause for everyone' : focusSeconds < pomodoroMinutes * 60 ? 'Resume session' : 'Start session'}</button></div><div className="focus-oath"><Icon name="target" /><span><strong>My focus promise</strong>I’ll give this task my full attention until the timer rings.</span></div><div className="distraction-capture"><input value={distraction} onChange={(event) => setDistraction(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && saveDistraction()} placeholder="Something else came to mind? Park it here." /><button onClick={saveDistraction}>Save</button>{savedDistractions.length > 0 && <small>{savedDistractions.length} item{savedDistractions.length === 1 ? '' : 's'} saved for later</small>}</div></div> : <div className="pomodoro-console participant-console"><div className="participant-host"><span className="avatar bg-[#dbe9ff]">MK<i /></span><div><small>Session host</small><strong>Maya controls this Pomodoro</strong><p>You’ll start, pause, and take breaks together.</p></div><span className="sync-status"><i />Synced</span></div><div className="participant-schedule"><span><small>Focus</small><strong>{pomodoroMinutes} min</strong></span><Icon name="arrow" /><span><small>Short break</small><strong>5 min</strong></span><Icon name="arrow" /><span><small>After 4 rounds</small><strong>20 min</strong></span></div><div className="focus-oath"><Icon name="lock" /><span><strong>Timer controls are host-only</strong>Your timer updates automatically when Maya starts, pauses, or stops the session.</span></div><div className="distraction-capture"><input value={distraction} onChange={(event) => setDistraction(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && saveDistraction()} placeholder="Something else came to mind? Park it here." /><button onClick={saveDistraction}>Save</button>{savedDistractions.length > 0 && <small>{savedDistractions.length} item{savedDistractions.length === 1 ? '' : 's'} saved for later</small>}</div></div>}</div>
       <SessionSidebar sessionName={sessionName} role={entryMode === 'create' ? 'Host' : 'Participant'} goals={activeGoals} checked={checked} setChecked={setChecked} people={people} />
     </section>
     {complete && <div className="overlay"><div className="complete-modal"><div className="icon-bubble mint"><Icon name="check" /></div><div className="eyebrow">{pomodoroMinutes} minutes complete</div><h2>Pomodoro complete.</h2><p>{upcomingBreakMinutes >= 20 ? 'That’s four rounds. Take a longer 20-minute break so your brain can recharge.' : 'Mark it complete and take a five-minute break before the next round.'}</p><div className="button-row"><button className="secondary" onClick={() => { setComplete(false); setScreen('summary') }}>End session</button><button className="primary" onClick={() => { setComplete(false); setScreen('break') }}>Take {upcomingBreakMinutes} min break <Icon name="arrow" /></button></div></div></div>}
+    {liveLayer}
   </main>
 }
