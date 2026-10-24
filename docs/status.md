@@ -68,7 +68,7 @@ Last updated: 2026-10-24. Biggest gap: **nothing connects to SpacetimeDB yet**. 
 5. Resolve judge + category mismatches.
 
 ## Gotchas
-- Consent columns removed from `member` (schema change): republish with `spacetime publish --delete-data` (wipes the db), then run `seed_defaults`.
+- Breaking schema changes need `spacetime publish calhacks-13-wyd --delete-data=on-conflict -y` (wipes data). Fresh db: `init` seeds defaults; existing db: run `seed_defaults`. Consent columns removed; republished 2026-10-24, db identity `c200f3d8…1bc7`.
 - `npm install` fails with `Cannot read properties of null (reading 'edgesOut')` unless `vite` is an explicit devDependency (added). Used `--legacy-peer-deps` to add Tailwind.
 - Renderer CSS imports Google Fonts: needs network. No CSP is set (old UI had none; `ui_to_integrate` CSP omitted because it blocks LiveKit/SpacetimeDB sockets).
 - `ui_to_integrate/` is the untouched UI source; safe to delete once the team confirms.
