@@ -1,14 +1,16 @@
 # Status
 
-Last updated: 2026-10-24. Biggest gap: **nothing connects to SpacetimeDB yet**. Desktop and worker run standalone.
+Last updated: 2026-10-24. Biggest gap: **desktop ↔ SpacetimeDB not on `main`** (client on a teammate branch, unmerged). Desktop and worker run without the DB; the new UI is hardcoded/local.
 
 ## Built
 | Part | Path | What works |
 |---|---|---|
 | SpacetimeDB module | `spacetimedb/` | Full schema + ~40 reducers: sessions, goals, Pomodoro timers, `ingest_signal`, smoothing, fallback judge, scoring, call/nudge trigger, phone pairing, finalize + awards. Configured for maincloud db `calhacks-13-wyd`. See `components/spacetimedb.md`. |
 | Desktop activity tracking | `src/main/activityMonitor.ts` | Polls front app + window title + browser URL (Chrome/Safari/Arc/Brave) every 2 s via `osascript`. macOS only. |
+| Desktop `.env` loader | `src/main/env.ts` | Loads root `.env` into `process.env` at startup (no override of shell vars). |
 | Desktop categorization | `src/main/categorize.ts` | Rules + cache → contract categories (`coding`…`unknown`). Fills `activity.category`. |
 | Desktop judge | `src/main/claudeJudge.ts` | Claude call every 8 s once session context exists; output drives local alerts (30 s warning, 60 s alert). |
+| Check-in calls (LiveKit) | `src/main/livekitToken.ts`, `src/renderer/src/useCircleCall.ts` (old UI in `outdated/`: `VideoCall.tsx`) | One LiveKit room per session code: presence, 90 s video call, late joiners auto-join. Worked in the old UI; **unwired** in the new UI. See `components/livekit-call.md`. |
 | Desktop UI | `src/renderer/src/` (+ `docs/ui_integration.md`) · dock + check-ins in full-screen overlay window (`overlay/OverlayApp.tsx`) | New Figma-Make UI: entry, intro, goals, focus workspace, dock, check-in windows, break, summary. All data hardcoded/local; Demo menu simulates events. Goals submit calls `wyd:tracking:start`. |
 | Worker judge | `worker/judge.ts` | Text-only judge over 2-min window → `{status, confidence, reason}`; failure → confidence 0 (neutral). |
 | Worker categorizer | `worker/categorizeUnknown.ts` | Model categorization for `unknown` titles, cached. |
@@ -16,14 +18,15 @@ Last updated: 2026-10-24. Biggest gap: **nothing connects to SpacetimeDB yet**. 
 
 ## Stubbed
 - Voice AI onboarding: archived in `outdated/` (see `outdated/README.md`); goals now come from the Goals screen.
-- LiveKit call: `src/main/livekitToken.ts`, `src/renderer/src/useCircleCall.ts`, `circleAPI` preload exist but are **unwired**. **Important next step:** replace the UI's placeholder check-in tiles with real LiveKit video.
+- LiveKit calls: `circleAPI` preload + `useCircleCall.ts` exist but nothing in the new UI uses them. **Important next step:** replace the UI's placeholder check-in tiles with real LiveKit video (see `components/livekit-call.md`).
 - Call room: `call_room_base_url` setting is `""`; no provider chosen.
 
 ## Missing
 - UI wiring: `activity:update`/`activity:alert` not consumed (UI uses Demo-menu triggers); real people/timer/session codes/summary stats (see `ui_integration.md` demo-only inventory).
-- Desktop ↔ SpacetimeDB: no client bindings, no `spacetimedb` client dep, no `ingest_signal` calls.
+- Desktop ↔ SpacetimeDB on `main`: no bindings, no `spacetimedb` client dep, no `ingest_signal` calls (exists on a teammate branch).
+- Teammate's Pomodoro timer UI (being pushed) vs the new UI's own local Pomodoro: reconcile when it lands.
 - Worker ↔ SpacetimeDB: no subscription to `worker_pending_signal_events`, no `write_judgment`.
-- Vision (MediaPipe), phone sensor page (`phone/`), replay clips.
+- Vision (MediaPipe), phone sensor page (`phone/`, optional), replay clips.
 - Check-in call UI.
 - Screens: replay (no consent screen by decision; see `product/privacy.md`).
 - Worker: summary + replay captions.
@@ -55,15 +58,16 @@ Last updated: 2026-10-24. Biggest gap: **nothing connects to SpacetimeDB yet**. 
 | Judge | `src/main/claudeJudge.ts`: `claude-haiku-4-5-20251001`, labels `productive`/`distracted`/`neutral` · `worker/judge.ts`: `claude-haiku-5-5`, `on_task`/`off_task`/`break` · DB `StatusLabel`: `Focused`/`OffTask`/`Away`/`Break`/`Unknown` |
 | Categories | `categorize.ts`: contract lowercase 9 · `appClassifier.ts`: `productive`/`distracted`/`neutral`/`unknown` (still drives alerts) · DB `AppCategory`: `Work`/`Study`/`Communication`/`Social`/`Entertainment`/`Games`/`News`/`Other` |
 | Event format | Contract JSON (`worker/types.ts`) vs DB `SignalInput`. See `architecture/contracts.md`. |
-| Timing | Spec: drift 2 min, call cooldown 30 min, call ~60 s · DB: call at ~60 s off-task (`off_task_threshold_secs`), cooldown 600 s, max call 90 s · Desktop: alerts at 30/60 s |
+| Timing | Spec: drift 2 min, call cooldown 30 min, call ~60 s · DB: call at ~60 s off-task (`off_task_threshold_secs`), cooldown 600 s, max call 90 s · Desktop: alerts at 30/60 s, auto-call cooldown 5 min, LiveKit call 90 s |
+| Calls | LiveKit: call state in participant attributes, triggered by desktop alert · DB: `group_call` + `CallIncoming` alert, `call_room_base_url` `""`. Not linked. |
 | Active window | Old docs said `get-windows`; code uses `osascript`. |
 | Scope | DB has scores, awards, takeover, stuck-helper, DeepFace expression fields, `factory_run_id`; decisions lean against several. |
 | SDK | `@anthropic-ai/sdk ^0.27` (old); worker casts around missing `output_config` type. |
 
 ## Next up (demo critical path, suggested)
-1. Generate SpacetimeDB TS bindings; desktop joins session and sends `ingest_signal` every 10 s.
+1. Merge the SpacetimeDB desktop client; desktop joins session and sends `ingest_signal` every 10 s.
 2. Worker subscribes to `worker_pending_signal_events` → `write_judgment`. (DB fallback judge covers the demo meanwhile.)
-3. Pick call provider; set `call_room_base_url`; desktop opens room on `CallIncoming` alert.
+3. Wire LiveKit into the new UI's check-in windows; start the call from the DB `CallIncoming` alert instead of the local desktop alert.
 4. Back summary screen with real stats.
 5. Resolve judge + category mismatches.
 
@@ -72,7 +76,8 @@ Last updated: 2026-10-24. Biggest gap: **nothing connects to SpacetimeDB yet**. 
 - `npm install` fails with `Cannot read properties of null (reading 'edgesOut')` unless `vite` is an explicit devDependency (added). Used `--legacy-peer-deps` to add Tailwind.
 - Renderer CSS imports Google Fonts: needs network. No CSP is set (old UI had none; `ui_to_integrate` CSP omitted because it blocks LiveKit/SpacetimeDB sockets).
 - `ui_to_integrate/` is the untouched UI source; safe to delete once the team confirms.
-- Desktop has no `.env` loader: `ANTHROPIC_API_KEY` must be in the shell env for `npm run dev`.
+- Every laptop needs `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` in `.env`; each signs its own call token.
+- LiveKit tokens are signed by hand in `livekitToken.ts`: `livekit-server-sdk` needs Node 19+, Electron 28 ships Node 18.
 - Worker runs `.ts` directly: needs Node 24 (`node -v`).
 - `osascript` needs Accessibility/Automation permission for System Events; window titles need Screen Recording.
 - SpacetimeDB `init` seeds only on first publish; after a schema publish run `seed_defaults`.

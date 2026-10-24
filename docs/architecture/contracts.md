@@ -93,9 +93,27 @@ Other reducers: `../components/spacetimedb-schema.md#reducers`.
 | `onActivityUpdate` | `activity:update` | main → renderer | `ActivityState` (every 2 s); no UI consumer yet |
 | `onActivityAlert` | `activity:alert` | main → renderer | `ActivityState` when `alertLevel` is `warning`/`alert`; no UI consumer yet |
 
-`window.circleAPI` (LiveKit, unwired; typings `src/renderer/src/circle.d.ts`): `requestMediaAccess`, `getCallToken` (`call:token`), `setCallMode` (`window:call-mode`).
+`window.circleAPI` (LiveKit, unwired; room/identity/attributes below; typings `src/renderer/src/circle.d.ts`): `requestMediaAccess`, `getCallToken` (`call:token`), `setCallMode` (`window:call-mode`).
 
 Removed: `activityAPI`, `sessionAPI` (voice onboarding, archived in `outdated/`). Type: `ActivityState` in `src/main/activityMonitor.ts`.
+
+## LiveKit room
+Owner: `src/renderer/src/useCircleCall.ts`; token: `src/main/livekitToken.ts`.
+- Room: `lockin-<CODE>` (`CODE` = session code, A–Z0–9, 4–8 chars). One room per session; joined on entering the session, media published only during a call.
+- Identity: random UUID per app run. Name: lobby name (≤ 24 chars).
+- Token grants: `roomJoin`, `canPublish`, `canSubscribe`, `canPublishData`, `canUpdateOwnMetadata`; TTL 6 h.
+- Participant attributes:
+
+| Key | Value | Set when |
+|---|---|---|
+| `callEndsAt` | ms epoch as string; `''` = none | call started or joined; cleared at call end |
+| `inCall` | `'1'` or `''` | media published / left |
+
+Active call = max `callEndsAt` over all participants, if in the future. Everyone in the call copies it, so the call survives the starter leaving.
+
+## Worker functions
+- `judge(topic, events: FocusEvent[], phase='work'|'break') → {status, confidence, reason}` (`worker/judge.ts`)
+- `categorizeUnknown(app, title) → ActivityCategory` (`worker/categorizeUnknown.ts`)
 
 ## Worker functions
 - `judge(topic, events: FocusEvent[], phase='work'|'break') → {status, confidence, reason}` (`worker/judge.ts`)
