@@ -22,7 +22,20 @@ Opt-in group focus app: sustained drift → rare, short surprise group check-in 
 - **Open decisions** (`decisions.md`): ask, don't assume.
 - Never commit API keys; use `.env` (gitignored).
 - Ask before adding dependencies or services. Simple and working > clever.
-- One branch per person/feature, small PRs into `main`. A PR that changes behavior updates `docs/status.md`.
+- One branch per person/feature, small PRs into `main`.
+
+## Keeping docs current
+Update docs in the same change, every time, on:
+| Trigger | Update |
+|---|---|
+| Feature built, stubbed, or removed | `docs/status.md` (Built/Stubbed/Missing) + `docs/components/<name>.md` if it exists |
+| Event field, enum, IPC channel, or reducer signature changed | `docs/architecture/contracts.md`, and tell the team |
+| Dependency, model, env var, or command added/changed | `docs/architecture/stack.md` |
+| Data flow or component wiring changed | `docs/architecture/overview.md` |
+| Bug, blocker, or setup issue that can affect others | `docs/status.md` Gotchas (or Mismatches if two parts disagree) |
+| Open question answered | `docs/product/decisions.md` |
+
+Follow "Writing docs" below. If unsure whether a change is major, update `status.md`.
 
 ## Writing docs (applies to every doc create/edit)
 Docs are read mainly by AI. Max info, min tokens.
