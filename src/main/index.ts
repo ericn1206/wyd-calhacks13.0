@@ -4,6 +4,7 @@ import { ActivityMonitor } from './activityMonitor'
 import { createAgentSession } from './cartesiaAgent'
 import { loadEnv } from './env'
 import { SessionManager } from './sessionManager'
+import { startLanDiscovery } from './lanDiscovery'
 import { listSignalUrls, SIGNAL_PORT, startSignalServer, stopSignalServer } from './signalServer'
 
 loadEnv()
@@ -11,6 +12,7 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 
 let mainWindow: BrowserWindow | null = null
 let monitor: ActivityMonitor | null = null
+let stopDiscovery: (() => void) | null = null
 const session = new SessionManager()
 
 function createWindow(): void {
@@ -119,6 +121,23 @@ app.whenReady().then(async () => {
     urls: listSignalUrls()
   }))
 
+  ipcMain.handle('lan:start', (event, code: string, name: string) => {
+    stopDiscovery?.()
+    stopDiscovery = startLanDiscovery({
+      code: String(code ?? ''),
+      name: String(name ?? ''),
+      onHost: (host) => {
+        if (event.sender.isDestroyed()) return
+        event.sender.send('lan:host', host)
+      }
+    })
+  })
+
+  ipcMain.handle('lan:stop', () => {
+    stopDiscovery?.()
+    stopDiscovery = null
+  })
+
   ipcMain.handle('window:call-mode', (_event, on: boolean) => {
     if (!mainWindow) return
     const active = Boolean(on)
@@ -136,6 +155,8 @@ app.whenReady().then(async () => {
 })
 
 app.on('before-quit', () => {
+  stopDiscovery?.()
+  stopDiscovery = null
   stopSignalServer()
 })
 

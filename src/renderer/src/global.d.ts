@@ -20,6 +20,7 @@ declare global {
       requestMediaAccess: () => Promise<{ camera: boolean; microphone: boolean }>
       getSignalInfo: () => Promise<{ port: number; urls: string[] }>
       setCallMode: (on: boolean) => Promise<void>
+      watchCircle: (code: string, name: string, onHost: (host: { url: string; name: string } | null) => void) => () => void
     }
   }
 }

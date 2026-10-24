@@ -56,6 +56,15 @@ function makeSessionCode(): string {
   return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join('')
 }
 
+function isLoopback(url: string): boolean {
+  try {
+    const host = new URL(url).hostname
+    return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1'
+  } catch {
+    return true
+  }
+}
+
 function saved(key: string, fallback: string): string {
   try {
     return localStorage.getItem(key) || fallback
@@ -92,10 +101,12 @@ function SessionLobby({ onJoin }: { onJoin: (room: CircleRoom) => void }) {
 
   const submit = () => {
     if (!canJoin) return
+    const typed = signalUrl.trim() || DEFAULT_SIGNAL_URL
     const room = {
       name: name.trim().slice(0, 24),
       sessionCode,
-      signalUrl: signalUrl.trim() || DEFAULT_SIGNAL_URL,
+      signalUrl: typed,
+      discover: isLoopback(typed),
     }
     try {
       localStorage.setItem('lockin:name', room.name)
@@ -178,8 +189,8 @@ function SessionLobby({ onJoin }: { onJoin: (room: CircleRoom) => void }) {
 
       <p style={{ color: '#4b5563', fontSize: 12, margin: 0, textAlign: 'center', maxWidth: 380, lineHeight: 1.5 }}>
         {hostUrls.length > 0
-          ? `Friends on this Wi-Fi can use ${hostUrls[0]}. Same computer: leave the server as localhost and join the same code.`
-          : 'Everyone in the circle uses the same code and the same signal server. This computer hosts it on localhost.'}
+          ? `Same Wi-Fi: both of you enter this code and Lock In connects the computers. If a friend does not appear, they can set the signal server to ${hostUrls[0]}.`
+          : 'Same Wi-Fi: both of you enter this code. Leave the signal server as localhost unless a friend still does not appear.'}
       </p>
     </div>
   )
@@ -348,9 +359,8 @@ function Dashboard({ state, room, connection, connectionError, peers, callActive
           )}
           {peers.length === 0 && connection === 'connected' && (
             <div style={{ color: '#6b7280', fontSize: 12, marginTop: 6, lineHeight: 1.45 }}>
-              {hostUrl
-                ? `On a friend’s computer, open Lock In, enter ${room.sessionCode}, and set the signal server to ${hostUrl}. You both need the same Wi-Fi.`
-                : `Share ${room.sessionCode}. Someone on this computer can join at ${room.signalUrl}.`}
+              Waiting for a friend on this Wi-Fi. They open Lock In and enter {room.sessionCode}.
+              {hostUrl ? ` If they do not show up, have them set the signal server to ${hostUrl}.` : ''}
             </div>
           )}
         </div>
@@ -512,6 +522,20 @@ export default function App() {
   const [callSettled, setCallSettled] = useState(false)
   const circle = useCircleCall(lobby)
   const lastAutoCall = useRef(0)
+
+  useEffect(() => {
+    if (!lobby?.discover || !window.circleAPI?.watchCircle) return
+    const code = lobby.sessionCode
+    const name = lobby.name
+    return window.circleAPI.watchCircle(code, name, (host) => {
+      setLobby((current) => {
+        if (!current || current.sessionCode !== code || !current.discover) return current
+        const next = host?.url ?? DEFAULT_SIGNAL_URL
+        if (current.signalUrl === next) return current
+        return { ...current, signalUrl: next }
+      })
+    })
+  }, [lobby?.discover, lobby?.name, lobby?.sessionCode])
   const startCallRef = useRef(circle.startCall)
   startCallRef.current = circle.startCall
 

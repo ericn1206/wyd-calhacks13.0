@@ -9,6 +9,7 @@ export interface CircleRoom {
   name: string
   sessionCode: string
   signalUrl: string
+  discover?: boolean
 }
 
 export interface CirclePeer {
