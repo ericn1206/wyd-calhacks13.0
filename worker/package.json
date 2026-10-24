@@ -1,0 +1,12 @@
+{
+  "name": "wyd-worker",
+  "private": true,
+  "type": "module",
+  "description": "AI worker: judgment + ambiguous-title categorization (runs on Node 24, no build step)",
+  "scripts": {
+    "fixtures": "node --env-file-if-exists=../.env runFixtures.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.27.0"
+  }
+}

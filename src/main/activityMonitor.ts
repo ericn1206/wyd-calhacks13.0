@@ -1,8 +1,16 @@
 import { exec } from 'child_process'
 import { classify, Category } from './appClassifier'
 import { judgeActivity, SessionContext } from './claudeJudge'
+import { categorize, ActivityCategory } from './categorize'
 
-export type { Category }
+export type { Category, ActivityCategory }
+
+// Matches the `activity` field of the shared event format (see claude.md)
+export interface Activity {
+  app: string
+  title: string
+  category: ActivityCategory
+}
 
 export interface ActivityEntry {
   timestamp: number
@@ -11,6 +19,7 @@ export interface ActivityEntry {
   url?: string
   category: Category
   reason: string
+  activity: Activity
 }
 
 export interface ActivityState {
@@ -19,6 +28,7 @@ export interface ActivityState {
   url?: string
   category: Category
   reason: string
+  activity: Activity
   judgedByClaude: boolean
   consecutiveDistractedSeconds: number
   alertLevel: 'none' | 'warning' | 'alert'
@@ -91,6 +101,7 @@ export class ActivityMonitor {
       windowTitle: '',
       category: 'unknown',
       reason: '',
+      activity: { app: 'Unknown', title: '', category: 'unknown' },
       judgedByClaude: false,
       consecutiveDistractedSeconds: 0,
       alertLevel: 'none',
@@ -134,6 +145,7 @@ export class ActivityMonitor {
   private async poll(): Promise<void> {
     const { appName, windowTitle } = await getActiveApp()
     const url = await getBrowserUrl(appName)
+    const activity: Activity = { app: appName, title: windowTitle, category: categorize(appName, windowTitle, url) }
 
     let category: Category
     let reason: string
@@ -204,7 +216,7 @@ export class ActivityMonitor {
     const history = changed
       ? [
           ...this.state.history,
-          { timestamp: Date.now(), appName, windowTitle, url: url || undefined, category, reason }
+          { timestamp: Date.now(), appName, windowTitle, url: url || undefined, category, reason, activity }
         ].slice(-20)
       : this.state.history
 
@@ -214,6 +226,7 @@ export class ActivityMonitor {
       url: url || undefined,
       category,
       reason,
+      activity,
       judgedByClaude,
       consecutiveDistractedSeconds,
       alertLevel,
