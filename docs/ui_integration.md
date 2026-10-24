@@ -15,7 +15,7 @@ The prototype is implemented primarily in `src/App.tsx`. It uses hardcoded peopl
 - `src/App.tsx` — application state, timers, event orchestration, and screen routing.
 - `src/components/ui/` — reusable primitives such as `Icon`, `Brand`, setup progress, and `Shell`.
 - `src/components/onboarding/` — entry, first-run introduction, and goal-setup screens.
-- `src/components/session/` — break, summary, desktop preview, and session sidebar components.
+- `src/components/session/` — break, summary, and session sidebar components.
 - `src/components/overlays/` — persistent dock and dock notification UI.
 - `src/data/people.ts` — shared prototype participant data and its `Person` type.
 
@@ -30,14 +30,8 @@ The items below exist to demonstrate intended product behavior. Future agents mu
 #### Demo menu
 
 - The complete Demo menu is a development/test surface.
-- Its off-task, check-in, Pomodoro completion, corner-selection, desktop-preview, and End session actions simulate system or backend events.
+- Its off-task, check-in, Pomodoro completion, corner-selection, and End session actions simulate system or backend events.
 - It must be hidden or removed from production participant builds.
-
-#### Apple desktop preview
-
-- `src/components/session/DesktopPreview.tsx` is only a visual test background for overlays.
-- Its wallpaper, menu bar, clock, and native dock are decorative.
-- It does not represent or communicate with the user's real desktop.
 
 #### Mock shared screen
 
@@ -114,7 +108,7 @@ The items below exist to demonstrate intended product behavior. Future agents mu
 
 - The Electron shell, preload bridge, permissions, preference file, build configuration, and native window APIs are implemented.
 - The dock, notifications and check-in windows render in a separate transparent, click-through, always-on-top Electron window covering the main window's display work area (`src/renderer/src/overlay/OverlayApp.tsx`, loaded as `index.html?overlay=1`). It exists only while the focus screen is showing. The main window keeps the timer, goals, role, Demo menu and modals, and syncs to the overlay through the bridge in `src/renderer/src/overlay/bridge.ts`.
-- Remaining integration work: multi-display placement, active-application monitoring, and real screen streams. The "Apple desktop preview" demo is superseded by the real overlay.
+- Remaining integration work: multi-display placement, active-application monitoring, and real screen streams.
 
 ### Demo code removal rule
 
@@ -394,7 +388,6 @@ All active check-ins last 30 seconds. They do not dim or block the desktop, and 
 
 ## Demo menu
 
-- Toggles an Apple-style empty desktop preview for evaluating dock and check-in overlays outside the WYD!! base application.
 - Triggers current-user off-task with no participants.
 - Triggers current-user off-task with participants.
 - Triggers teammate off-task.
@@ -402,13 +395,6 @@ All active check-ins last 30 seconds. They do not dim or block the desktop, and 
 - Lets hosts finish the Pomodoro.
 - Ends the session.
 - Demo actions simulate backend/system events and should not be exposed as production participant controls.
-
-### Desktop overlay preview
-
-- Replaces the base focus workspace with a non-interactive macOS-style wallpaper, menu bar, and native dock mock.
-- Keeps the WYD!! focus dock, incoming notifications, and check-in windows active above the mock desktop.
-- Can be entered from the Demo menu and exited from either the Demo menu or **Return to WYD!!**.
-- Exists only as a visual test harness; it does not emulate operating-system APIs or application tracking.
 
 ## Electron desktop surfaces
 

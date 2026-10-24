@@ -346,20 +346,6 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
 .demo-popover span { padding: 7px 8px; color: var(--muted); font-size: 8px; text-transform: uppercase; letter-spacing: .1em; font-weight: 700; }
 .demo-popover button { border: 0; background: transparent; color: var(--ink); text-align: left; border-radius: 7px; padding: 8px; font-size: 11px; }
 .demo-popover button:hover { background: #f1f7f4; }
-.mock-desktop { position: fixed; z-index: 0; inset: 0; overflow: hidden; color: #26332f; background: linear-gradient(145deg, #d6e8ed 0%, #e8ddcf 48%, #c8dadd 100%); }
-.mock-menu-bar { position: absolute; z-index: 2; top: 0; left: 0; right: 0; height: 28px; padding: 0 14px; display: flex; align-items: center; justify-content: space-between; color: rgba(28,40,37,.84); background: rgba(248,250,248,.58); box-shadow: 0 1px 0 rgba(255,255,255,.55); backdrop-filter: blur(18px) saturate(140%); font-size: 10px; }
-.mock-menu-bar > div { display: flex; align-items: center; gap: 14px; }
-.mock-menu-bar strong { font-size: 8px; }
-.mock-menu-bar svg { width: 13px; height: 13px; }
-.wallpaper-shape { position: absolute; border-radius: 46% 54% 64% 36%; filter: blur(1px); opacity: .82; }
-.shape-one { width: 72vw; height: 72vw; left: -26vw; bottom: -42vw; background: linear-gradient(145deg, #7fcbd4, #a8dbcb); transform: rotate(20deg); }
-.shape-two { width: 52vw; height: 58vw; right: -18vw; top: -27vw; background: linear-gradient(160deg, #f1ba91, #db93a8); transform: rotate(-18deg); }
-.shape-three { width: 36vw; height: 24vw; right: 24vw; bottom: -15vw; background: linear-gradient(160deg, #879fc8, #b9abd8); }
-.mock-native-dock { position: absolute; z-index: 2; left: 50%; bottom: 13px; transform: translateX(-50%); display: flex; gap: 7px; padding: 7px 9px; border: 1px solid rgba(255,255,255,.62); border-radius: 18px; background: rgba(244,248,247,.42); box-shadow: 0 12px 30px rgba(43,58,54,.18), inset 0 1px 0 rgba(255,255,255,.8); backdrop-filter: blur(20px) saturate(140%); }
-.mock-native-dock > span { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 11px; box-shadow: inset 0 1px 1px rgba(255,255,255,.45), 0 4px 10px rgba(31,46,42,.12); }
-.mock-native-dock i { color: white; font: 800 15px 'Manrope'; font-style: normal; }
-.return-from-desktop { position: absolute; z-index: 3; left: 18px; bottom: 18px; min-height: 37px; padding: 0 12px; border: 1px solid rgba(255,255,255,.72); border-radius: 11px; display: flex; align-items: center; gap: 6px; color: #40534e; background: rgba(255,255,255,.66); box-shadow: 0 8px 22px rgba(36,54,49,.13); backdrop-filter: blur(14px); font-size: 9px; font-weight: 700; }
-.return-from-desktop svg { width: 14px; transform: rotate(180deg); }
 .corner-setting { margin: 4px 0; padding: 8px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .corner-setting small { display: block; margin-bottom: 6px; color: var(--muted); font-size: 8px; text-transform: uppercase; letter-spacing: .08em; }
 .corner-setting > div { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }

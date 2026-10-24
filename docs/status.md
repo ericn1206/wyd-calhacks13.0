@@ -45,8 +45,8 @@ Last updated: 2026-10-24. Biggest gap: **nothing connects to SpacetimeDB yet**. 
 | Private summary | Hardcoded %, minutes, rhythm chart; compute from session records; Claude summary (1 call/session). |
 | Camera-on disclosure / vision | MediaPipe not built. |
 | Phone sensor, replay clips | Not built. |
-| Overlay polish | Overlay covers one display (the main window's work area, below the menu bar); no multi-display. "Apple desktop preview" demo is obsolete. Overlay window is hidden, not destroyed, outside focus. |
-| Demo menu + Apple desktop preview | Hide behind dev flag for final build. |
+| Overlay polish | Overlay covers one display (the main window's work area, below the menu bar); no multi-display. Overlay window is hidden, not destroyed, outside focus. |
+| Demo menu | Hide behind dev flag for final build. |
 | Voice AI | Archived in `outdated/`; re-add only if wanted. |
 
 ## Mismatches (unresolved; decisions tracked in `product/decisions.md`)
