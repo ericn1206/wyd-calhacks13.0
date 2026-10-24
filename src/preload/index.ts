@@ -17,7 +17,7 @@ contextBridge.exposeInMainWorld('activityAPI', {
 })
 
 contextBridge.exposeInMainWorld('sessionAPI', {
-  start: () => ipcRenderer.invoke('session:start'),
+  start: () => ipcRenderer.invoke('session:start') as Promise<{ token: string; agentId: string }>,
   submitResponse: (transcript: string) => ipcRenderer.invoke('session:user-response', transcript),
   onPhase: (cb: (phase: OnboardingPhase) => void) => {
     ipcRenderer.on('session:phase', (_e, phase) => cb(phase))
@@ -29,4 +29,11 @@ contextBridge.exposeInMainWorld('sessionAPI', {
     ipcRenderer.removeAllListeners('session:phase')
     ipcRenderer.removeAllListeners('session:context-ready')
   }
+})
+
+contextBridge.exposeInMainWorld('circleAPI', {
+  requestMediaAccess: () => ipcRenderer.invoke('media:request-access') as Promise<{ camera: boolean; microphone: boolean }>,
+  getCallToken: (code: string, identity: string, name: string) =>
+    ipcRenderer.invoke('call:token', code, identity, name) as Promise<{ url: string; token: string; room: string }>,
+  setCallMode: (on: boolean) => ipcRenderer.invoke('window:call-mode', on)
 })

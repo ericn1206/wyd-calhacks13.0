@@ -10,11 +10,16 @@ declare global {
       removeAllListeners: () => void
     }
     sessionAPI: {
-      start: () => Promise<void>
+      start: () => Promise<{ token: string; agentId: string }>
       submitResponse: (transcript: string) => Promise<void>
       onPhase: (cb: (phase: OnboardingPhase) => void) => void
       onContextReady: (cb: (ctx: SessionContext) => void) => void
       removeAllListeners: () => void
+    }
+    circleAPI?: {
+      requestMediaAccess: () => Promise<{ camera: boolean; microphone: boolean }>
+      getCallToken: (code: string, identity: string, name: string) => Promise<{ url: string; token: string; room: string }>
+      setCallMode: (on: boolean) => Promise<void>
     }
   }
 }
