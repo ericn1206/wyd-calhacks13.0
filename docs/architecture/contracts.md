@@ -73,7 +73,7 @@ Wire format: in module code / TS bindings a value is `{ tag: 'Focused' }`. Raw J
 | idle_secs | u32 | desktop | |
 | client_version | string | desktop | |
 
-Consent enforcement (UI has no consent screen; client must set all consents `true` on join or fields are dropped): no `consent_webcam` → vision fields zeroed; no `consent_activity` → app `"hidden"`, title/domain dropped, category `Other`; no `consent_phone` → phone_state `Unknown`.
+No consent gating: all fields are stored as sent (consent flags and `set_consent` removed).
 
 ## write_judgment (worker only)
 `event_id, label: StatusLabel, reason: ReasonCode, confidence: f32, model: ModelName, latency_ms, input_tokens, output_tokens, cost_usd`. One per event; replaces a fallback judgment for the same event.

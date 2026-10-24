@@ -54,9 +54,9 @@ nudge or call in that episode: +3 (QuickRecovery). `focus_ratio` = DeepWork secs
 Interruption secs). `final_score = focus_ratio × goals_completed`.
 
 **Group call.** Same off-task condition, `group_call_enabled`, once per episode, no call already
-ringing/active. Inside `call_cooldown_secs` of the last call, or with fewer than 2 opted-in members,
+ringing/active. Inside `call_cooldown_secs` of the last call, or with fewer than 2 active members,
 the member gets a NudgeSelf alert instead. Otherwise: group_call (Ringing), a call_participant +
-CallIncoming alert per opted-in member, and an auto-end after `min(max_call_secs, call_max_secs)`.
+CallIncoming alert per active member, and an auto-end after `min(max_call_secs, call_max_secs)`.
 `room_id` is `wyd-<code>-<n>`; `room_url` is `call_room_base_url + room_id` if that setting is set,
 or whatever the worker writes with `set_call_room_url`.
 

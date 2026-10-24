@@ -183,7 +183,7 @@ export function insertAlert(ctx: Ctx, sessionId: bigint, targetMemberId: bigint,
 
 /** Creates status/score rows and the per-member tick timer if missing. Safe to call repeatedly. */
 export function ensureTracking(ctx: Ctx, m: Member, s: Session) {
-  if (!m.optedIn || m.leftAt !== undefined) return;
+  if (m.leftAt !== undefined) return;
   if (s.state.tag !== 'Active' && s.state.tag !== 'Break') return;
 
   if (!ctx.db.status.memberId.find(m.id)) {
@@ -620,7 +620,7 @@ function offTaskEpisode(ctx: Ctx, memberId: bigint) {
   const s = m ? ctx.db.session.id.find(m.sessionId) : undefined;
   const st = ctx.db.status.memberId.find(memberId);
   if (!m || !s || !st) return undefined;
-  if (m.leftAt !== undefined || !m.optedIn) return undefined;
+  if (m.leftAt !== undefined) return undefined;
   if (s.state.tag !== 'Active' || s.currentPhase.tag !== 'Work') return undefined;
   if (st.label.tag !== 'OffTask' || st.smoothedOffTaskSecs < s.offTaskThresholdSecs) return undefined;
   return { m, s, st };
@@ -646,7 +646,7 @@ export function maybeTriggerGroupCall(ctx: Ctx, memberId: bigint) {
   }
 
   const cooldown = ctx.db.callCooldown.sessionId.find(s.id);
-  const participants = activeMembersOf(ctx.db, s.id).filter(m => m.optedIn);
+  const participants = activeMembersOf(ctx.db, s.id);
   const coolingDown = cooldown !== null && cooldown !== undefined && secsBetween(cooldown.lastCallAt, ctx.timestamp) < s.callCooldownSecs;
 
   if (coolingDown || participants.length < 2) {

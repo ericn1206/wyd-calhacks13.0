@@ -179,11 +179,6 @@ function insertMember(ctx: Ctx, sessionId: bigint, isHost: boolean) {
     identity: ctx.sender,
     joinedAt: ctx.timestamp,
     leftAt: undefined,
-    optedIn: false,
-    consentWebcam: false,
-    consentPhone: false,
-    consentActivity: false,
-    consentReplayClips: false,
     deviceStatus: tag('Connected'),
     phoneLinked: false,
     isHost,
@@ -233,28 +228,6 @@ export const joinSession = spacetimedb.reducer({ code: t.string() }, (ctx, { cod
 export const leaveSession = spacetimedb.reducer(ctx => {
   const { member: m } = requireActiveMember(ctx);
   leaveMember(ctx, m.id);
-});
-
-const ConsentFlags = t.object('ConsentFlags', {
-  optedIn: t.bool(),
-  webcam: t.bool(),
-  phone: t.bool(),
-  activity: t.bool(),
-  replayClips: t.bool(),
-});
-
-export const setConsent = spacetimedb.reducer({ flags: ConsentFlags }, (ctx, { flags }) => {
-  const { member: m, session: s } = requireActiveMember(ctx);
-  const updated = ctx.db.member.id.update({
-    ...m,
-    optedIn: flags.optedIn,
-    consentWebcam: flags.optedIn && flags.webcam,
-    consentPhone: flags.optedIn && flags.phone,
-    consentActivity: flags.optedIn && flags.activity,
-    consentReplayClips: flags.optedIn && flags.replayClips,
-  });
-  if (updated.optedIn) ensureTracking(ctx, updated, s);
-  else stopTracking(ctx, m.id);
 });
 
 export const setGoals = spacetimedb.reducer({ goals: t.array(t.string()) }, (ctx, { goals }) => {
@@ -434,25 +407,21 @@ const SignalInput = t.object('SignalInput', {
 
 export const ingestSignal = spacetimedb.reducer({ event: SignalInput }, (ctx, { event }) => {
   const { member: m, session: s } = requireActiveMember(ctx);
-  if (!m.optedIn) throw new SenderError('consent required before sending signals');
   if (s.state.tag !== 'Active' && s.state.tag !== 'Break') throw new SenderError('session is not running');
   if ([...ctx.db.signalEvent.byMemberSeq.filter([m.id, event.seq])].length > 0) {
     throw new SenderError(`duplicate seq ${event.seq}`);
   }
 
-  // Enforce consent server-side: drop any field the member didn't agree to share.
-  const webcam = m.consentWebcam;
-  const activity = m.consentActivity;
-  const app = activity ? event.activeApp.slice(0, 120) : 'hidden';
-  const title = activity ? event.activeWindowTitle?.slice(0, 300) : undefined;
-  const domain = activity ? event.activeUrlDomain?.toLowerCase().slice(0, 200) : undefined;
-  let category = activity ? event.appCategory.tag : 'Other';
-  if (activity && category === 'Other') category = classify(ctx.db, s.id, app, domain, title) ?? 'Other';
+  const app = event.activeApp.slice(0, 120);
+  const title = event.activeWindowTitle?.slice(0, 300);
+  const domain = event.activeUrlDomain?.toLowerCase().slice(0, 200);
+  let category = event.appCategory.tag;
+  if (category === 'Other') category = classify(ctx.db, s.id, app, domain, title) ?? 'Other';
 
   // The paired phone page is the source of truth for phone state when it's fresh.
-  let phoneState = m.consentPhone ? event.phoneState : tag('Unknown');
+  let phoneState = event.phoneState;
   const sensor = ctx.db.phoneSensor.memberId.find(m.id);
-  if (m.consentPhone && sensor && sensor.phoneIdentity && sensor.lastHeartbeatAt) {
+  if (sensor && sensor.phoneIdentity && sensor.lastHeartbeatAt) {
     const fresh = secsBetween(sensor.lastHeartbeatAt, ctx.timestamp) <= settingNum(ctx.db, 'phone_heartbeat_stale_secs');
     if (fresh) phoneState = tag(sensor.pageVisible ? 'Locked_In_Page_Visible' : 'Phone_In_Use');
   }
@@ -463,21 +432,21 @@ export const ingestSignal = spacetimedb.reducer({ event: SignalInput }, (ctx, { 
     memberId: m.id,
     ts: ctx.timestamp,
     seq: event.seq,
-    facePresent: webcam ? event.facePresent : true,
-    eyesClosed: webcam && event.eyesClosed,
-    lookingAway: webcam && event.lookingAway,
-    headYaw: webcam ? event.headYaw : 0,
-    headPitch: webcam ? event.headPitch : 0,
-    postureSlouchScore: webcam ? event.postureSlouchScore : 0,
-    phoneInHand: webcam && event.phoneInHand,
-    facialExpression: webcam ? event.facialExpression?.slice(0, 40) : undefined,
-    expressionConfidence: webcam ? event.expressionConfidence : 0,
+    facePresent: event.facePresent,
+    eyesClosed: event.eyesClosed,
+    lookingAway: event.lookingAway,
+    headYaw: event.headYaw,
+    headPitch: event.headPitch,
+    postureSlouchScore: event.postureSlouchScore,
+    phoneInHand: event.phoneInHand,
+    facialExpression: event.facialExpression?.slice(0, 40),
+    expressionConfidence: event.expressionConfidence,
     activeApp: app,
     activeWindowTitle: title,
     activeUrlDomain: domain,
     appCategory: tag(category),
     phoneState,
-    webcamConfidence: webcam ? event.webcamConfidence : 0,
+    webcamConfidence: event.webcamConfidence,
     idleSecs: event.idleSecs,
     clientVersion: event.clientVersion.slice(0, 40),
   });
@@ -669,7 +638,6 @@ export const completeTakeover = spacetimedb.reducer({ requestId: t.u64() }, (ctx
 /** Desktop calls this to get a pairing code (read it from my_phone_sensor). */
 export const startPhonePairing = spacetimedb.reducer(ctx => {
   const { member: m, session: s } = requireActiveMember(ctx);
-  if (!m.consentPhone) throw new SenderError('phone consent required');
   const pairingCode = randomCode(ctx, 6, c => ctx.db.phoneSensor.pairingCode.find(c) != null);
   const row = {
     memberId: m.id,
@@ -691,7 +659,7 @@ export const pairPhone = spacetimedb.reducer({ code: t.string(), platform: Phone
   const sensor = ctx.db.phoneSensor.pairingCode.find(code.trim().toUpperCase());
   if (!sensor) throw new SenderError('invalid pairing code');
   const m = ctx.db.member.id.find(sensor.memberId);
-  if (!m || m.leftAt !== undefined || !m.consentPhone) throw new SenderError('pairing is no longer valid');
+  if (!m || m.leftAt !== undefined ) throw new SenderError('pairing is no longer valid');
   ctx.db.phoneSensor.memberId.update({
     ...sensor,
     phoneIdentity: ctx.sender,
@@ -720,7 +688,6 @@ export const addReplayClip = spacetimedb.reducer(
   { durationSecs: t.u32(), reasonCode: ReasonCode, localPathHash: t.string() },
   (ctx, { durationSecs, reasonCode, localPathHash }) => {
     const { member: m, session: s } = requireActiveMember(ctx);
-    if (!m.consentReplayClips) throw new SenderError('replay clip consent required');
     ctx.db.replayClipMeta.insert({
       id: 0n,
       memberId: m.id,

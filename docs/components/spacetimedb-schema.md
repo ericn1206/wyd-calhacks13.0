@@ -18,8 +18,7 @@ current_phase: PomodoroPhase · phase_started_at? · cycle_number · off_task_th
 call_cooldown_secs (600) · max_call_secs (90) · scoreboard_enabled (false) · group_call_enabled (true)
 
 ### 3. member — own session
-id (PK, auto_inc) · session_id (idx) · identity (idx) · joined_at · left_at? · opted_in ·
-consent_webcam · consent_phone · consent_activity · consent_replay_clips ·
+id (PK, auto_inc) · session_id (idx) · identity (idx) · joined_at · left_at? ·
 device_status: DeviceStatus · phone_linked · is_host · goals_set
 Extra index: (session_id, identity).
 
@@ -137,7 +136,6 @@ focus_ratio · indexed_at
 | create_session(name, settings) | anyone | Caller becomes host; leaves any other active session |
 | join_session(code) | anyone | Case-insensitive code; one active session per identity |
 | leave_session() | member | Host passes to the earliest remaining member; last one out ends the session |
-| set_consent(flags) | member | `{opted_in, webcam, phone, activity, replay_clips}`; opting in starts tracking |
 | set_goals(goals[]) | member | 1–3 goals, replaces existing |
 | check_goal(goal_id, done) | goal owner | Logs GoalChecked, recomputes final_score |
 | update_session_context(topic, allowed, blocked) | host | |
@@ -146,7 +144,7 @@ focus_ratio · indexed_at
 | end_session() | host | Ends calls, expires takeovers, finalizes, deletes replay metadata |
 | finalize_session(session_id) | host / worker | Idempotent retry of finalization |
 | delete_replay_meta_on_end(session_id) | host / worker | Ended sessions only |
-| ingest_signal(event) | opted-in member | Validates member/session, rejects duplicate seq, enforces consent, rule-classifies `Other`, fallback-judges when the worker is offline |
+| ingest_signal(event) | member | Validates member/session, rejects duplicate seq, rule-classifies `Other`, fallback-judges when the worker is offline |
 | write_judgment(...) | worker only | |
 | apply_smoothing(member_id) | worker only | Also runs every tick |
 | tick_score | scheduler only | Fallback-judges stale events, smoothing, scoring, call/nudge trigger |
@@ -159,10 +157,10 @@ focus_ratio · indexed_at
 | request_takeover(target_id, action) | member | Always requires target consent |
 | respond_takeover(request_id, approve) | target | Expires after 120 s |
 | complete_takeover(request_id) | target | Approved → Executed |
-| start_phone_pairing() | member with phone consent | Code appears in `my_phone_sensor` |
+| start_phone_pairing() | member | Code appears in `my_phone_sensor` |
 | pair_phone(code, platform) | phone page | Links the phone's identity |
 | phone_heartbeat(visible) | paired phone | |
-| add_replay_clip(duration, reason, path_hash) | member with replay consent | Metadata only |
+| add_replay_clip(duration, reason, path_hash) | member | Metadata only |
 | start_stuck(topic) / post_stuck_message(stuck_id, text) / resolve_stuck(stuck_id) | owner (worker posts as Assistant) | |
 | authorize_worker(identity) | worker | Add another worker identity |
 | report_worker_heartbeat(worker_id, model, queue_depth) | worker | |
