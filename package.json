@@ -1,0 +1,25 @@
+{
+  "name": "attentionmaxx",
+  "version": "0.1.0",
+  "description": "Group focus tool that keeps you locked in",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite dev"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.27.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@types/node": "^20.0.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "electron": "^28.0.0",
+    "electron-vite": "^2.0.0",
+    "typescript": "^5.0.0"
+  }
+}
