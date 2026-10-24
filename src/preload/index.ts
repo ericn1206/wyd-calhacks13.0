@@ -33,15 +33,7 @@ contextBridge.exposeInMainWorld('sessionAPI', {
 
 contextBridge.exposeInMainWorld('circleAPI', {
   requestMediaAccess: () => ipcRenderer.invoke('media:request-access') as Promise<{ camera: boolean; microphone: boolean }>,
-  getSignalInfo: () => ipcRenderer.invoke('signal:info') as Promise<{ port: number; urls: string[] }>,
-  setCallMode: (on: boolean) => ipcRenderer.invoke('window:call-mode', on),
-  watchCircle: (code: string, name: string, onHost: (host: { url: string; name: string } | null) => void) => {
-    const listener = (_event: unknown, host: { url: string; name: string } | null) => onHost(host)
-    ipcRenderer.on('lan:host', listener)
-    void ipcRenderer.invoke('lan:start', code, name)
-    return () => {
-      ipcRenderer.removeListener('lan:host', listener)
-      void ipcRenderer.invoke('lan:stop')
-    }
-  }
+  getCallToken: (code: string, identity: string, name: string) =>
+    ipcRenderer.invoke('call:token', code, identity, name) as Promise<{ url: string; token: string; room: string }>,
+  setCallMode: (on: boolean) => ipcRenderer.invoke('window:call-mode', on)
 })

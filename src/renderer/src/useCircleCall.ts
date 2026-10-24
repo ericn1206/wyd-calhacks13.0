@@ -1,15 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  ConnectionState,
+  createLocalTracks,
+  type LocalTrack,
+  type Participant,
+  Room,
+  RoomEvent,
+  Track,
+  VideoPresets,
+} from 'livekit-client'
 
-const ICE_SERVERS: RTCIceServer[] = [
-  { urls: 'stun:stun.l.google.com:19302' },
-  { urls: 'stun:stun1.l.google.com:19302' },
-]
+const CALL_DURATION_MS = 90_000
+// Call state lives on participant attributes so late joiners see it too.
+// Everyone in a call copies the end time, so it survives the starter leaving.
+const CALL_ENDS_AT = 'callEndsAt'
+const IN_CALL = 'inCall'
 
 export interface CircleRoom {
   name: string
   sessionCode: string
-  signalUrl: string
-  discover?: boolean
 }
 
 export interface CirclePeer {
@@ -22,31 +31,6 @@ export interface RemoteTile {
   name: string
   stream: MediaStream | null
   connection: RTCPeerConnectionState
-}
-
-interface SignalData {
-  description?: RTCSessionDescriptionInit
-  candidate?: RTCIceCandidateInit
-}
-
-interface ServerMessage {
-  type: string
-  peers?: CirclePeer[]
-  peer?: CirclePeer
-  peerId?: string
-  from?: string
-  name?: string
-  endsAt?: number
-  data?: SignalData
-  message?: string
-  call?: { from: string; name: string; endsAt: number } | null
-}
-
-interface PeerLink {
-  peerId: string
-  name: string
-  pc: RTCPeerConnection
-  pendingCandidates: RTCIceCandidateInit[]
 }
 
 export interface CircleCall {
@@ -92,36 +76,32 @@ function playJoinChime(): void {
   window.setTimeout(() => void ctx.close().catch(() => undefined), 1200)
 }
 
-function localDescription(pc: RTCPeerConnection): RTCSessionDescriptionInit | null {
-  const description = pc.localDescription
-  if (!description) return null
-  return { type: description.type, sdp: description.sdp }
+function endsAtOf(participant: Participant): number {
+  const value = Number(participant.attributes[CALL_ENDS_AT])
+  return Number.isFinite(value) ? value : 0
 }
 
-function normalizeSignalUrl(raw: string): string {
-  const trimmed = raw.trim()
-  if (!trimmed) return 'ws://localhost:8787'
-  if (/^wss?:\/\//i.test(trimmed)) return trimmed
-  return `ws://${trimmed}`
+/** Electron prefixes errors thrown in ipcMain handlers; keep only the message. */
+function ipcMessage(err: unknown): string {
+  const text = err instanceof Error ? err.message : String(err)
+  return text.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
 }
 
 export function useCircleCall(room: CircleRoom | null): CircleCall {
   const selfId = useRef(crypto.randomUUID())
-  const wsRef = useRef<WebSocket | null>(null)
-  const peersRef = useRef<CirclePeer[]>([])
-  const pcs = useRef<Map<string, PeerLink>>(new Map())
-  const queued = useRef<Map<string, SignalData[]>>(new Map())
-  const localStreamRef = useRef<MediaStream | null>(null)
+  const roomRef = useRef<Room | null>(null)
+  const tracksRef = useRef<LocalTrack[]>([])
+  const streams = useRef<Map<string, { key: string; stream: MediaStream | null }>>(new Map())
   const inCallRef = useRef(false)
   const callEndsAtRef = useRef<number | null>(null)
+  // The end time this computer claimed. Covers the gap before LiveKit echoes our attributes back.
+  const ownEndsAt = useRef<number | null>(null)
   const declinedEndsAt = useRef<number | null>(null)
   const startingRef = useRef<Promise<void> | null>(null)
   const chimedFor = useRef<number | null>(null)
-  const haltRef = useRef(false)
   const handlers = useRef({
-    onServer: (_msg: ServerMessage) => undefined as void,
+    refresh: () => undefined as void,
     stopMedia: () => undefined as void,
-    onSocketDown: () => undefined as void,
   })
 
   const [status, setStatus] = useState<CircleCall['status']>('idle')
@@ -137,9 +117,12 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
   const [muted, setMuted] = useState(false)
   const [cameraOn, setCameraOn] = useState(true)
 
-  const send = useCallback((payload: unknown) => {
-    const ws = wsRef.current
-    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload))
+  const setAttributes = useCallback((attributes: Record<string, string>) => {
+    const lk = roomRef.current
+    if (!lk || lk.state !== ConnectionState.Connected) return
+    void lk.localParticipant.setAttributes(attributes).catch((err) => {
+      console.error('Could not update call attributes', err)
+    })
   }, [])
 
   const setCallWindow = useCallback((endsAt: number | null) => {
@@ -154,144 +137,42 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
     setCallActive(false)
   }, [])
 
-  const upsertRemote = useCallback((peerId: string, patch: Partial<RemoteTile> & { name?: string }) => {
-    setRemotes((prev) => {
-      const current = prev.find((tile) => tile.peerId === peerId)
-      if (!current) {
-        return [...prev, {
-          peerId,
-          name: patch.name ?? 'Friend',
-          stream: patch.stream ?? null,
-          connection: patch.connection ?? 'new',
-        }]
-      }
-      return prev.map((tile) => (tile.peerId === peerId ? { ...tile, ...patch } : tile))
-    })
+  const activeEndsAt = useCallback((lk: Room): number | null => {
+    let best = ownEndsAt.current ?? 0
+    best = Math.max(best, endsAtOf(lk.localParticipant))
+    for (const participant of lk.remoteParticipants.values()) best = Math.max(best, endsAtOf(participant))
+    return best > Date.now() ? best : null
   }, [])
 
-  const applySignal = useCallback(async (link: PeerLink, data: SignalData) => {
-    const pc = link.pc
-    try {
-      if (data.description) {
-        await pc.setRemoteDescription(data.description)
-        const pending = link.pendingCandidates.splice(0)
-        for (const candidate of pending) {
-          await pc.addIceCandidate(candidate).catch(() => undefined)
-        }
-        if (data.description.type === 'offer') {
-          const answer = await pc.createAnswer()
-          await pc.setLocalDescription(answer)
-          const description = localDescription(pc)
-          if (description) send({ type: 'signal', to: link.peerId, data: { description } })
-        }
-        return
-      }
-      if (data.candidate) {
-        if (!pc.remoteDescription) {
-          link.pendingCandidates.push(data.candidate)
-          return
-        }
-        await pc.addIceCandidate(data.candidate)
-      }
-    } catch (err) {
-      console.error('WebRTC signal failed', err)
-    }
-  }, [send])
+  const syncLocalStream = useCallback(() => {
+    const tracks = tracksRef.current
+    setLocalStream(tracks.length ? new MediaStream(tracks.map((track) => track.mediaStreamTrack)) : null)
+  }, [])
 
-  const ensurePeer = useCallback((peerId: string, name: string): PeerLink | null => {
-    const stream = localStreamRef.current
-    if (!stream) return null
-    const existing = pcs.current.get(peerId)
-    if (existing) {
-      existing.name = name
-      upsertRemote(peerId, { name })
-      return existing
-    }
-
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS })
-    const link: PeerLink = { peerId, name, pc, pendingCandidates: [] }
-    pcs.current.set(peerId, link)
-    upsertRemote(peerId, { name, stream: null, connection: pc.connectionState })
-
-    const offerer = selfId.current < peerId
-    pc.onnegotiationneeded = async () => {
-      if (!offerer) return
-      try {
-        const offer = await pc.createOffer()
-        await pc.setLocalDescription(offer)
-        const description = localDescription(pc)
-        if (!description) return
-        send({ type: 'signal', to: peerId, data: { description } })
-      } catch (err) {
-        console.error('Failed to create offer', err)
-      }
-    }
-
-    pc.onicecandidate = (event) => {
-      if (!event.candidate) return
-      send({
-        type: 'signal',
-        to: peerId,
-        data: { candidate: event.candidate.toJSON() },
-      })
-    }
-
-    pc.ontrack = (event) => {
-      const remoteStream = event.streams[0]
-      if (!remoteStream) return
-      upsertRemote(peerId, { name: link.name, stream: remoteStream, connection: pc.connectionState })
-    }
-
-    pc.onconnectionstatechange = () => {
-      upsertRemote(peerId, { connection: pc.connectionState })
-    }
-
-    for (const track of stream.getTracks()) pc.addTrack(track, stream)
-    return link
-  }, [send, upsertRemote])
-
-  const connectToPeer = useCallback((peer: CirclePeer) => {
-    const link = ensurePeer(peer.peerId, peer.name)
-    if (!link) return
-    const waiting = queued.current.get(peer.peerId)
-    if (!waiting?.length) return
-    queued.current.delete(peer.peerId)
-    for (const data of waiting) void applySignal(link, data)
-  }, [applySignal, ensurePeer])
-
-  const handleSignal = useCallback((from: string, data: SignalData) => {
-    if (!localStreamRef.current) {
-      const list = queued.current.get(from) ?? []
-      list.push(data)
-      queued.current.set(from, list)
-      return
-    }
-    const name = peersRef.current.find((peer) => peer.peerId === from)?.name ?? 'Friend'
-    const link = ensurePeer(from, name)
-    if (!link) return
-    void applySignal(link, data)
-  }, [applySignal, ensurePeer])
-
-  const leaveMedia = useCallback((notify: boolean) => {
+  const leaveMedia = useCallback((endCall: boolean) => {
     inCallRef.current = false
     setInCall(false)
     setJoining(false)
-    for (const link of pcs.current.values()) link.pc.close()
-    pcs.current.clear()
-    queued.current.clear()
+    const lk = roomRef.current
+    const tracks = tracksRef.current
+    tracksRef.current = []
+    for (const track of tracks) {
+      if (lk) void lk.localParticipant.unpublishTrack(track).catch(() => undefined)
+      track.stop()
+    }
+    streams.current.clear()
     setRemotes([])
-    const stream = localStreamRef.current
-    localStreamRef.current = null
-    stream?.getTracks().forEach((track) => track.stop())
     setLocalStream(null)
     setMuted(false)
     setCameraOn(true)
-    if (notify) send({ type: 'call-leave' })
-  }, [send])
+    if (endCall) ownEndsAt.current = null
+    setAttributes(endCall ? { [IN_CALL]: '', [CALL_ENDS_AT]: '' } : { [IN_CALL]: '' })
+  }, [setAttributes])
 
   const beginMedia = useCallback(async () => {
-    if (localStreamRef.current) {
-      for (const peer of peersRef.current) connectToPeer(peer)
+    const lk = roomRef.current
+    if (!lk) return
+    if (tracksRef.current.length) {
       inCallRef.current = true
       setInCall(true)
       setJoining(false)
@@ -312,6 +193,7 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
         chimedFor.current = endsAt
         playJoinChime()
       }
+      let tracks: LocalTrack[] = []
       try {
         if (window.circleAPI) {
           const access = await window.circleAPI.requestMediaAccess()
@@ -319,18 +201,32 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
             throw new Error('Camera and microphone are blocked. Allow them for Electron in System Settings, then try the call again.')
           }
         }
-        const stream = await navigator.mediaDevices.getUserMedia({
+        tracks = await createLocalTracks({
           audio: { echoCancellation: true, noiseSuppression: true },
-          video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+          video: { resolution: VideoPresets.h720.resolution, facingMode: 'user' },
         })
-        localStreamRef.current = stream
-        setLocalStream(stream)
+        if (roomRef.current !== lk) {
+          tracks.forEach((track) => track.stop())
+          return
+        }
+        for (const track of tracks) await lk.localParticipant.publishTrack(track)
+        tracksRef.current = tracks
+        syncLocalStream()
         inCallRef.current = true
         setInCall(true)
-        for (const peer of peersRef.current) connectToPeer(peer)
+        const claimed = callEndsAtRef.current
+        if (claimed) ownEndsAt.current = Math.max(ownEndsAt.current ?? 0, claimed)
+        setAttributes({ [IN_CALL]: '1', [CALL_ENDS_AT]: claimed ? String(claimed) : '' })
+        handlers.current.refresh()
       } catch (err) {
+        for (const track of tracks) {
+          void lk.localParticipant.unpublishTrack(track).catch(() => undefined)
+          track.stop()
+        }
         inCallRef.current = false
         setInCall(false)
+        // Do not auto-retry this call on the next attribute change.
+        declinedEndsAt.current = callEndsAtRef.current
         const denied = err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'NotFoundError')
         setCallError(denied
           ? 'Camera or microphone permission was denied.'
@@ -346,85 +242,63 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
     } finally {
       startingRef.current = null
     }
-  }, [connectToPeer])
+  }, [setAttributes, syncLocalStream])
 
-  const onServer = useCallback((msg: ServerMessage) => {
-    if (msg.type === 'error') {
-      haltRef.current = true
-      setStatus('error')
-      setError(msg.message || 'Could not join this session.')
-      wsRef.current?.close()
-      return
+  const refresh = useCallback(() => {
+    const lk = roomRef.current
+    if (!lk) return
+    const participants = [...lk.remoteParticipants.values()]
+    setPeers(participants.map((participant) => ({
+      peerId: participant.identity,
+      name: participant.name || 'Friend',
+    })))
+
+    const reconnecting = lk.state === ConnectionState.Reconnecting || lk.state === ConnectionState.SignalReconnecting
+    const tiles: RemoteTile[] = []
+    const live = new Set<string>()
+    if (inCallRef.current) {
+      for (const participant of participants) {
+        const tracks = [...participant.trackPublications.values()]
+          .filter((pub) => pub.track && (pub.kind === Track.Kind.Video || pub.kind === Track.Kind.Audio))
+          .map((pub) => pub.track!.mediaStreamTrack)
+        if (participant.attributes[IN_CALL] !== '1' && tracks.length === 0) continue
+        live.add(participant.identity)
+        // Reuse the MediaStream until the tracks change so <video> does not reload.
+        const key = tracks.map((track) => track.id).sort().join(',')
+        let cached = streams.current.get(participant.identity)
+        if (!cached || cached.key !== key) {
+          cached = { key, stream: tracks.length ? new MediaStream(tracks) : null }
+          streams.current.set(participant.identity, cached)
+        }
+        tiles.push({
+          peerId: participant.identity,
+          name: participant.name || 'Friend',
+          stream: cached.stream,
+          connection: reconnecting ? 'disconnected' : cached.stream ? 'connected' : 'connecting',
+        })
+      }
     }
-
-    if (msg.type === 'joined') {
-      setStatus('connected')
-      setError('')
-      peersRef.current = msg.peers ?? []
-      setPeers(peersRef.current)
-      const endsAt = msg.call?.endsAt ?? null
-      setCallWindow(endsAt)
-      if (endsAt && declinedEndsAt.current !== endsAt) void beginMedia()
-      return
+    for (const id of [...streams.current.keys()]) {
+      if (!live.has(id)) streams.current.delete(id)
     }
+    setRemotes(tiles)
 
-    if (msg.type === 'peer-joined' && msg.peer) {
-      peersRef.current = [...peersRef.current.filter((peer) => peer.peerId !== msg.peer!.peerId), msg.peer]
-      setPeers([...peersRef.current])
-      if (localStreamRef.current) connectToPeer(msg.peer)
-      return
-    }
-
-    if (msg.type === 'peer-left' && msg.peerId) {
-      peersRef.current = peersRef.current.filter((peer) => peer.peerId !== msg.peerId)
-      setPeers([...peersRef.current])
-      pcs.current.get(msg.peerId)?.pc.close()
-      pcs.current.delete(msg.peerId)
-      setRemotes((prev) => prev.filter((tile) => tile.peerId !== msg.peerId))
-      return
-    }
-
-    if (msg.type === 'signal' && msg.from && msg.data) {
-      handleSignal(msg.from, msg.data)
-      return
-    }
-
-    if (msg.type === 'call-start' && msg.endsAt) {
-      setCallWindow(msg.endsAt)
-      if (declinedEndsAt.current === msg.endsAt) return
+    const endsAt = activeEndsAt(lk)
+    if (endsAt !== callEndsAtRef.current) setCallWindow(endsAt)
+    if (endsAt && !inCallRef.current && !startingRef.current && declinedEndsAt.current !== endsAt) {
       void beginMedia()
-      return
     }
+  }, [activeEndsAt, beginMedia, setCallWindow])
 
-    if (msg.type === 'call-leave' && msg.peerId) {
-      pcs.current.get(msg.peerId)?.pc.close()
-      pcs.current.delete(msg.peerId)
-      setRemotes((prev) => prev.filter((tile) => tile.peerId !== msg.peerId))
-      return
-    }
-
-    if (msg.type === 'call-end') {
-      declinedEndsAt.current = null
-      setCallWindow(null)
-      leaveMedia(false)
-    }
-  }, [beginMedia, connectToPeer, handleSignal, leaveMedia, setCallWindow])
-
-  handlers.current.onServer = onServer
+  handlers.current.refresh = refresh
   handlers.current.stopMedia = () => leaveMedia(false)
-  handlers.current.onSocketDown = () => {
-    for (const link of pcs.current.values()) link.pc.close()
-    pcs.current.clear()
-    queued.current.clear()
-    setRemotes([])
-  }
 
   useEffect(() => {
     if (!callEndsAt) return
     const timer = window.setTimeout(() => {
       declinedEndsAt.current = null
       setCallWindow(null)
-      leaveMedia(false)
+      leaveMedia(true)
     }, Math.max(0, callEndsAt - Date.now() + 400))
     return () => window.clearTimeout(timer)
   }, [callEndsAt, leaveMedia, setCallWindow])
@@ -433,66 +307,86 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
     if (!room) {
       setStatus('idle')
       setPeers([])
-      peersRef.current = []
       return
     }
 
-    const url = normalizeSignalUrl(room.signalUrl)
     let disposed = false
-    let socket: WebSocket | null = null
     let retry: ReturnType<typeof setTimeout> | null = null
     let attempts = 0
-    haltRef.current = false
+    // adaptiveStream pauses video that is not attached through LiveKit; we render raw MediaStreams.
+    const lk = new Room({ adaptiveStream: false, dynacast: true })
+    roomRef.current = lk
 
-    const connect = () => {
-      if (disposed || haltRef.current) return
+    const refreshNow = () => handlers.current.refresh()
+    const scheduleRetry = (message: string) => {
+      attempts += 1
       setStatus('connecting')
-      const ws = new WebSocket(url)
-      socket = ws
-      wsRef.current = ws
-      ws.onopen = () => {
+      setError(attempts > 1 ? `Reconnecting to the circle… (${message})` : '')
+      retry = setTimeout(() => void connect(), Math.min(8000, 1000 * attempts))
+    }
+
+    lk
+      .on(RoomEvent.ParticipantConnected, refreshNow)
+      .on(RoomEvent.ParticipantDisconnected, refreshNow)
+      .on(RoomEvent.ParticipantAttributesChanged, refreshNow)
+      .on(RoomEvent.ParticipantNameChanged, refreshNow)
+      .on(RoomEvent.TrackSubscribed, refreshNow)
+      .on(RoomEvent.TrackUnsubscribed, refreshNow)
+      .on(RoomEvent.Reconnecting, () => {
+        setStatus('connecting')
+        refreshNow()
+      })
+      .on(RoomEvent.Reconnected, () => {
+        setStatus('connected')
+        setError('')
+        refreshNow()
+      })
+      .on(RoomEvent.Disconnected, () => {
+        if (disposed) return
+        handlers.current.stopMedia()
+        setPeers([])
+        scheduleRetry('connection lost')
+      })
+
+    const connect = async () => {
+      if (disposed) return
+      setStatus('connecting')
+      try {
+        if (!window.circleAPI) throw new Error('Calls need the Lock In desktop app.')
+        const { url, token } = await window.circleAPI.getCallToken(room.sessionCode, selfId.current, room.name)
+        if (disposed) return
+        await lk.connect(url, token)
         if (disposed) {
-          ws.close()
+          void lk.disconnect()
           return
         }
         attempts = 0
-        ws.send(JSON.stringify({
-          type: 'join',
-          sessionCode: room.sessionCode,
-          peerId: selfId.current,
-          name: room.name,
-        }))
-      }
-      ws.onmessage = (event) => {
-        try {
-          handlers.current.onServer(JSON.parse(String(event.data)) as ServerMessage)
-        } catch {
-          // ignore malformed payloads
+        setStatus('connected')
+        setError('')
+        refreshNow()
+      } catch (err) {
+        if (disposed) return
+        const message = ipcMessage(err)
+        if (/not set up|session code|desktop app/i.test(message)) {
+          setStatus('error')
+          setError(message)
+          return
         }
-      }
-      ws.onerror = () => undefined
-      ws.onclose = () => {
-        const replaced = wsRef.current !== null && wsRef.current !== ws
-        if (wsRef.current === ws) wsRef.current = null
-        if (disposed || replaced) return
-        if (!haltRef.current) handlers.current.onSocketDown()
-        if (haltRef.current) return
-        attempts += 1
-        setStatus('connecting')
-        setError(attempts > 1 ? `Reconnecting to ${url}…` : '')
-        retry = setTimeout(connect, Math.min(4000, 800 * attempts))
+        console.error('LiveKit connect failed', err)
+        scheduleRetry(message)
       }
     }
 
-    connect()
+    void connect()
     return () => {
       disposed = true
       if (retry) clearTimeout(retry)
       handlers.current.stopMedia()
-      socket?.close()
+      roomRef.current = null
+      void lk.disconnect()
       window.circleAPI?.setCallMode(false)
     }
-  }, [room?.name, room?.sessionCode, room?.signalUrl])
+  }, [room?.name, room?.sessionCode])
 
   const startCall = useCallback(() => {
     declinedEndsAt.current = null
@@ -500,12 +394,17 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
       void beginMedia()
       return
     }
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+    const lk = roomRef.current
+    if (!lk || lk.state !== ConnectionState.Connected) {
       setError('Still connecting to the circle. Try the call again in a moment.')
       return
     }
-    send({ type: 'call-start' })
-  }, [beginMedia, send])
+    const endsAt = Date.now() + CALL_DURATION_MS
+    ownEndsAt.current = endsAt
+    setCallWindow(endsAt)
+    setAttributes({ [CALL_ENDS_AT]: String(endsAt) })
+    void beginMedia()
+  }, [beginMedia, setAttributes, setCallWindow])
 
   const joinCall = useCallback(() => {
     declinedEndsAt.current = null
@@ -515,7 +414,7 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
   const leaveCall = useCallback(() => {
     declinedEndsAt.current = callEndsAtRef.current
     setCallError('')
-    leaveMedia(true)
+    leaveMedia(false)
     void window.circleAPI?.setCallMode(false)
   }, [leaveMedia])
 
@@ -526,24 +425,21 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
   }, [])
 
   const toggleMute = useCallback(() => {
-    setMuted((current) => {
-      const next = !current
-      localStreamRef.current?.getAudioTracks().forEach((track) => {
-        track.enabled = !next
-      })
-      return next
-    })
+    const audio = tracksRef.current.find((track) => track.kind === Track.Kind.Audio)
+    if (!audio) return
+    const next = !audio.isMuted
+    setMuted(next)
+    void (next ? audio.mute() : audio.unmute()).catch(() => undefined)
   }, [])
 
   const toggleCamera = useCallback(() => {
-    setCameraOn((current) => {
-      const next = !current
-      localStreamRef.current?.getVideoTracks().forEach((track) => {
-        track.enabled = next
-      })
-      return next
-    })
-  }, [])
+    const video = tracksRef.current.find((track) => track.kind === Track.Kind.Video)
+    if (!video) return
+    const off = !video.isMuted
+    setCameraOn(!off)
+    // LiveKit stops the camera on mute and restarts it on unmute with a new track.
+    void (off ? video.mute() : video.unmute()).then(syncLocalStream).catch(() => undefined)
+  }, [syncLocalStream])
 
   return {
     status: room ? status : 'idle',

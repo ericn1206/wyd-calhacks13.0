@@ -4,15 +4,13 @@ import { ActivityMonitor } from './activityMonitor'
 import { createAgentSession } from './cartesiaAgent'
 import { loadEnv } from './env'
 import { SessionManager } from './sessionManager'
-import { startLanDiscovery } from './lanDiscovery'
-import { listSignalUrls, SIGNAL_PORT, startSignalServer, stopSignalServer } from './signalServer'
+import { createCallToken } from './livekitToken'
 
 loadEnv()
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 
 let mainWindow: BrowserWindow | null = null
 let monitor: ActivityMonitor | null = null
-let stopDiscovery: (() => void) | null = null
 const session = new SessionManager()
 
 function createWindow(): void {
@@ -56,11 +54,6 @@ function allowMicrophone(): void {
 
 app.whenReady().then(async () => {
   allowMicrophone()
-  try {
-    await startSignalServer()
-  } catch (err) {
-    console.error('[signal] failed to start', err)
-  }
   createWindow()
   mainWindow?.webContents.setBackgroundThrottling(false)
   mainWindow?.webContents.on('render-process-gone', (_event, details) => {
@@ -116,27 +109,9 @@ app.whenReady().then(async () => {
     return { camera, microphone }
   })
 
-  ipcMain.handle('signal:info', () => ({
-    port: SIGNAL_PORT,
-    urls: listSignalUrls()
-  }))
-
-  ipcMain.handle('lan:start', (event, code: string, name: string) => {
-    stopDiscovery?.()
-    stopDiscovery = startLanDiscovery({
-      code: String(code ?? ''),
-      name: String(name ?? ''),
-      onHost: (host) => {
-        if (event.sender.isDestroyed()) return
-        event.sender.send('lan:host', host)
-      }
-    })
-  })
-
-  ipcMain.handle('lan:stop', () => {
-    stopDiscovery?.()
-    stopDiscovery = null
-  })
+  ipcMain.handle('call:token', (_event, code: string, identity: string, name: string) =>
+    createCallToken(code, identity, name)
+  )
 
   ipcMain.handle('window:call-mode', (_event, on: boolean) => {
     if (!mainWindow) return
@@ -152,12 +127,6 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
-})
-
-app.on('before-quit', () => {
-  stopDiscovery?.()
-  stopDiscovery = null
-  stopSignalServer()
 })
 
 app.on('window-all-closed', () => {

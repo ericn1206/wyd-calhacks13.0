@@ -6,20 +6,18 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "start": "electron-vite dev",
-    "signal": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/main/signalServer.ts"
+    "start": "electron-vite dev"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.27.0",
+    "livekit-client": "2.23.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "ws": "^8.22.0"
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
-    "@types/ws": "^8.18.2",
     "@vitejs/plugin-react": "^4.0.0",
     "electron": "^28.0.0",
     "electron-vite": "^2.0.0",

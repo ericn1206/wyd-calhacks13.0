@@ -18,9 +18,8 @@ declare global {
     }
     circleAPI?: {
       requestMediaAccess: () => Promise<{ camera: boolean; microphone: boolean }>
-      getSignalInfo: () => Promise<{ port: number; urls: string[] }>
+      getCallToken: (code: string, identity: string, name: string) => Promise<{ url: string; token: string; room: string }>
       setCallMode: (on: boolean) => Promise<void>
-      watchCircle: (code: string, name: string, onHost: (host: { url: string; name: string } | null) => void) => () => void
     }
   }
 }

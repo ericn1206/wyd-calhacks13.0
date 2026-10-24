@@ -6,7 +6,6 @@ import { VideoCallOverlay } from './VideoCall'
 import { useCircleCall, type CircleRoom } from './useCircleCall'
 
 const AUTO_CALL_COOLDOWN_MS = 5 * 60 * 1000
-const DEFAULT_SIGNAL_URL = 'ws://localhost:8787'
 
 const COLORS = {
   productive: '#22c55e',
@@ -56,15 +55,6 @@ function makeSessionCode(): string {
   return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join('')
 }
 
-function isLoopback(url: string): boolean {
-  try {
-    const host = new URL(url).hostname
-    return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1'
-  } catch {
-    return true
-  }
-}
-
 function saved(key: string, fallback: string): string {
   try {
     return localStorage.getItem(key) || fallback
@@ -87,31 +77,19 @@ const fieldStyle: React.CSSProperties = {
 function SessionLobby({ onJoin }: { onJoin: (room: CircleRoom) => void }) {
   const [name, setName] = useState(() => saved('lockin:name', ''))
   const [code, setCode] = useState(() => saved('lockin:code', ''))
-  const [signalUrl, setSignalUrl] = useState(() => saved('lockin:signal', DEFAULT_SIGNAL_URL))
-  const [hostUrls, setHostUrls] = useState<string[]>([])
-
-  useEffect(() => {
-    window.circleAPI?.getSignalInfo().then((info) => {
-      setHostUrls(info.urls.filter((url) => !url.includes('localhost')))
-    }).catch(() => undefined)
-  }, [])
 
   const sessionCode = cleanCode(code)
   const canJoin = name.trim().length > 0 && sessionCode.length >= 4
 
   const submit = () => {
     if (!canJoin) return
-    const typed = signalUrl.trim() || DEFAULT_SIGNAL_URL
     const room = {
       name: name.trim().slice(0, 24),
       sessionCode,
-      signalUrl: typed,
-      discover: isLoopback(typed),
     }
     try {
       localStorage.setItem('lockin:name', room.name)
       localStorage.setItem('lockin:code', room.sessionCode)
-      localStorage.setItem('lockin:signal', room.signalUrl)
     } catch {
       // private mode
     }
@@ -166,16 +144,6 @@ function SessionLobby({ onJoin }: { onJoin: (room: CircleRoom) => void }) {
           </div>
         </label>
 
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <span style={{ color: '#9ca3af', fontSize: 12, fontWeight: 600 }}>Signal server</span>
-          <input
-            value={signalUrl}
-            onChange={(event) => setSignalUrl(event.target.value)}
-            placeholder={DEFAULT_SIGNAL_URL}
-            style={{ ...fieldStyle, fontSize: 13 }}
-          />
-        </label>
-
         <button type="submit" disabled={!canJoin} style={{
           marginTop: 4, padding: '14px 20px', borderRadius: 12, border: 'none',
           background: canJoin ? '#6366f1' : '#27272a',
@@ -188,9 +156,7 @@ function SessionLobby({ onJoin }: { onJoin: (room: CircleRoom) => void }) {
       </form>
 
       <p style={{ color: '#4b5563', fontSize: 12, margin: 0, textAlign: 'center', maxWidth: 380, lineHeight: 1.5 }}>
-        {hostUrls.length > 0
-          ? `Same Wi-Fi: both of you enter this code and Lock In connects the computers. If a friend does not appear, they can set the signal server to ${hostUrls[0]}.`
-          : 'Same Wi-Fi: both of you enter this code. Leave the signal server as localhost unless a friend still does not appear.'}
+        Share this code with your circle. Anyone who enters it joins you, on any network.
       </p>
     </div>
   )
@@ -301,14 +267,6 @@ function Dashboard({ state, room, connection, connectionError, peers, callActive
 }) {
   const color = COLORS[state.category]
   const showTimer = state.consecutiveDistractedSeconds > 0
-  const [hostUrl, setHostUrl] = useState('')
-
-  useEffect(() => {
-    window.circleAPI?.getSignalInfo().then((info) => {
-      const lan = info.urls.find((url) => !url.includes('localhost') && !url.includes('127.0.0.1'))
-      if (lan) setHostUrl(lan)
-    }).catch(() => undefined)
-  }, [])
   const timerColor = state.alertLevel === 'alert' ? '#ef4444' : '#f97316'
   const history = [...state.history].reverse().slice(0, 10)
 
@@ -359,8 +317,7 @@ function Dashboard({ state, room, connection, connectionError, peers, callActive
           )}
           {peers.length === 0 && connection === 'connected' && (
             <div style={{ color: '#6b7280', fontSize: 12, marginTop: 6, lineHeight: 1.45 }}>
-              Waiting for a friend on this Wi-Fi. They open Lock In and enter {room.sessionCode}.
-              {hostUrl ? ` If they do not show up, have them set the signal server to ${hostUrl}.` : ''}
+              Waiting for your circle. They open Lock In and enter {room.sessionCode}.
             </div>
           )}
         </div>
@@ -523,19 +480,6 @@ export default function App() {
   const circle = useCircleCall(lobby)
   const lastAutoCall = useRef(0)
 
-  useEffect(() => {
-    if (!lobby?.discover || !window.circleAPI?.watchCircle) return
-    const code = lobby.sessionCode
-    const name = lobby.name
-    return window.circleAPI.watchCircle(code, name, (host) => {
-      setLobby((current) => {
-        if (!current || current.sessionCode !== code || !current.discover) return current
-        const next = host?.url ?? DEFAULT_SIGNAL_URL
-        if (current.signalUrl === next) return current
-        return { ...current, signalUrl: next }
-      })
-    })
-  }, [lobby?.discover, lobby?.name, lobby?.sessionCode])
   const startCallRef = useRef(circle.startCall)
   startCallRef.current = circle.startCall
 
