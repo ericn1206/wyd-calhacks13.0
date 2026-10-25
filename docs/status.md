@@ -71,6 +71,7 @@ Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` â†
 5. Resolve judge + category mismatches.
 
 ## Gotchas
+- macOS overlay: `type: 'panel'` (clicks don't activate the app / raise the main window) and `setVisibleOnAllWorkspaces(..., { skipTransformProcessType: true })` (without it Electron makes the app a UI-element process and its Dock icon disappears).
 - 2026-10-24: module published to maincloud with `--delete-data=on-conflict` (data wiped; `init` re-seeded 12 settings): removed `member.joined_at`, `session.host_identity`; added `active_connection`, `CallEndedReason.Superseded`. Client bindings regenerated.
 - 2026-10-24: db wiped + republished (`--delete-data=on-conflict`) for the binary `AppCategory`; `seed_defaults` re-run. Any old session/token state is gone (identities persist per client token).
 - `set_pomodoro` published to maincloud 2026-10-24 (additive publish, data kept).
