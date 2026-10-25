@@ -29,8 +29,7 @@ model = None
 
 
 def gemini_key():
-    # key = os.environ.get("GEMINI_API_KEY", "").strip()
-    key = "AQ.Ab8RN6JqEwAVZnkrxhc2yoY5wg3zO9tLSXXvDTmD3QvdL2NrYw"
+    key = os.environ.get("GEMINI_API_KEY", "").strip()
     if key:
         return key
     env_path = os.path.join(ROOT, ".env")
