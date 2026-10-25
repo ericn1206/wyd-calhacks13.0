@@ -233,10 +233,10 @@ function registerDesktopApi(): void {
     }
     monitor?.setSessionContext(context)
     monitor?.start()
-    // Gemini judges relevance to the goal (subject + goals + notes). Sites/apps and the front app are
-    // context for that prompt, not a hard allowlist (vision/facetime_trigger.py).
-    const goal = [context.subject, ...context.goals, context.notes].filter((part) => part && part.trim()).join('. ') || 'study'
-    const mentioned = [context.subject, ...context.goals, context.sites, context.notes].filter((part) => part && part.trim()).join('. ')
+    // Gemini judges the OCR text against what they said they are doing. Sites/notes are optional extra context.
+    const goalParts = [context.subject, ...context.goals, context.notes].map((part) => part.trim()).filter(Boolean)
+    const goal = goalParts.filter((part, index) => goalParts.findIndex((item) => item.toLowerCase() === part.toLowerCase()) === index).join('. ') || 'study'
+    const mentioned = [context.sites, context.notes].map((part) => part.trim()).filter(Boolean).join('. ')
     startFacetimeTrigger(goal, publishFacetime, (offTask) => sendToRenderer('wyd:detector-status', offTask), recordDetectorDebug, mentioned)
   })
 

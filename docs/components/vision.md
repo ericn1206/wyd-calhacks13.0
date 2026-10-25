@@ -20,7 +20,7 @@ On Goals submit, run the webcam detector and the screen monitor. Print `face tim
 | Webcam path | Screen on-task both intervals, and webcam `distracted` both intervals. |
 | Fire | Either path prints `face time` once. Any other interval resets both streaks. |
 | Debug | Every interval prints `debug {status, screen, reason, ocrChars, webcam, face, prob, screenStreak, camStreak}` → main keeps the last 300 → Demo menu "Detector log" window; "Dock debug" toggle shows the latest as chips on the dock (verdict · OCR · webcam · streaks · current app). |
-| Dock pill | Wide status line. While tracking, shows `OFF-TASK`/`ON-TASK: <reason>` only when that reason's verdict matches the synced status dot; otherwise `Off task`/`On task`. Idle / Camera off when not tracking. |
+| Dock pill | While tracking, `On task` or `Off task` plus Gemini's short line about the latest screenshot (`On task: Reading chemistry notes`). Idle when not tracking. |
 | Status | Each interval with a verdict prints `status off` (screen off, or screen ok + webcam distracted) or `status on`; unknown prints nothing. → `wyd:detector-status` → `ingest_signal` → status table, which every status dot reads (own dock via `OverlayState.selfStatus`, partners via `members`). |
 | On fire | Overlay opens the live LiveKit check-in (`LiveCheckIn.tsx`) for the session code and **shares the drifter's screen** (`startCall({ shareScreen: true })`, entire screen via `setDisplayMediaRequestHandler`). Teammates get a 3 s Join invite; joiners see the share window (screen big, drifter's webcam bottom-right, others bottom-left). Needs Screen Recording permission; without it the call runs camera-only. |
 
