@@ -135,7 +135,12 @@ function recordDetectorDebug(entry: DetectorDebug): void {
   sendToRenderer('wyd:detector-debug', entry)
 }
 
+// True while the main window is on the focus/break screen (it asks for the overlay); the detector's
+// `face time` must not pop a check-in on the summary or entry screens.
+let overlayWanted = false
+
 function publishFacetime(): void {
+  if (!overlayWanted) return
   if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.showInactive()
   sendTo(overlayWindow, 'facetime:start')
 }
@@ -173,6 +178,7 @@ function registerDesktopApi(): void {
   )
 
   ipcMain.handle('wyd:overlay:set-visible', (_e, visible: boolean) => {
+    overlayWanted = Boolean(visible)
     if (visible) {
       overlayWindow = overlayWindow ?? createOverlayWindow()
       overlayWindow.showInactive()
@@ -208,6 +214,11 @@ function registerDesktopApi(): void {
 
   // Goals or the voice interview → give the judge its context and start polling.
   ipcMain.handle('wyd:detector-log:get', () => detectorLog)
+  // Leaving the session (summary / entry screen): stop the webcam + screen checks and activity polling.
+  ipcMain.handle('wyd:tracking:stop', () => {
+    stopFacetimeTrigger()
+    monitor?.stop()
+  })
   ipcMain.handle('wyd:tracking:start', (_e, ctx: { subject: string; goals: string[]; sites?: string; notes?: string }) => {
     const context: SessionContext = {
       subject: ctx.subject,

@@ -273,6 +273,12 @@ export default function App() {
     return () => bridge.removeListeners()
   }, [])
 
+  // Outside a session (summary / entry screen) the webcam, screen checks and activity polling stop;
+  // they start again on the next Goals submit (wyd:tracking:start).
+  useEffect(() => {
+    if (screen === 'summary' || screen === 'join') void window.wydDesktop?.stopTracking()
+  }, [screen])
+
   useEffect(() => {
     // The dock stays up through breaks; reset the overlay only when it first appears.
     const visible = screen === 'focus' || screen === 'break'

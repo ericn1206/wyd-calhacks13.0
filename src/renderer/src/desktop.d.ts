@@ -27,6 +27,7 @@ declare global {
         onState(cb: (snapshot: unknown) => void): () => void
       }
       startTracking(context: { subject: string; goals: string[]; sites?: string; notes?: string }): Promise<void>
+      stopTracking(): Promise<void>
       onDetectorStatus(cb: (offTask: boolean) => void): () => void
       getDetectorLog(): Promise<DetectorDebug[]>
       onDetectorDebug(cb: (entry: DetectorDebug) => void): () => void

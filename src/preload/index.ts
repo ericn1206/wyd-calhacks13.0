@@ -37,6 +37,7 @@ contextBridge.exposeInMainWorld('wydDesktop', {
   },
   // Activity tracking (src/main/activityMonitor.ts); UI does not consume these yet.
   startTracking: (context: { subject: string; goals: string[]; sites?: string; notes?: string }) => ipcRenderer.invoke('wyd:tracking:start', context),
+  stopTracking: () => ipcRenderer.invoke('wyd:tracking:stop'),
   // Detector debug: one entry per interval (screen OCR vote, webcam, verdict); log kept in main.
   getDetectorLog: () => ipcRenderer.invoke('wyd:detector-log:get') as Promise<DetectorDebug[]>,
   onDetectorDebug: (cb: (entry: DetectorDebug) => void) => {

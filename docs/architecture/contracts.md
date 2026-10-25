@@ -90,6 +90,7 @@ Other reducers: `../components/spacetimedb-schema.md#reducers`.
 | `setOverlayVisible` | `wyd:overlay:set-visible` | invoke | `boolean`; creates/shows/hides the overlay window (shown on focus screen) |
 | `bridge.send` / `bridge.onMessage` | `wyd:bridge:send` → `wyd:bridge:message` | window ↔ window via main | `BridgeMessage` (`src/renderer/src/overlay/bridge.ts`): main→overlay `state`/`checkIn`/`reveal`/`reset`; overlay→main `ready`/`action` |
 | `startTracking` | `wyd:tracking:start` | invoke | `{subject, goals[]}` → `monitor.setSessionContext` + `start()`; called on Goals submit |
+| `stopTracking` | `wyd:tracking:stop` | invoke | stops `facetime_trigger.py` (webcam + screen checks) and activity polling; called on summary/entry screen. `face time` only pops a check-in while the overlay is wanted (focus/break). |
 | `onActivityUpdate` | `activity:update` | main → renderer | `ActivityState` (every 2 s); `App.tsx` turns `appName`/`url` into `OverlayState.currentActivity` (dock \"Currently on\": site hostname, else app name) |
 | `onActivityAlert` | `activity:alert` | main → renderer | `ActivityState` when `alertLevel` is `warning`/`alert`; no UI consumer yet |
 
