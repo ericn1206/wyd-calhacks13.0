@@ -22,9 +22,10 @@ Last updated: 2026-10-24. Biggest gap: **desktop ↔ SpacetimeDB not on `main`**
 - Call room: `call_room_base_url` setting is `""`; no provider chosen.
 
 ## Missing
-- UI wiring: `activity:update`/`activity:alert` not consumed (UI uses Demo-menu triggers); real people/timer/session codes/summary stats (see `ui_integration.md` demo-only inventory).
-- Desktop ↔ SpacetimeDB on `main`: no bindings, no `spacetimedb` client dep, no `ingest_signal` calls (exists on a teammate branch).
-- Teammate's Pomodoro timer UI (being pushed) vs the new UI's own local Pomodoro: reconcile when it lands.
+- UI wiring: `activity:update`/`activity:alert` not consumed (UI uses Demo-menu triggers); summary stats (see `ui_integration.md` demo-only inventory).
+- Desktop → SpacetimeDB: no `ingest_signal` calls yet; no UI for `my_alerts`, group calls, takeover, phone pairing, stuck, summaries/awards; no display-name input (`set_profile` unused, users show as `guest-xxxx`).
+- Pause/stop for everyone: no reducer exists (host console Stop is a no-op in a DB session).
+- Overlay window gets DB state only via `App.tsx` → `OverlayState`; it has no direct DB feed.
 - Worker ↔ SpacetimeDB: no subscription to `worker_pending_signal_events`, no `write_judgment`.
 - Vision (MediaPipe), phone sensor page (`phone/`, optional), replay clips.
 - Check-in call UI.
@@ -72,6 +73,9 @@ Last updated: 2026-10-24. Biggest gap: **desktop ↔ SpacetimeDB not on `main`**
 5. Resolve judge + category mismatches.
 
 ## Gotchas
+- `set_pomodoro` published to maincloud 2026-10-24 (additive publish, data kept).
+- Desktop DB client: `src/main/db/stdb.ts` (single connection in main; Node 18 needs `undici` for WebSocket). Renderer reads `window.wydDesktop.db` (`snapshot`, `call`, `onState`) via `src/renderer/src/db/useDb.ts`. Offline/not connected → entry screen falls back to the local demo flow (needs a typed code).
+- Regenerate bindings after any module change: `spacetime generate --lang typescript --module-path spacetimedb --out-dir src/main/db/module_bindings -y`.
 - Breaking schema changes need `spacetime publish calhacks-13-wyd --delete-data=on-conflict -y` (wipes data). Fresh db: `init` seeds defaults; existing db: run `seed_defaults`. Consent columns removed; republished 2026-10-24, db identity `c200f3d8…1bc7`.
 - `npm install` fails with `Cannot read properties of null (reading 'edgesOut')` unless `vite` is an explicit devDependency (added). Used `--legacy-peer-deps` to add Tailwind.
 - Renderer CSS imports Google Fonts: needs network. No CSP is set (old UI had none; `ui_to_integrate` CSP omitted because it blocks LiveKit/SpacetimeDB sockets).

@@ -5,6 +5,7 @@ import { ActivityMonitor } from './activityMonitor'
 import type { SessionContext } from './claudeJudge'
 import { loadEnv } from './env'
 import { createCallToken } from './livekitToken'
+import { StdbClient } from './db/stdb'
 
 loadEnv()
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
@@ -175,6 +176,12 @@ function registerDesktopApi(): void {
     }
   })
 
+  // SpacetimeDB: main owns the single connection; both windows get plain-JSON snapshots.
+  ipcMain.handle('wyd:db:snapshot', () => stdb.snapshot())
+  ipcMain.handle('wyd:db:call', async (_e, name: string, args?: Record<string, unknown>) => {
+    try { await stdb.call(name, args); return { ok: true } } catch (err) { return { ok: false, error: err instanceof Error ? err.message : String(err) } }
+  })
+
   // Goals screen submit → give the judge its context and start polling.
   ipcMain.handle('wyd:tracking:start', (_e, ctx: { subject: string; goals: string[] }) => {
     const context: SessionContext = { subject: ctx.subject, goals: ctx.goals, sites: '', notes: '' }
@@ -183,10 +190,15 @@ function registerDesktopApi(): void {
   })
 }
 
+const stdb = new StdbClient()
+
 app.whenReady().then(() => {
   configurePermissions()
   registerDesktopApi()
   createWindow()
+
+  stdb.onChange(snapshot => sendToRenderer('wyd:db:state', snapshot))
+  stdb.connect().catch(err => console.error('[stdb] connect failed', err))
 
   monitor = new ActivityMonitor()
   monitor.onUpdate(state => {
@@ -203,5 +215,6 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   monitor?.stop()
+  stdb.disconnect()
   if (process.platform !== 'darwin') app.quit()
 })

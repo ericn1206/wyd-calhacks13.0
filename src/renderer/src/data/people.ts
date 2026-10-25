@@ -3,6 +3,8 @@ export type Person = {
   initials: string
   color: string
   status: string
+  /** Avatar background from the database; overrides `color` when set. */
+  hex?: string
 }
 
 export const people: Person[] = [

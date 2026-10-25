@@ -14,7 +14,9 @@
     "livekit-client": "2.23.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "tailwindcss": "^4.3.3"
+    "spacetimedb": "2.13",
+    "tailwindcss": "^4.3.3",
+    "undici": "^6.29.1"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

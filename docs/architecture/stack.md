@@ -3,7 +3,7 @@
 ## Packages
 | Part | Path | Runtime | Key deps |
 |---|---|---|---|
-| Desktop | `/` (`src/`) | Electron ^28, electron-vite ^2 | react ^18.2, react-dom, @vitejs/plugin-react ^4, tailwindcss ^4 + @tailwindcss/vite ^4 (renderer), vite ^5.4 (explicit; `npm install` without it breaks), typescript ^5, @anthropic-ai/sdk ^0.27, livekit-client 2.23.0 (exact) |
+| Desktop | `/` (`src/`) | Electron ^28, electron-vite ^2 | react ^18.2, react-dom, @vitejs/plugin-react ^4, tailwindcss ^4 + @tailwindcss/vite ^4 (renderer), vite ^5.4 (explicit; `npm install` without it breaks), typescript ^5, @anthropic-ai/sdk ^0.27, livekit-client 2.23.0 (exact), spacetimedb 2.13.* (client), undici ^6 (WebSocket for the SDK on Node 18) |
 | Worker | `worker/` | Node 24, ESM, runs `.ts` directly (no build) | @anthropic-ai/sdk ^0.27 |
 | SpacetimeDB module | `spacetimedb/` | SpacetimeDB TS module (V8) | spacetimedb 2.13.*, typescript ~5.6 |
 
@@ -28,6 +28,7 @@ Desktop build: `electron.vite.config.ts` (main/preload externalize deps; rendere
 |---|---|
 | `ANTHROPIC_API_KEY` | desktop (`src/main/env.ts` loads `.env`; shell vars win), worker (`--env-file-if-exists=../.env`) |
 | `LIVEKIT_URL` (`wss://…`), `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | desktop main, `livekitToken.ts`; secret never reaches the renderer |
+| `SPACETIME_URI` (default `wss://maincloud.spacetimedb.com`), `SPACETIME_DB` (default `calhacks-13-wyd`) | desktop main, `src/main/db/stdb.ts` (optional overrides) |
 | `CARTESIA_API_KEY`, `CARTESIA_AGENT_ID`, `CARTESIA_VOICE_ID` | used only by archived `outdated/` voice code |
 
 ## Commands
@@ -38,7 +39,7 @@ Desktop build: `electron.vite.config.ts` (main/preload externalize deps; rendere
 | Worker fixtures | `cd worker && npm run fixtures` |
 | Build / publish module | `cd spacetimedb && spacetime build` / `spacetime publish` |
 | Re-seed after publish | `spacetime call calhacks-13-wyd seed_defaults` |
-| Generate client bindings | see `../reference/spacetimedb-sdk.md` (`spacetime generate`) |
+| Generate client bindings | `spacetime generate --lang typescript --module-path spacetimedb --out-dir src/main/db/module_bindings -y` |
 
 ## macOS permissions (for the terminal/IDE running dev)
 Accessibility/Automation (System Events via `osascript`) · Screen Recording (window titles) · Camera (webcam) · Microphone (speech onboarding).

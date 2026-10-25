@@ -279,6 +279,17 @@ export const updateSessionContext = spacetimedb.reducer(
 
 // ── Pomodoro ──
 
+export const setPomodoro = spacetimedb.reducer(
+  { workSecs: t.u32(), breakSecs: t.u32() },
+  (ctx, { workSecs, breakSecs }) => {
+    const { session: s } = requireHost(ctx);
+    if (s.state.tag !== 'Lobby') throw new SenderError('timer is locked once the session starts');
+    if (workSecs < 60 || workSecs > 7200) throw new SenderError('work length must be 1 to 120 minutes');
+    if (breakSecs < 60 || breakSecs > 3600) throw new SenderError('break length must be 1 to 60 minutes');
+    ctx.db.session.id.update({ ...s, pomodoroWorkSecs: workSecs, pomodoroBreakSecs: breakSecs });
+  }
+);
+
 export const startSession = spacetimedb.reducer(ctx => {
   const { session: s } = requireHost(ctx);
   if (s.state.tag !== 'Lobby') throw new SenderError('session already started');

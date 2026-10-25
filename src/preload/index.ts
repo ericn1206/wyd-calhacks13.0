@@ -22,6 +22,16 @@ contextBridge.exposeInMainWorld('wydDesktop', {
     },
     removeListeners: () => ipcRenderer.removeAllListeners('wyd:bridge:message')
   },
+  // SpacetimeDB (connection lives in src/main/db/stdb.ts). `call` takes a generated reducer accessor name.
+  db: {
+    snapshot: () => ipcRenderer.invoke('wyd:db:snapshot'),
+    call: (name: string, args?: Record<string, unknown>) => ipcRenderer.invoke('wyd:db:call', name, args) as Promise<{ ok: boolean; error?: string }>,
+    onState: (cb: (snapshot: unknown) => void) => {
+      const handler = (_e: unknown, snapshot: unknown) => cb(snapshot)
+      ipcRenderer.on('wyd:db:state', handler)
+      return () => { ipcRenderer.removeListener('wyd:db:state', handler) }
+    }
+  },
   // Activity tracking (src/main/activityMonitor.ts); UI does not consume these yet.
   startTracking: (context: { subject: string; goals: string[] }) => ipcRenderer.invoke('wyd:tracking:start', context),
   onActivityUpdate: (cb: (state: ActivityState) => void) => {
