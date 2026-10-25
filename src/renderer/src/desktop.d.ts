@@ -14,6 +14,7 @@ declare global {
       setAlwaysOnTop(enabled: boolean): Promise<void>
       setIgnoreMouseEvents(enabled: boolean): Promise<void>
       setCaptureHidden(hidden: boolean): Promise<void>
+      recordJoinClip(): Promise<void>
       moveToCorner(corner: CheckInCorner, size?: { width?: number; height?: number }): Promise<void>
       getDisplays(): Promise<unknown[]>
       setOverlayVisible(visible: boolean): Promise<void>
@@ -27,7 +28,7 @@ declare global {
         call(name: string, args?: Record<string, unknown>): Promise<{ ok: boolean; error?: string }>
         onState(cb: (snapshot: unknown) => void): () => void
       }
-      startTracking(context: { subject: string; goals: string[]; sites?: string; notes?: string }): Promise<void>
+      startTracking(context: { subject: string; goals: string[]; sites?: string; notes?: string; camera?: string }): Promise<void>
       stopTracking(): Promise<void>
       onDetectorStatus(cb: (offTask: boolean) => void): () => void
       getDetectorLog(): Promise<DetectorDebug[]>

@@ -6,7 +6,7 @@ Overview, visibility, behavior: `spacetimedb.md`. Enums: `../architecture/contra
 
 Field names are camelCase in TS and snake_case in the database. `?` = optional. `idx` = btree index.
 
-### 1. user — public
+### user — public
 identity (PK) · display_name · avatar_color · created_at · online
 
 Auto-created on connect as `guest-xxxx`; set with `set_profile`.
@@ -23,65 +23,65 @@ device_status: DeviceStatus · phone_linked · is_host · goals_set
 Extra index: (session_id, identity).
 `is_host` is the only host record. Host leaves → active member with the lowest `id` becomes host. `join_session` always inserts a fresh row (rejoiners go to the back of the line, goals reset).
 
-### 4. goal — own session
+### goal — own session
 id (PK, auto_inc) · session_id (idx) · member_id (idx) · text · position (1–3) · completed ·
 completed_at? · checked_at_break_number?
 
-### 5. signal_event — private
+### signal_event — private
 id (PK, auto_inc) · session_id (idx) · member_id (idx) · ts (idx) · seq · face_present · eyes_closed ·
 looking_away · head_yaw · head_pitch · posture_slouch_score · phone_in_hand · facial_expression? ·
 expression_confidence · active_app · active_window_title? · active_url_domain? ·
 app_category: AppCategory · phone_state: PhoneState · webcam_confidence · idle_secs · client_version
 Extra index: (member_id, seq) for duplicate rejection.
 
-### 6. status — own session (one row per member)
+### status — own session (one row per member)
 member_id (PK) · session_id (idx) · label: StatusLabel · reason_code: ReasonCode · confidence ·
 since · last_event_id · smoothed_off_task_secs · updated_at
 
-### 7. judgment — private
+### judgment — private
 id (PK, auto_inc) · event_id (idx) · member_id (idx) · session_id (idx) · raw_label: StatusLabel ·
 raw_confidence · reason_code · model_name: ModelName · latency_ms · input_tokens · output_tokens ·
 cost_usd · created_at
 
-### 8. focus_block — own session
+### focus_block — own session
 id (PK, auto_inc) · session_id (idx) · member_id (idx) · kind: FocusBlockKind · reason_code? ·
 started_at · ended_at? · duration_secs · pomodoro_cycle
 
-### 9. score — own session, gated by scoreboard_enabled
+### score — own session, gated by scoreboard_enabled
 member_id (PK) · session_id (idx) · focus_points · focus_ratio · goals_completed · goals_total ·
 final_score (= focus_ratio × goals_completed) · current_streak_secs · best_streak_secs ·
 penalties_total · recovery_bonus_total · interruptions_count · updated_at
 
-### 10. score_event — private
+### score_event — private
 id (PK, auto_inc) · member_id (idx) · session_id (idx) · ts · kind: ScoreEventKind · delta · note
 
-### 13. group_call — own session
+### group_call — own session
 id (PK, auto_inc) · session_id (idx) · triggered_by_member_id (idx) · trigger_reason_code · room_id ·
 room_url? · state: CallState · created_at · started_at? · ended_at? · max_duration_secs ·
 ended_reason?: CallEndedReason
 
-### 14. call_participant — own session
+### call_participant — own session
 id (PK, auto_inc) · call_id (idx) · member_id (idx) · joined_at? · left_at? · response: CallResponse
 
-### 15. call_cooldown — private
+### call_cooldown — private
 session_id (PK) · last_call_at · calls_in_last_hour
 
-### 15b. call_member_trigger — private
+### call_member_trigger — private
 member_id (PK) · session_id (idx) · last_triggered_at (last call *or* nudge for this member)
 
-### 16. alert — targeted member
+### alert — targeted member
 id (PK, auto_inc) · session_id (idx) · target_member_id (idx) · kind: AlertKind · payload_json ·
 created_at · delivered · delivered_at? · factory_run_id?
 
-### 17. takeover_request — own session
+### takeover_request — own session
 id (PK, auto_inc) · session_id (idx) · requester_member_id (idx) · target_member_id (idx) ·
 state: TakeoverState · action: TakeoverAction · created_at · resolved_at? · requires_target_consent (true)
 
-### 18. phone_sensor — owner + paired phone
+### phone_sensor — owner + paired phone
 member_id (PK) · session_id (idx) · pairing_code (unique) · phone_identity? · page_visible ·
 last_heartbeat_at? · state: PhoneSensorState · platform: PhonePlatform
 
-### 19. replay_clip_meta — owner only
+### replay_clip_meta — owner only
 id (PK, auto_inc) · member_id (idx) · session_id (idx) · ts · duration_secs · reason_code ·
 local_path_hash · deleted_after_session
 
@@ -94,35 +94,38 @@ mime (`video/mp4`) · size_bytes · chunk_count · received_chunks · complete �
 id (PK, auto_inc) · clip_id (idx) · seq · data: byte array. File = chunks ordered by `seq`. Chunk ≤ 256 KiB.
 
 ### 19d. session_compilation — own session (`my_session_compilations`), written by the clip worker only
-session_id (PK) · status: CompilationStatus · clip_count (clips in the video at `url`; 0 until Ready) · url? · error? · updated_at. Flow: `clip-compiler.md`.
+session_id (PK) · status: CompilationStatus · clip_count (clips in the video at `url`; 0 until Ready) · url? (a path such as `/compilations/session-45-2.mp4`; add `clip_page_base_url`) · error? (a note on Ready, e.g. unreadable clips left out) · updated_at. Flow: `clip-compiler.md`.
+
+### 19e. compiler_lease — private (no client view)
+key (PK, always `clip_compiler`) · lease_id (random per compiler process) · holder_identity · label · url · started_at · heartbeat_at. At most one row: the clip compiler that may run (`../components/clip-compiler.md#one-compiler`).
 
 ### 20. session_summary — owner only
 id (PK, auto_inc) · session_id (idx) · member_id (idx) · total_secs · deep_work_secs ·
 longest_block_secs · interruption_count · top_distraction_category? · goals_completed · goals_total ·
 summary_text (written by the worker; empty until then) · notability_pdf_ref? · created_at
 
-### 21. session_award — own session
+### session_award — own session
 id (PK, auto_inc) · session_id (idx) · member_id (idx) · kind: AwardKind · value · note
 
-### 22. stuck_session — owner only
+### stuck_session — owner only
 id (PK, auto_inc) · session_id (idx) · member_id (idx) · started_at · ended_at? · topic · state: StuckState
 
-### 23. stuck_message — owner only
+### stuck_message — owner only
 id (PK, auto_inc) · stuck_id (idx) · role: StuckRole · text · ts
 
-### 24. app_category_rule — public
+### app_category_rule — public
 id (PK, auto_inc) · session_id? (none = global) · pattern · match_type: MatchType ·
 category: AppCategory (`OnTask`/`OffTask`) · on_task_default
 No longer consulted by `ingest_signal` (classification is client-side); seeded rows remain. Candidate to drop.
 `session_id` is not indexed (SpacetimeDB can't index option columns; the table is tiny).
 
-### 25. session_context — own session
+### session_context — own session
 session_id (PK) · topic_description · allowed_domains · blocked_domains
 
-### 26. worker_heartbeat — private
+### worker_heartbeat — private
 worker_id (PK) · last_seen_at · model_in_use · queue_depth
 
-### 27. app_setting — public
+### app_setting — public
 key (PK) · value_json
 
 Seeded: `smoothing_hold_secs=60`, `low_confidence_threshold=0.5`, `event_interval_secs=10`,
@@ -131,7 +134,7 @@ Seeded: `smoothing_hold_secs=60`, `low_confidence_threshold=0.5`, `event_interva
 `fallback_judge_after_secs=20`, `phone_heartbeat_stale_secs=30`, `takeover_expire_secs=120`,
 `call_room_base_url=""`.
 
-### 28. focus_history_index — private
+### focus_history_index — private
 id (PK, auto_inc) · member_id (idx) · session_id (idx) · hour_of_day (UTC) · day_of_week (UTC) ·
 focus_ratio · indexed_at
 
@@ -163,7 +166,7 @@ focus_ratio · indexed_at
 | end_session() | host | Ends calls, expires takeovers, finalizes, deletes replay metadata |
 | finalize_session(session_id) | host / worker | Idempotent retry of finalization |
 | delete_replay_meta_on_end(session_id) | host / worker | Ended sessions only |
-| ingest_signal(event) | member | Validates member/session, rejects duplicate seq, rule-classifies `Other`, fallback-judges when the worker is offline |
+| ingest_signal(event) | member | Validates member/session, rejects duplicate seq, judges `app_category` (OffTask → Distracting_App), fallback-judges when the worker is offline |
 | write_judgment(...) | worker only | |
 | apply_smoothing(member_id) | worker only | Also runs every tick and on every `ingest_signal`/`write_judgment` |
 | tick_score | scheduler only | Fallback-judges stale events, smoothing, scoring, call/nudge trigger |
@@ -181,10 +184,14 @@ focus_ratio · indexed_at
 | pair_phone(code, platform) | phone page | Links the phone's identity |
 | phone_heartbeat(visible) | paired phone | |
 | add_replay_clip(duration, reason, path_hash) | member | Metadata only (unused; superseded by `session_clip`) |
-| begin_session_clip(clip_key, moment_at_ms, started_at_ms, duration_ms, width, height, fps, mime, size_bytes, chunk_count) | member | Caller's newest member row; allowed up to 600 s after the session ended / member left. Same key again restarts the upload. Limits: 12 MiB, 64 chunks, 60 s, 20 clips per member |
+| begin_session_clip(clip_key, moment_at_ms, started_at_ms, duration_ms, width, height, fps, mime, size_bytes, chunk_count) | member | Caller's newest member row; allowed up to 600 s after the session ended / member left. Same key again restarts the upload. Limits: 64 MiB, 400 chunks, 60 s, 20 clips per member |
 | upload_clip_chunk(clip_key, seq, data) | clip owner | ≤ 256 KiB; same `seq` again replaces |
 | finish_session_clip(clip_key) | clip owner | Needs every chunk and exact `size_bytes`; sets `complete` |
 | set_session_compilation(session_id, status, clip_count, url?, error?) | worker only | Upsert; `Ready` needs `url` |
+| claim_compiler_lease(lease_id, label, url, takeover) | worker only | Free, stale (heartbeat > 20 s) or same lease id → take/refresh; else error `a clip compiler is already running: …` unless `takeover` |
+| heartbeat_compiler_lease(lease_id) | worker only | Error `lease lost` if someone else holds it |
+| release_compiler_lease(lease_id) | worker only | Frees the lease if it is ours |
+| set_clip_page_base_url(url) | worker only | Upserts `app_setting` `clip_page_base_url` (JSON string, no trailing `/`); http(s), ≤ 200 chars |
 | start_stuck(topic) / post_stuck_message(stuck_id, text) / resolve_stuck(stuck_id) | owner (worker posts as Assistant) | |
 | authorize_worker(identity) | worker | Add another worker identity |
 | report_worker_heartbeat(worker_id, model, queue_depth) | worker | |

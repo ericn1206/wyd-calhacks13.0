@@ -29,6 +29,7 @@ const VIEWS = {
   summaries: 'mySessionSummaries',
   awards: 'mySessionAwards',
   compilations: 'mySessionCompilations',
+  settings: 'appSetting',
   users: 'user'
 } as const
 

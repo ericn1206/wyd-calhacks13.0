@@ -9,15 +9,24 @@ Feature: `contracts.md#session-clips`. No extra dependencies.
 
 | File | Covers |
 |---|---|
-| `python/test_clip_recorder.py` | `vision/detector.py` `ClipRecorder`: 10 s buffer, 10 s before + 20 s after, 320×240 / 8 fps constant-rate H.264, busy rejection, flush on shutdown, no frames, bad path, `mp4v` fallback, stdin `clip <path>` reader |
-| `python/test_trigger_forwarding.py` | `vision/facetime_trigger.py`: `clip {json}` re-print without touching the webcam vote, stdin → detector forwarding |
+| `python/test_clip_recorder.py` | `vision/clip_recorder.py`: webcam + screen buffers (10 s, thread-safe), 10 s before + 20 s after, 1280x720 / 10 fps composite (screen picture, webcam inset, letterbox, webcam-only, screen-only), busy rejection, flush, errors, `mp4v` fallback, `ScreenSampler` (rate, failures, give-up) |
+| `python/test_clip_cam_only.py` | Webcam-only clips (`clip-cam`): no pre-roll, camera's own even size, no screen, replies carry `path` (busy/errors too), `clip-cam` stdin line queued and forwarded with spaces kept |
+| `ts/compile-plan-join.test.ts` | `groupClips`: old order without joiners, overlap matching, other member only, ≥ 3 s, max 4, orphans, every clip counted once; uploader/compiler prefix agree |
+| `ts/compile-render-join.test.ts` | Joiner insets with real ffmpeg: absent before / present after joining (pixel check), duration = drifter clip even if the joiner runs past it, own segment only, several side by side, soundtrack kept, unreadable joiner / unreadable base |
+| `ts/compile.join.integration.test.ts` | Two members on a real db: drifter clip + `join-` clip + an unmatched one → inset in the video, `clip_count` 3, orphan noted. Same env as `compile.integration` |
+| `python/test_detector_stdin.py` | `vision/detector.py`: stdin `clip <path>` reader, raw + model-sized camera frame, screen sampler start (`WYD_APP_PID`, off-macOS fallback, no Screen Recording permission → webcam only + message) |
+| `python/test_screen_capture.py` | `vision/screen_capture.py` on the real window server (macOS): BGR frame, excluding a process removes exactly its windows |
+| `python/test_trigger_forwarding.py` | `vision/facetime_trigger.py`: `clip {json}` re-print without touching the webcam vote, stdin → detector forwarding, stop on stdin EOF/SIGTERM with the watchdog (incl. two real-process tests: a hung trigger and its child both die) |
 | `ts/clipUpload.test.ts` | `src/main/clipUpload.ts` with a fake DB client: call order, chunk sizes and reassembly, retries, give-up, file deletion, clip dir |
 | `ts/facetimeTrigger.test.ts` | `requestClip` is false when tracking is off |
 | `ts/module.integration.test.ts` | `session_clip` reducers on a real db (validation, ownership, limits, grace window). Skipped unless env set |
-| `ts/compile-plan.test.ts` | `worker/compile/plan.ts`: clip order, when a session is due (quiet period, all chunks, retry back-off), file names |
-| `ts/compile-serve.test.ts` | `worker/compile/serve.ts`: Range/206/416, HEAD, CORS, 404 for anything but compiled videos, path tricks |
+| `ts/compile-plan.test.ts` | `worker/compile/plan.ts`: clip order, when a session is due (quiet period, all chunks, retry back-off), file names, which Ready rows have no file here |
+| `ts/compile-serve.test.ts` | `worker/compile/serve.ts`: Range/206/416, HEAD, CORS, 404 for anything but compiled videos, path tricks; `/session/<id>` page and `/status` JSON for every state, numeric ids only |
 | `ts/compile-render.test.ts` | `worker/compile/render.ts` with real ffmpeg: order, mixed size/codec, no leftovers, errors. Skipped without ffmpeg |
-| `ts/compile.integration.test.ts` | Full flow on a real db: upload clips, end session, compiler renders + hosts, URL in `compilations`, late clip re-render, non-worker rejected. Needs ffmpeg + `WYD_TEST_WORKER_TOKEN` |
+| `ts/network.test.ts` | `worker/compile/network.ts` `lanAddress`: Wi-Fi first, VPN/virtual last, loopback/link-local/IPv6 ignored |
+| `ts/compile.lease.integration.test.ts` | One-compiler lease on a real db: refuse + who holds it, nothing left behind, graceful release, `--takeover` (old one stops itself), stale takeover after 20 s, reconnect keeps the lease; rebuilding of missing videos (a deleted file comes back, a compiler on another folder rebuilds, no rebuild without a lease). Needs the same env as `compile.integration` |
+| `ts/summary-link.test.ts` | `useDb.ts` `clipInfo`: summary-screen link, state and video address (stored path + current base) from `app_setting` + `session_compilation` |
+| `ts/compile.integration.test.ts` | Full flow on a real db: upload clips, end session, compiler renders + hosts, URL in `compilations`, late clip re-render, ended session without clips → `empty`, dropped connection → `offline` then recovers, non-worker rejected. Needs ffmpeg + `WYD_TEST_WORKER_TOKEN` |
 
 Python needs `cv2` + `numpy`: uses `vision/.venv` (`npm run setup:vision`), else `WYD_TEST_PYTHON=/path/to/python`; skipped with a message if missing.
 

@@ -1,31 +1,46 @@
-// Clip compiler entry. Run with `npm run worker:compile` (bundles this file, then runs it); env in docs/components/clip-compiler.md.
+// Clip compiler entry. Run with `npm run clips:host` (shares links on this laptop's network address) or
+// `npm run worker:compile` (links use COMPILE_PUBLIC_URL / localhost). Both bundle this file, then run it.
+// Flags: --host  use this laptop's network address in the links · --takeover  replace a compiler that is already running.
+// Only one compiler may run against a database at a time: it takes a lease in SpacetimeDB (docs/components/clip-compiler.md).
+import { hostname } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { startCompiler } from './compiler.ts'
+import { lanAddress } from './network.ts'
 
+const root = process.env['COMPILE_ROOT'] || join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const env = process.env
-// run.mjs passes the repo root (the bundle lives in worker/compile/.build, one level deeper than this source).
-const root = env['COMPILE_ROOT'] || join(dirname(fileURLToPath(import.meta.url)), '..', '..')
+const flags = new Set(process.argv.slice(2))
 const port = Number(env['COMPILE_PORT'] ?? 8787)
+const lan = lanAddress()
+const publicUrl = env['COMPILE_PUBLIC_URL'] || (flags.has('--host') ? `http://${lan ?? 'localhost'}:${port}` : `http://localhost:${port}`)
+const database = env['SPACETIME_DB'] || 'calhacks-13-wyd'
 
 const compiler = await startCompiler({
   uri: env['SPACETIME_URI'] || 'wss://maincloud.spacetimedb.com',
-  database: env['SPACETIME_DB'] || 'calhacks-13-wyd',
+  database,
   token: env['WYD_WORKER_TOKEN'] || undefined,
   tokenFile: env['COMPILE_TOKEN_FILE'] || join(root, 'worker', '.state', 'compile-token'),
   outDir: env['COMPILE_OUT_DIR'] || join(root, 'worker', 'out', 'compilations'),
   port,
-  publicUrl: env['COMPILE_PUBLIC_URL'] || `http://localhost:${port}`,
+  publicUrl,
   quietMs: Number(env['COMPILE_QUIET_SECS'] ?? 30) * 1000,
   retryMs: 60_000,
   pollMs: 2000,
   ffmpegBin: env['FFMPEG_BIN'] || 'ffmpeg',
+  audioPath: env['COMPILE_AUDIO'] || join(root, 'worker', 'compile', 'audio', 'background.mp3'),
+  lease: { label: `${hostname()} (${publicUrl})`, takeover: flags.has('--takeover') },
+  onLeaseLost: () => process.exit(0),
   log: m => console.log(`[compile ${new Date().toTimeString().slice(0, 8)}] ${m}`)
 }).catch(err => {
-  console.error('[compile] could not start:', err instanceof Error ? err.message : err)
+  console.error(`[compile] could not start: ${err instanceof Error ? err.message : err}`)
   process.exit(1)
 })
 
+if (flags.has('--host')) {
+  console.log(`[compile] session pages: ${publicUrl}/session/<session id>  (teammates must be on the same network)`)
+  if (!lan && !env['COMPILE_PUBLIC_URL']) console.log('[compile] no network address found; links only work on this laptop')
+}
 console.log(`[compile] if renders fail with "only the AI worker may call this", authorize this identity once:`)
-console.log(`  spacetime call ${env['SPACETIME_DB'] || 'calhacks-13-wyd'} authorize_worker '"0x${compiler.identity}"'`)
+console.log(`  spacetime call ${database} authorize_worker '"0x${compiler.identity}"'`)
 for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => { void compiler.stop().then(() => process.exit(0)) })

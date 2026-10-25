@@ -8,16 +8,16 @@ This document must be updated whenever a feature is added, removed, renamed, or 
 
 ## Current UI inventory
 
-The prototype is implemented primarily in `src/App.tsx`. It uses hardcoded people, focus statistics, screen-share content, and demo events. These are visual contracts for later integrations, not production data sources.
+The prototype is implemented primarily in `src/renderer/src/App.tsx`. It uses hardcoded people, focus statistics, screen-share content, and demo events. These are visual contracts for later integrations, not production data sources.
 
 ### Component organization
 
-- `src/App.tsx` — application state, timers, event orchestration, and screen routing.
-- `src/components/ui/` — reusable primitives such as `Icon`, `Brand`, setup progress, and `Shell`.
-- `src/components/onboarding/` — entry, first-run introduction, and goal-setup screens.
-- `src/components/session/` — break, summary, and session sidebar components.
-- `src/components/overlays/` — persistent dock and dock notification UI.
-- `src/data/people.ts` — shared prototype participant data and its `Person` type.
+- `src/renderer/src/App.tsx` — application state, timers, event orchestration, and screen routing.
+- `src/renderer/src/components/ui/` — `Icon`, `Shell`.
+- `src/renderer/src/components/onboarding/` — entry, first-run introduction, and goal-setup screens.
+- `src/renderer/src/components/session/` — break, summary, and session sidebar components.
+- `src/renderer/src/components/overlays/` — persistent dock and dock notification UI.
+- `src/renderer/src/data/people.ts` — shared prototype participant data and its `Person` type.
 
 New UI should be placed in the closest functional directory and reuse shared primitives and data types where practical. Keep backend calls and cross-screen orchestration above presentational components.
 
@@ -49,23 +49,19 @@ The items below exist to demonstrate intended product behavior. Future agents mu
 
 #### People and focus states
 
-- `src/data/people.ts` contains hardcoded Maya, Jake, and Priya records.
+- `src/renderer/src/data/people.ts` contains hardcoded Maya, Jake, and Priya records.
 - Their focused/drifting states are fixed prototype data.
 - Production records must come from session membership and focus-state services.
 
 #### Session entry and creation
 
-- Session validation currently checks only for non-empty text.
-- `STUDY25` is a hardcoded invite code.
-- Copy to clipboard is functional, but room lookup and room creation are not connected to a backend.
-- Host/participant role is inferred from choosing Create or Join rather than server-authorized membership.
+- Create/join call `createSession`/`joinSession` against the DB (`src/renderer/src/db/useDb.ts`); the invite code is generated client-side (`makeInviteCode`) and passed as `code`. Offline (no DB connection) falls back to the local demo flow.
+- Host/participant role comes from server membership in a DB session, and from Create/Join choice in the offline flow.
 
 #### Pomodoro synchronization
 
-- Countdown, rounds, short breaks, and long breaks function locally.
-- Host and participant layouts represent intended permissions.
-- No timer state is currently transmitted between clients.
-- The participant timer starts locally for demonstration; production participants must derive it from authoritative host events.
+- In a DB session the clock derives from the server (`components/spacetimedb.md#behavior`); host `set_pomodoro`/`start_session`/`take_break`.
+- The local countdown, rounds and long breaks exist only in the offline demo flow.
 
 #### Focus detection
 
@@ -100,7 +96,7 @@ The items below exist to demonstrate intended product behavior. Future agents mu
 
 #### Private summary
 
-- On-task percentage, focused minutes, trend text, and rhythm chart are hardcoded.
+- In a DB session, stats come from `my_session_summaries`. Trend text and rhythm chart stay hardcoded; the offline flow is all hardcoded.
 - Goal completion counts are derived from current local checkbox state.
 - Production statistics must be computed from authoritative session records.
 
@@ -154,7 +150,7 @@ The opening card has two modes.
 
 - Accepts a session name.
 - Requires a non-empty name before continuing.
-- Displays a hardcoded invite code and a copy-to-clipboard action.
+- Displays the generated invite code and a copy-to-clipboard action.
 - Carries the custom session name into the focus workspace.
 - Assigns the current user the **host** role.
 - Passes through the first-run introduction gate before goal setup.
@@ -254,7 +250,7 @@ The opening card has two modes.
 ### Private summary page
 
 - Opens from End session, Leave, or the Pomodoro completion modal.
-- Shows hardcoded on-task percentage and focused minutes.
+- Shows on-task percentage and focused minutes (real in a DB session, hardcoded offline).
 - Shows live goal-completion counts.
 - Displays a hardcoded focus-rhythm chart.
 - Is explicitly private to the participant.

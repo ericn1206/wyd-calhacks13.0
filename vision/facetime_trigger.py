@@ -22,6 +22,10 @@ INTERVAL_SEC = 5
 STREAK_TO_FIRE = 2
 
 stop = threading.Event()
+STOP_GRACE_SEC = 4.0
+detector_proc = None  # the webcam detector child, so the watchdog can kill it
+_stopping = False
+_hard_exit = os._exit  # patched in tests
 lock = threading.Lock()
 webcam_distracted = False
 saw_webcam = False
@@ -50,6 +54,11 @@ def load_screen():
     return mod
 
 
+def dbg(msg):
+    """Timestamped stderr line for tracing clips and shutdown (grep `[clipdbg]`)."""
+    print(f'[clipdbg] {time.strftime("%H:%M:%S")}.{int(time.time() * 1000) % 1000:03d} trigger: {msg}', file=sys.stderr, flush=True)
+
+
 def read_webcam(proc):
     global webcam_distracted, saw_webcam, webcam_last
     if proc.stdout is None:
@@ -63,6 +72,7 @@ def read_webcam(proc):
         except json.JSONDecodeError:
             continue
         if "clip" in msg:
+            dbg(f'relaying detector reply to Electron: {json.dumps(msg)}')
             print("clip " + json.dumps(msg), flush=True)
             continue
         with lock:
@@ -73,17 +83,52 @@ def read_webcam(proc):
             break
 
 
+def request_stop(grace=None):
+    """Ask the main loop to finish. It can be stuck in a slow network call (Gemini), so after `grace` seconds a
+    watchdog kills the webcam detector and exits regardless: nothing may keep the camera and screen capture
+    running after the app is gone."""
+    global _stopping
+    dbg(f'request_stop (already stopping={_stopping}), watchdog {STOP_GRACE_SEC if grace is None else grace}s')
+    stop.set()
+    if _stopping:
+        return
+    _stopping = True
+    wait = STOP_GRACE_SEC if grace is None else grace
+    exit_now = _hard_exit  # bound now, so a later change of the module attribute cannot redirect a pending watchdog
+
+    def watchdog():
+        time.sleep(wait)
+        proc = detector_proc
+        alive = proc is not None and proc.poll() is None
+        dbg(f'watchdog fired after {wait}s: detector still running={alive}; killing it and exiting (an unflushed clip is lost)')
+        if alive:
+            proc.kill()
+        exit_now(0)
+
+    threading.Thread(target=watchdog, daemon=True).start()
+
+
+def install_signal_handlers():
+    for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        signal.signal(sig, lambda *_: request_stop())
+
+
 def forward_clip_requests(proc):
-    """Pass `clip <path>` lines from Electron on to the detector."""
+    """Pass `clip <path>` lines from Electron on to the detector. stdin closing means Electron is gone: stop."""
     for line in sys.stdin:
-        if not line.startswith("clip ") or stop.is_set():
+        if not line.startswith(("clip ", "clip-cam ")) or stop.is_set():
+            dbg(f'dropped stdin line (stopping={stop.is_set()}): {line.strip()[:80]}')
             continue
+        dbg(f'forwarding to detector: {line.strip()}')
         try:
             if proc.stdin is not None:
                 proc.stdin.write(line.encode())
                 proc.stdin.flush()
         except (BrokenPipeError, ValueError, OSError):
+            dbg('detector stdin is gone; clip request lost')
             return
+    dbg('Electron closed stdin')
+    request_stop()
 
 
 def screen_vote(screen, goal, sites):
@@ -112,11 +157,12 @@ def screen_vote(screen, goal, sites):
 def main():
     goal = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1].strip() else "study"
     sites = sys.argv[2] if len(sys.argv) > 2 else ""
-    signal.signal(signal.SIGTERM, lambda *_: stop.set())
+    install_signal_handlers()
 
+    global detector_proc
     detector = os.path.join(HERE, "detector.py")
     model = os.path.join(HERE, "distraction_model.json")
-    proc = subprocess.Popen(
+    proc = detector_proc = subprocess.Popen(
         [sys.executable, detector, "--model", model],
         cwd=os.path.dirname(HERE),
         stdin=subprocess.PIPE,
@@ -196,12 +242,15 @@ def main():
                 break
     finally:
         stop.set()
+        dbg('main loop ended; terminating detector')
         if proc.stdin:
             proc.stdin.close()
         proc.terminate()
         try:
             proc.wait(timeout=3)
+            dbg(f'detector exited ({proc.returncode})')
         except subprocess.TimeoutExpired:
+            dbg('detector did not exit in 3s; killing it (an unflushed clip is lost)')
             proc.kill()
     return 0
 

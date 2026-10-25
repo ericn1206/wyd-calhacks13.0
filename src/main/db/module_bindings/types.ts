@@ -153,6 +153,17 @@ export const CompilationStatus = __t.enum("CompilationStatus", {
 });
 export type CompilationStatus = __Infer<typeof CompilationStatus>;
 
+export const CompilerLease = __t.object("CompilerLease", {
+  key: __t.string(),
+  leaseId: __t.string(),
+  holderIdentity: __t.identity(),
+  label: __t.string(),
+  url: __t.string(),
+  startedAt: __t.timestamp(),
+  heartbeatAt: __t.timestamp(),
+});
+export type CompilerLease = __Infer<typeof CompilerLease>;
+
 // The tagged union or sum type for the algebraic type `DeviceStatus`.
 export const DeviceStatus = __t.enum("DeviceStatus", {
   Connected: __t.unit(),
@@ -683,7 +694,7 @@ export const StatusLabel = __t.enum("StatusLabel", {
   OffTask: __t.unit(),
   Away: __t.unit(),
   Break: __t.unit(),
-  Unknown: __t.unit(),
+  Idle: __t.unit(),
 });
 export type StatusLabel = __Infer<typeof StatusLabel>;
 

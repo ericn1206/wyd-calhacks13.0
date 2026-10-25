@@ -110,9 +110,9 @@ describe('clip compilation, end to end', { skip }, () => {
 
     const row = await until('Ready compilation (2 clips)', () => ready(member, 2))
     const url = row.url as string
-    assert.match(url, new RegExp(`^http://127\\.0\\.0\\.1:${port}/compilations/session-\\d+-2\\.mp4$`))
+    assert.match(url, /^\/compilations\/session-\d+-2\.mp4$/, 'stored as a path, without the host')
 
-    const res = await fetch(url)
+    const res = await fetch(`http://127.0.0.1:${port}${url}`)
     assert.equal(res.status, 200)
     assert.equal(res.headers.get('content-type'), 'video/mp4')
     const file = join(outDir, 'fetched.mp4')
@@ -124,13 +124,155 @@ describe('clip compilation, end to end', { skip }, () => {
     const again = await until('Ready compilation (3 clips)', () => ready(member, 3))
     const url3 = again.url as string
     assert.match(url3, /session-\d+-3\.mp4$/)
-    const res3 = await fetch(url3)
+    const res3 = await fetch(`http://127.0.0.1:${port}${url3}`)
     assert.equal(res3.status, 200)
     writeFileSync(file, Buffer.from(await res3.arrayBuffer()))
     assert.ok(Math.abs(secs(file) - 6) < 0.7, `compilation is ${secs(file)} s, expected ~6`)
-    assert.equal((await fetch(url)).status, 404, 'the old render is removed')
+    assert.equal((await fetch(`http://127.0.0.1:${port}${url}`)).status, 404, 'the old render is removed')
     assert.ok(readFileSync(file).length > 0)
+    // Stop it now: a compiler left running would render later tests' sessions into its own folder.
+    await compiler.stop()
+    compiler = undefined
     member.disconnect()
+  })
+
+  it('an ended session with no clips reports empty, and a dropped connection reports offline then recovers', async () => {
+    const member = await client()
+    await member.call('createSession', {
+      name: 'no clips',
+      settings: { pomodoroWorkSecs: none, pomodoroBreakSecs: none, offTaskThresholdSecs: none, callCooldownSecs: none, maxCallSecs: none, scoreboardEnabled: none, groupCallEnabled: none, topicDescription: none, allowedDomains: none, blockedDomains: none },
+      code: none
+    })
+    await sleep(300)
+    const sessionId = member.snapshot().tables.sessions.map(s => Number(s.id)).sort((a, b) => b - a)[0]
+    const outDir = mkdtempSync(join(tmpdir(), 'wyd-out-'))
+    dirs.push(outDir)
+    const port = await freePort()
+    const logs: string[] = []
+    const c = await startCompiler({
+      uri: uri!, database: db!, token: workerToken, tokenFile: join(outDir, 'token'), outDir, port,
+      publicUrl: `http://127.0.0.1:${port}`, quietMs: 0, emptyGraceMs: 1500, reconnectMs: 200, callTimeoutMs: 3000, retryMs: 1000, pollMs: 300, ffmpegBin: 'ffmpeg',
+      log: m => logs.push(m)
+    })
+    const status = async () => (await (await fetch(`http://127.0.0.1:${port}/session/${sessionId}/status`)).json()) as { state: string }
+
+    assert.equal((await status()).state, 'waiting', 'a running session is waiting')
+    await member.call('endSession', {})
+    let state = ''
+    const end = Date.now() + 20_000
+    while (Date.now() < end && state !== 'empty') { state = (await status()).state; if (state !== 'empty') await sleep(300) }
+    assert.equal(state, 'empty', 'ended without any clip')
+
+    c.dropConnection()
+    await sleep(50)
+    assert.equal((await status()).state, 'offline', 'no database connection')
+    const back = Date.now() + 20_000
+    while (Date.now() < back && (await status()).state === 'offline') await sleep(300)
+    assert.notEqual((await status()).state, 'offline', 'reconnected')
+    assert.ok(logs.some(l => l.includes('reconnected')), logs.join(' | '))
+    assert.equal(await (async () => { for (let i = 0; i < 60; i++) { const s = (await status()).state; if (s === 'empty') return s; await sleep(300) } return 'never' })(), 'empty', 'state is correct again after reconnecting')
+    await c.stop()
+    member.disconnect()
+  })
+
+  it('a session that ended before the compiler started is not treated as fresh activity (restart)', async () => {
+    const member = await client()
+    await member.call('createSession', {
+      name: 'ended before start',
+      settings: { pomodoroWorkSecs: none, pomodoroBreakSecs: none, offTaskThresholdSecs: none, callCooldownSecs: none, maxCallSecs: none, scoreboardEnabled: none, groupCallEnabled: none, topicDescription: none, allowedDomains: none, blockedDomains: none },
+      code: none
+    })
+    await sleep(300)
+    const sessionId = member.snapshot().tables.sessions.map(s => Number(s.id)).sort((a, b) => b - a)[0]
+    await member.call('endSession', {})
+    await sleep(500)
+    const outDir = mkdtempSync(join(tmpdir(), 'wyd-out-'))
+    dirs.push(outDir)
+    const port = await freePort()
+    // A long quiet period: if the startup snapshot counted as activity this would stay `waiting` for a minute.
+    const c = await startCompiler({
+      uri: uri!, database: db!, token: workerToken, tokenFile: join(outDir, 'token'), outDir, port,
+      publicUrl: `http://127.0.0.1:${port}`, quietMs: 60_000, emptyGraceMs: 0, retryMs: 1000, pollMs: 300, ffmpegBin: 'ffmpeg', log: () => {}
+    })
+    let state = ''
+    const end = Date.now() + 8_000
+    while (Date.now() < end && state !== 'empty') {
+      state = ((await (await fetch(`http://127.0.0.1:${port}/session/${sessionId}/status`)).json()) as { state: string }).state
+      if (state !== 'empty') await sleep(300)
+    }
+    assert.equal(state, 'empty')
+    await c.stop()
+    member.disconnect()
+  })
+
+  it('a corrupt clip does not cost the session its video; the row says what was left out', async () => {
+    const member = await client()
+    await member.call('createSession', {
+      name: 'one bad clip',
+      settings: { pomodoroWorkSecs: none, pomodoroBreakSecs: none, offTaskThresholdSecs: none, callCooldownSecs: none, maxCallSecs: none, scoreboardEnabled: none, groupCallEnabled: none, topicDescription: none, allowedDomains: none, blockedDomains: none },
+      code: none
+    })
+    await sleep(300)
+    const now = Date.now()
+    await uploadReal(member, 2, now)
+    const clipKey = `corrupt-${now}`
+    await member.call('beginSessionClip', { clipKey, momentAtMs: BigInt(now + 1000), startedAtMs: BigInt(now - 9000), durationMs: 5000, width: 1280, height: 720, fps: 10, mime: 'video/mp4', sizeBytes: 100, chunkCount: 1 })
+    await member.call('uploadClipChunk', { clipKey, seq: 0, data: new Uint8Array(100).fill(7) })
+    await member.call('finishSessionClip', { clipKey })
+    await member.call('endSession', {})
+    const outDir = mkdtempSync(join(tmpdir(), 'wyd-out-'))
+    dirs.push(outDir)
+    const port = await freePort()
+    const c = await startCompiler({
+      uri: uri!, database: db!, token: workerToken, tokenFile: join(outDir, 'token'), outDir, port,
+      publicUrl: `http://127.0.0.1:${port}`, quietMs: 0, retryMs: 1000, pollMs: 300, ffmpegBin: 'ffmpeg', log: () => {}
+    })
+    const row = await until('Ready compilation with 2 clips', () => ready(member, 2))
+    assert.match(String(row.error), /1 unreadable clip\(s\) left out/)
+    const res = await fetch(`http://127.0.0.1:${port}${row.url as string}`)
+    assert.equal(res.status, 200)
+    const file = join(outDir, 'partial.mp4')
+    writeFileSync(file, Buffer.from(await res.arrayBuffer()))
+    assert.ok(Math.abs(secs(file) - 2) < 0.5, `video is ${secs(file)} s, expected ~2 (the good clip)`)
+    await c.stop()
+    member.disconnect()
+  })
+
+  it('the compiler publishes its page address, which every client can read', async () => {
+    const reader = await client()
+    const outDir = mkdtempSync(join(tmpdir(), 'wyd-out-'))
+    dirs.push(outDir)
+    const port = await freePort()
+    const second = await startCompiler({
+      uri: uri!, database: db!, token: workerToken, tokenFile: join(outDir, 'token'), outDir, port,
+      publicUrl: `http://10.1.2.3:${port}/`, quietMs: 60_000, retryMs: 1000, pollMs: 300, ffmpegBin: 'ffmpeg', log: () => {}
+    })
+    const row = await until('clip_page_base_url setting', () => reader.snapshot().tables.settings.find(s => s.key === 'clip_page_base_url' && String(s.valueJson).includes('10.1.2.3')))
+    assert.equal(JSON.parse(row.valueJson as string), `http://10.1.2.3:${port}`, 'trailing slash removed')
+    await second.stop()
+    reader.disconnect()
+  })
+
+  it('only a worker can set the page address', async () => {
+    const stranger = await client()
+    await assert.rejects(stranger.call('setClipPageBaseUrl', { url: 'http://evil:1' }), /only the AI worker/)
+    stranger.disconnect()
+  })
+
+  it('the page address must be an http(s) url', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wyd-it-'))
+    dirs.push(dir)
+    writeFileSync(join(dir, 'stdb-token.json'), JSON.stringify({ token: workerToken }))
+    process.env['WYD_TEST_USERDATA'] = dir
+    process.env['SPACETIME_URI'] = uri
+    process.env['SPACETIME_DB'] = db
+    const asWorker = new StdbClient()
+    await asWorker.connect()
+    await sleep(1500)
+    for (const bad of ['javascript:alert(1)', 'ftp://h/x', 'http://has space', '', `http://h/${'x'.repeat(250)}`]) {
+      await assert.rejects(asWorker.call('setClipPageBaseUrl', { url: bad }), /bad url/, bad)
+    }
+    asWorker.disconnect()
   })
 
   it('only a worker can write compilation state', async () => {

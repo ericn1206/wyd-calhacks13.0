@@ -39,6 +39,7 @@ import ApplySmoothingReducerReducer from "./apply_smoothing_reducer_reducer";
 import AuthorizeWorkerReducer from "./authorize_worker_reducer";
 import BeginSessionClipReducer from "./begin_session_clip_reducer";
 import CheckGoalReducer from "./check_goal_reducer";
+import ClaimCompilerLeaseReducer from "./claim_compiler_lease_reducer";
 import CompleteTakeoverReducer from "./complete_takeover_reducer";
 import CreateSessionReducer from "./create_session_reducer";
 import DeleteReplayMetaOnEndReducer from "./delete_replay_meta_on_end_reducer";
@@ -46,6 +47,7 @@ import EndCallReducerReducer from "./end_call_reducer_reducer";
 import EndSessionReducer from "./end_session_reducer";
 import FinalizeSessionReducerReducer from "./finalize_session_reducer_reducer";
 import FinishSessionClipReducer from "./finish_session_clip_reducer";
+import HeartbeatCompilerLeaseReducer from "./heartbeat_compiler_lease_reducer";
 import IngestSignalReducer from "./ingest_signal_reducer";
 import JoinSessionReducer from "./join_session_reducer";
 import LeaveSessionReducer from "./leave_session_reducer";
@@ -54,6 +56,7 @@ import MaybeTriggerGroupCallReducerReducer from "./maybe_trigger_group_call_redu
 import PairPhoneReducer from "./pair_phone_reducer";
 import PhoneHeartbeatReducer from "./phone_heartbeat_reducer";
 import PostStuckMessageReducer from "./post_stuck_message_reducer";
+import ReleaseCompilerLeaseReducer from "./release_compiler_lease_reducer";
 import ReportWorkerHeartbeatReducer from "./report_worker_heartbeat_reducer";
 import RequestTakeoverReducer from "./request_takeover_reducer";
 import ResolveStuckReducer from "./resolve_stuck_reducer";
@@ -61,6 +64,7 @@ import RespondTakeoverReducer from "./respond_takeover_reducer";
 import RespondToCallReducer from "./respond_to_call_reducer";
 import SeedDefaultsReducerReducer from "./seed_defaults_reducer_reducer";
 import SetCallRoomUrlReducer from "./set_call_room_url_reducer";
+import SetClipPageBaseUrlReducer from "./set_clip_page_base_url_reducer";
 import SetGoalsReducer from "./set_goals_reducer";
 import SetPomodoroReducer from "./set_pomodoro_reducer";
 import SetProfileReducer from "./set_profile_reducer";
@@ -368,6 +372,7 @@ const reducersSchema = __reducers(
   __reducerSchema("authorize_worker", AuthorizeWorkerReducer),
   __reducerSchema("begin_session_clip", BeginSessionClipReducer),
   __reducerSchema("check_goal", CheckGoalReducer),
+  __reducerSchema("claim_compiler_lease", ClaimCompilerLeaseReducer),
   __reducerSchema("complete_takeover", CompleteTakeoverReducer),
   __reducerSchema("create_session", CreateSessionReducer),
   __reducerSchema("delete_replay_meta_on_end", DeleteReplayMetaOnEndReducer),
@@ -375,6 +380,7 @@ const reducersSchema = __reducers(
   __reducerSchema("end_session", EndSessionReducer),
   __reducerSchema("finalize_session", FinalizeSessionReducerReducer),
   __reducerSchema("finish_session_clip", FinishSessionClipReducer),
+  __reducerSchema("heartbeat_compiler_lease", HeartbeatCompilerLeaseReducer),
   __reducerSchema("ingest_signal", IngestSignalReducer),
   __reducerSchema("join_session", JoinSessionReducer),
   __reducerSchema("leave_session", LeaveSessionReducer),
@@ -383,6 +389,7 @@ const reducersSchema = __reducers(
   __reducerSchema("pair_phone", PairPhoneReducer),
   __reducerSchema("phone_heartbeat", PhoneHeartbeatReducer),
   __reducerSchema("post_stuck_message", PostStuckMessageReducer),
+  __reducerSchema("release_compiler_lease", ReleaseCompilerLeaseReducer),
   __reducerSchema("report_worker_heartbeat", ReportWorkerHeartbeatReducer),
   __reducerSchema("request_takeover", RequestTakeoverReducer),
   __reducerSchema("resolve_stuck", ResolveStuckReducer),
@@ -390,6 +397,7 @@ const reducersSchema = __reducers(
   __reducerSchema("respond_to_call", RespondToCallReducer),
   __reducerSchema("seed_defaults", SeedDefaultsReducerReducer),
   __reducerSchema("set_call_room_url", SetCallRoomUrlReducer),
+  __reducerSchema("set_clip_page_base_url", SetClipPageBaseUrlReducer),
   __reducerSchema("set_goals", SetGoalsReducer),
   __reducerSchema("set_pomodoro", SetPomodoroReducer),
   __reducerSchema("set_profile", SetProfileReducer),

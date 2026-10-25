@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('wydDesktop', {
   setAlwaysOnTop: (enabled: boolean) => ipcRenderer.invoke('wyd:window:always-on-top', enabled),
   setIgnoreMouseEvents: (enabled: boolean) => ipcRenderer.invoke('wyd:window:ignore-mouse', enabled),
   setCaptureHidden: (hidden: boolean) => ipcRenderer.invoke('wyd:window:capture-hidden', hidden),
+  // Joined a teammate's check-in: record + upload my webcam for their clip (src/main/clipUpload.ts).
+  recordJoinClip: () => ipcRenderer.invoke('wyd:clip:join'),
   moveToCorner: (corner: CheckInCorner, size?: { width?: number; height?: number }) =>
     ipcRenderer.invoke('wyd:window:move-to-corner', corner, size),
   getDisplays: () => ipcRenderer.invoke('wyd:displays:get'),
@@ -37,7 +39,7 @@ contextBridge.exposeInMainWorld('wydDesktop', {
     }
   },
   // Activity tracking (src/main/activityMonitor.ts); UI does not consume these yet.
-  startTracking: (context: { subject: string; goals: string[]; sites?: string; notes?: string }) => ipcRenderer.invoke('wyd:tracking:start', context),
+  startTracking: (context: { subject: string; goals: string[]; sites?: string; notes?: string; camera?: string }) => ipcRenderer.invoke('wyd:tracking:start', context),
   stopTracking: () => ipcRenderer.invoke('wyd:tracking:stop'),
   // Detector debug: one entry per interval (screen OCR vote, webcam, verdict); log kept in main.
   getDetectorLog: () => ipcRenderer.invoke('wyd:detector-log:get') as Promise<DetectorDebug[]>,
@@ -81,8 +83,8 @@ contextBridge.exposeInMainWorld('sessionAPI', {
 
 contextBridge.exposeInMainWorld('circleAPI', {
   requestMediaAccess: () => ipcRenderer.invoke('wyd:media:request') as Promise<{ camera: boolean; microphone: boolean }>,
-  getCallToken: (code: string, identity: string, name: string) =>
-    ipcRenderer.invoke('call:token', code, identity, name) as Promise<{ url: string; token: string; room: string }>,
+  getCallToken: (code: string, identity: string, name: string, kind?: string) =>
+    ipcRenderer.invoke('call:token', code, identity, name, kind) as Promise<{ url: string; token: string; room: string }>,
   setCallMode: (on: boolean) => ipcRenderer.invoke('window:call-mode', on),
   onFacetime: (cb: () => void) => {
     const handler = () => cb()

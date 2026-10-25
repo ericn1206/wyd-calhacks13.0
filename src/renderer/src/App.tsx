@@ -372,7 +372,18 @@ export default function App() {
       return
     }
     const task = activeGoals[0] || 'study'
-    void window.wydDesktop?.startTracking({ subject: task, goals: activeGoals.length ? activeGoals : [task], sites: '', notes: '' })
+    let cancelled = false
+    void (async () => {
+      // The camera the check-in call picks (same constraints as useCircleCall); the clip recorder opens that one too.
+      let camera = ''
+      try {
+        const probe = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
+        camera = probe.getVideoTracks()[0]?.label ?? ''
+        probe.getTracks().forEach((track) => track.stop())
+      } catch { /* no camera access yet: the detector falls back to camera 0 */ }
+      if (!cancelled) void window.wydDesktop?.startTracking({ subject: task, goals: activeGoals.length ? activeGoals : [task], sites: '', notes: '', camera })
+    })()
+    return () => { cancelled = true }
   }, [tracking, activeGoals.join('\n')])
   const finishPomodoro = () => {
     setTimerRunning(false)
@@ -541,9 +552,9 @@ export default function App() {
 
   if (screen === 'goals') return <GoalsScreen task={goals[0] ?? ''} setTask={(task) => setGoals([task])} onStart={async () => { const task = (goals[0] ?? '').trim(); if (!task) return; setGoals([task]); if (dbSession) { const error = await db.call('setGoals', { goals: [task] }); if (error) return window.alert(error) }; if (!dbSession && entryMode === 'join') setTimerRunning(true); setScreen(dbSession?.state === 'Break' ? 'break' : 'focus') }} />
 
-  if (screen === 'break') return <BreakScreen minutes={upcomingBreakMinutes} seconds={breakSeconds} goals={activeGoals} checked={checked} setChecked={updateChecked} onReturn={dbSession ? undefined : returnFromBreak} onEnd={dbSession?.isHost ? endSession : undefined} />
+  if (screen === 'break') return <BreakScreen minutes={upcomingBreakMinutes} seconds={breakSeconds} goals={activeGoals} checked={checked} setChecked={updateChecked} onReturn={dbSession ? undefined : returnFromBreak} onEnd={dbSession?.isHost ? endSession : undefined} room={dbSession ? { sessionCode, name: callName } : undefined} />
 
-  if (screen === 'summary') return <SummaryScreen checked={checked} goalCount={activeGoals.length} stats={db.ended} />
+  if (screen === 'summary') return <SummaryScreen checked={checked} goalCount={activeGoals.length} stats={db.ended} clip={db.ended?.clipLink ? { link: db.ended.clipLink, state: db.ended.clipState } : null} />
 
   return <main className="focus-page">
     <div className="demo-menu">

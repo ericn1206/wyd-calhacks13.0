@@ -31,18 +31,18 @@ Subscribe like: `SELECT * FROM my_session_statuses`.
 | Own session | session_compilation | `my_session_compilations` |
 | Own session, gated | session_clip | `my_session_clips`: metadata of finished clips of anyone in the session, plus own unfinished uploads. No bytes |
 | Owner only | session_summary, stuck_session, stuck_message, phone_sensor, replay_clip_meta | `my_session_summaries`, `my_stuck_*`, `my_phone_sensor` (also the paired phone), `my_replay_clips` |
-| Private (no client view) | signal_event, judgment, score_event, call_cooldown, call_member_trigger, worker_heartbeat, focus_history_index, authorized_worker, session_clip_chunk, timer tables | reducers only; worker views below |
+| Private (no client view) | signal_event, judgment, score_event, call_cooldown, call_member_trigger, worker_heartbeat, focus_history_index, authorized_worker, session_clip_chunk, compiler_lease, timer tables | reducers only; worker views below |
 
-Worker-only views (empty for non-workers): clip compiler (`clip-compiler.md`): `worker_ended_sessions`, `worker_session_clips`, `worker_session_clip_chunks`, `worker_session_compilations` (sessions whose complete clips are not yet in a Ready compilation of the same size); `worker_pending_signal_events`, `worker_recent_judgments`,
+Worker-only views (empty for non-workers): clip compiler (`clip-compiler.md`): `worker_ended_sessions` (all ended sessions), `worker_session_clips`, `worker_session_clip_chunks` (complete clips of ended sessions not yet in a Ready compilation of the same size), `worker_session_compilations` (all rows); `worker_pending_signal_events`, `worker_recent_judgments`,
 `worker_pending_summaries`, `worker_summary_goals`,
 `worker_session_contexts`, `worker_open_stuck_sessions`, `worker_open_stuck_messages`.
 
-Video: only `session_clip_chunk.data` (320×240 H.264 mp4 webcam clips, 30 s: 10 s before to 20 s after an off-task check-in). Uploaded by the unfocused member's laptop right after local recording (`begin_session_clip` → `upload_clip_chunk` × n → `finish_session_clip`); chunks are never mirrored to clients (`stdb.ts` VIEWS has no chunk view). Clips are joined into one video by the Node clip compiler (`clip-compiler.md`). `replay_clip_meta` is unused (path hash only).
+Video: only `session_clip_chunk.data` (1280×720 H.264 mp4, 30 s: 10 s before to 20 s after an off-task check-in; the drifter's screen with their webcam inset, recorded locally, ≤ 64 MiB). Uploaded by the unfocused member's laptop right after local recording (`begin_session_clip` → `upload_clip_chunk` × n → `finish_session_clip`); chunks are never mirrored to clients (`stdb.ts` VIEWS has no chunk view). Clips are joined into one video by the Node clip compiler (`clip-compiler.md`). `replay_clip_meta` is unused (path hash only).
 
 ## Behavior
 
 **Smoothing (every 10 s per member and on every event).** Judgments with confidence < `low_confidence_threshold` or
-label Unknown are neutral and skipped. A confident OffTask applies immediately; any other change waits until the newest confident label
+label Idle are neutral and skipped. A confident OffTask applies immediately; any other change waits until the newest confident label
 has held for `smoothing_hold_secs` with no contradicting confident label. Also runs inside `ingest_signal` and `write_judgment`. `since` is backdated to when
 that streak began, so `smoothed_off_task_secs` counts from the first off-task event. During Break
 the label is Break. No events for a full hold window → Away (Left_Seat). Each change closes the open

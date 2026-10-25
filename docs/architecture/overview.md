@@ -34,8 +34,8 @@ SpacetimeDB (same transaction as `ingest_signal`): judgment → status flips to 
 
 ## Session clips
 ```
-detector.py: rolling 10 s of 320×240 JPEGs (memory only)
-face time → Electron publishFacetime → stdin `clip <path>` → detector adds 20 s → mp4 on disk
+detector.py: rolling 10 s of webcam JPEGs + screen JPEGs (own laptop only, memory only; WYD's own windows excluded from the screen)
+face time → Electron publishFacetime → stdin `clip <path>` → detector adds 20 s → one 1280×720 mp4 on disk (screen + webcam inset)
   → `clip {json}` → clipUpload.ts → begin_session_clip / upload_clip_chunk × n / finish_session_clip → SpacetimeDB (session_clip + session_clip_chunk) → local file deleted
 ```
 Details: `contracts.md#session-clips`. Only the unfocused person's own laptop records and uploads.

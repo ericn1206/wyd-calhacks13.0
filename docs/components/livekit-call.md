@@ -21,9 +21,14 @@ Room name, identity, token grants, attributes (`callEndsAt`, `inCall`): `../arch
 | My detector prints `face time`, teammates in the room | `startCall({ shareScreen: true })`: camera + mic + the front-most non-WYD window, i.e. the app they drifted to (no picker; `setDisplayMediaRequestHandler` skips our windows by `getMediaSourceId()`; whole screen only if no window is found) |
 | No session room, or alone in it | Duck reflection window (no camera), 30 s, **Resume** ends it early |
 | A teammate's call starts | Invite under the dock: "`<name>` drifted off task · Join", 6 s (`INVITE_SECONDS`); no click → `declineCall()` |
+| Press **Join** on an invite | Also `recordJoinClip()`: the detector records this laptop's webcam for the drifter's session clip (`../architecture/contracts.md#session-clips`) |
 | Joined a call with a screen share | Share window: screen big, sharer's webcam bottom-right, others + me bottom-left, countdown, Leave, progress bar |
+| My call, nobody else joins within `EMPTY_CALL_GRACE_MS` (5 s) | `leaveCall()`: overlay closes, return prompt shows (`LiveCheckIn.tsx`) |
 | Call length | `CALL_DURATION_MS` 30 s, same end time for everyone (copied into each joiner's `callEndsAt`) |
 | While sharing | Our windows are never the shared source, so the overlay's camera tiles can't appear (macOS 15+ ScreenCaptureKit ignores `setContentProtection`, which is still set as a fallback) |
+
+## Break room
+`components/session/BreakRoom.tsx`, rendered by `BreakScreen` (main window) in DB sessions only: separate room `lockin-<CODE>-break`, everyone connects when the break starts (no prompt); camera + mic start only once another person is in the room (alone: nothing published or shown; stops if everyone else leaves); video grid for the rest of the break (`startCall({ durationMs })`); leaving the break screen disconnects. No screen share, no mute/camera buttons.
 
 ## Run & test
 1. Each laptop: `.env` `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` (`../architecture/stack.md`); Screen Recording allowed for Electron.

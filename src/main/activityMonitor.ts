@@ -142,6 +142,13 @@ export class ActivityMonitor {
     return this.state
   }
 
+  // TODO(session-resting): NOT IMPLEMENTED. Sessions alternate `working` / `resting`
+  // (DB `current_phase` Work / Break, see docs/product/spec.md#session-phases).
+  // While resting this method must not run any off-task check: skip the Claude judge,
+  // reset `consecutiveDistractedSeconds` to 0, keep alertLevel 'none', and send no
+  // `ingest_signal`. Add `setResting(resting: boolean)` here, call it from main/index.ts
+  // on every DB phase change (stdb.onChange), and return early at the top of poll().
+  // On resume to working, status starts again from Idle.
   private async poll(): Promise<void> {
     const { appName, windowTitle } = await getActiveApp()
     const url = await getBrowserUrl(appName)

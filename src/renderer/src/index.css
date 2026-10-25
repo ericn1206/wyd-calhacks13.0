@@ -234,11 +234,15 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
 .person { display: flex; align-items: center; padding: 12px 0 5px; gap: 11px; }
 .person .avatar i { position: absolute; right: 0; bottom: 0; width: 11px; height: 11px; border: 2px solid white; border-radius: 50%; background: #e0b13f; }
 .person .avatar i.focused { background: #48a97f; }
+.person .avatar i.idle { background: #a9b2ae; }
+.person .avatar i.resting { background: #6fb4d8; }
 .person p { display: grid; flex: 1; }
 .person strong { font-size: 12px; }
 .person small { font-size: 10px; color: var(--muted); margin-top: 2px; }
 .status-text { font-size: 10px; color: #b08425; }
 .status-text.focused { color: var(--green); }
+.status-text.idle { color: var(--muted); }
+.status-text.resting { color: #3f87ad; }
 .overlay { position: fixed; inset: 0; background: rgba(25,33,30,.72); backdrop-filter: blur(7px); display: grid; place-items: center; z-index: 30; padding: 20px; animation: fade .2s ease; }
 .call-modal { width: min(880px, 100%); background: #f8f9f6; border-radius: 25px; padding: 28px; box-shadow: 0 25px 80px rgba(0,0,0,.25); }
 .call-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 22px; }
@@ -346,6 +350,8 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
 .dock-avatar { width: 32px; height: 32px; margin-left: -6px; border: 2px solid #263d3a; font-size: 9px; color: #46504d; }
 .dock-avatar i { position: absolute; right: -1px; bottom: -1px; width: 8px; height: 8px; border: 1.5px solid #263d3a; border-radius: 50%; background: #e0b13f; }
 .dock-avatar i.focused { background: #48a97f; }
+.dock-avatar i.idle { background: #a9b2ae; }
+.dock-avatar i.resting { background: #6fb4d8; }
 .dock-divider { width: 1px; height: 20px; background: rgba(255,255,255,.14); }
 .camera-live { display: flex; align-items: center; gap: 6px; color: #bfe3dc; font-size: 10px; white-space: nowrap; }
 .camera-live svg { width: 17px; }
@@ -509,6 +515,11 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
 .return-prompt .primary { min-height: 36px; padding: 0 12px; font-size: 10px; }
 
 .break-layout { width: min(950px, 100%); display: grid; grid-template-columns: 1.1fr .9fr; gap: 70px; align-items: center; }
+.break-videos { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.break-tile { position: relative; aspect-ratio: 4 / 3; overflow: hidden; border-radius: 18px; background: #243934; }
+.break-tile video { width: 100%; height: 100%; object-fit: cover; }
+.break-tile.mirror video { transform: scaleX(-1); }
+.break-tile span { position: absolute; left: 8px; bottom: 7px; padding: 3px 7px; border-radius: 8px; color: #fff; background: rgba(29,47,45,.58); font-size: 10px; font-weight: 700; }
 .break-hero h1 { margin: 10px 0; }
 .break-time { font: 800 4.6rem 'Manrope'; letter-spacing: -.07em; margin: 22px 0; }
 .check-card { padding: 28px; }
@@ -532,6 +543,11 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
 .stat-card small { font-size: 9px; }
 .stat-icon.blue { background: #e5effa; color: #4c7baa; }
 .focus-story { margin: 13px 0 20px; padding: 25px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+.clip-card { margin: 0 0 20px; padding: 22px 25px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.clip-card h3 { margin: 6px 0; }
+.clip-card p:last-child { color: var(--muted); font-size: 12px; line-height: 1.5; margin: 0; }
+.clip-actions { display: flex; gap: 10px; flex-shrink: 0; text-decoration: none; }
+.clip-actions a { text-decoration: none; }
 .focus-story h3 { margin: 6px 0; }
 .focus-story p:last-child { color: var(--muted); font-size: 12px; line-height: 1.5; }
 .bars { height: 110px; display: flex; gap: 5px; align-items: end; border-bottom: 1px solid var(--line); }
@@ -572,6 +588,7 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
   .timer-ring { width: 270px; }
   .summary-grid { grid-template-columns: 1fr; }
   .focus-story { grid-template-columns: 1fr; }
+  .clip-card { flex-direction: column; align-items: flex-start; }
   .call-modal { padding: 18px; max-height: 94vh; overflow: auto; }
   .video-tile { min-height: 125px; }
   .call-head, .call-foot { gap: 15px; }

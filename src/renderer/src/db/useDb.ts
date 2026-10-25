@@ -11,7 +11,7 @@ export type DbSnapshot = {
   error: string | null
   /** Local clock minus server clock (ms); null until measured. Server time = Date.now() - clockOffsetMs. */
   clockOffsetMs: number | null
-  tables: Record<'sessions' | 'members' | 'goals' | 'statuses' | 'contexts' | 'scores' | 'calls' | 'callParticipants' | 'alerts' | 'summaries' | 'awards' | 'users', Row[]>
+  tables: Record<'sessions' | 'members' | 'goals' | 'statuses' | 'contexts' | 'scores' | 'calls' | 'callParticipants' | 'alerts' | 'summaries' | 'awards' | 'compilations' | 'settings' | 'users', Row[]>
 }
 
 export type DbSession = {
@@ -28,14 +28,43 @@ export type DbSession = {
   memberId: number
 }
 
-export type DbEnded = { sessionId: number; name: string; totalSecs: number; deepWorkSecs: number; interruptions: number; goalsCompleted: number; goalsTotal: number } | null
+export type DbEnded = {
+  sessionId: number; name: string; totalSecs: number; deepWorkSecs: number; interruptions: number; goalsCompleted: number; goalsTotal: number
+  /** `<clip server>/session/<id>`: opens before the video exists and plays it once ready. null until the clip compiler has published its address. */
+  clipLink: string | null
+  /** The compiler's state for this session; `waiting` until it has written a row. */
+  clipState: 'waiting' | 'rendering' | 'ready' | 'failed'
+  /** The finished mp4 itself, only once the video is ready. The database stores a path; this adds the current address. */
+  clipVideo: string | null
+} | null
 
 const EMPTY: DbSnapshot = {
   connected: false, identity: null, error: null, clockOffsetMs: null,
-  tables: { sessions: [], members: [], goals: [], statuses: [], contexts: [], scores: [], calls: [], callParticipants: [], alerts: [], summaries: [], awards: [], users: [] }
+  tables: { sessions: [], members: [], goals: [], statuses: [], contexts: [], scores: [], calls: [], callParticipants: [], alerts: [], summaries: [], awards: [], compilations: [], settings: [], users: [] }
 }
 
 const tag = (v: unknown) => (v as Tag | undefined)?.tag ?? ''
+
+/** DB `StatusLabel` → `Person.status` (CSS class). Idle = joined or back from rest, no verdict yet. */
+const STATUS_BY_LABEL: Record<string, string> = { Focused: 'focused', OffTask: 'drifting', Away: 'drifting', Break: 'resting', Idle: 'idle' }
+
+/** Link to the session's highlight page and the compiler's progress, from `app_setting` + `session_compilation`. */
+export function clipInfo(tables: DbSnapshot['tables'], sessionId: number): Pick<NonNullable<DbEnded>, 'clipLink' | 'clipState' | 'clipVideo'> {
+  let base = ''
+  try { base = JSON.parse(tables.settings.find((s) => s.key === 'clip_page_base_url')?.valueJson ?? '""') } catch { /* no link */ }
+  if (typeof base !== 'string') base = ''
+  const row = tables.compilations.find((c) => c.sessionId === sessionId)
+  const status = tag(row?.status).toLowerCase()
+  const state = status === 'ready' || status === 'rendering' || status === 'failed' ? status : 'waiting'
+  // `url` is a path ("/compilations/session-45-1.mp4"); rows written by older compilers hold a full address.
+  const url = typeof row?.url === 'string' ? row.url : ''
+  const video = state !== 'ready' || !url ? null : /^https?:\/\//.test(url) ? url : base ? `${base}${url}` : null
+  return {
+    clipLink: base ? `${base}/session/${sessionId}` : null,
+    clipState: state,
+    clipVideo: video
+  }
+}
 const initialsOf = (name: string) => name.replace(/[^A-Za-z0-9 ]/g, '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?'
 
 export function useDb() {
@@ -75,7 +104,8 @@ export function useDb() {
     const ended: DbEnded = endedRow ? {
       sessionId: endedRow.id, name: endedRow.name,
       totalSecs: sum?.totalSecs ?? 0, deepWorkSecs: sum?.deepWorkSecs ?? 0, interruptions: sum?.interruptionCount ?? 0,
-      goalsCompleted: sum?.goalsCompleted ?? 0, goalsTotal: sum?.goalsTotal ?? 0
+      goalsCompleted: sum?.goalsCompleted ?? 0, goalsTotal: sum?.goalsTotal ?? 0,
+      ...clipInfo(tables, endedRow.id)
     } : null
 
     const users = new Map(tables.users.map((u) => [u.identity as string, u]))
@@ -84,7 +114,7 @@ export function useDb() {
           const u = users.get(m.identity)
           const name = u?.displayName ?? 'guest'
           const label = tag(tables.statuses.find((x) => x.memberId === m.id)?.label)
-          return { name, initials: initialsOf(name), color: '', hex: u?.avatarColor, status: label === 'OffTask' || label === 'Away' ? 'drifting' : 'focused', offline: tag(m.deviceStatus) === 'Disconnected', me: m.id === session.memberId, host: !!m.isHost }
+          return { name, initials: initialsOf(name), color: '', hex: u?.avatarColor, status: STATUS_BY_LABEL[label] ?? 'idle', offline: tag(m.deviceStatus) === 'Disconnected', me: m.id === session.memberId, host: !!m.isHost }
         })
       : []
     const myGoals = session ? tables.goals.filter((g) => g.memberId === session.memberId).sort((a, b) => a.position - b.position) : []

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { dueSessions, isVideoName, orderClips, staleVideos, videoName, type DueArgs, type PlanClip } from '../../../worker/compile/plan'
+import { dueSessions, missingVideos, isVideoName, orderClips, staleVideos, videoName, type DueArgs, type PlanClip } from '../../../worker/compile/plan'
 
 const clip = (id: number, sessionId: number, momentAtMs: number, chunkCount = 2): PlanClip => ({ id: BigInt(id), sessionId: BigInt(sessionId), momentAtMs: BigInt(momentAtMs), chunkCount })
 
@@ -85,5 +85,32 @@ describe('video names', () => {
   it('finds older renders of the same session only', () => {
     const files = ['session-7-2.mp4', 'session-7-3.mp4', 'session-70-1.mp4', 'session-8-3.mp4', 'notes.txt']
     assert.deepEqual(staleVideos(files, 7n, 'session-7-3.mp4'), ['session-7-2.mp4'])
+  })
+})
+
+describe('missingVideos', () => {
+  const row = (sessionId: number, status: string, clipCount: number) => ({ sessionId: BigInt(sessionId), status, clipCount })
+
+  it('lists Ready sessions whose file is not in this folder', () => {
+    const have = new Set(['session-1-2.mp4'])
+    const rows = [row(1, 'Ready', 2), row(2, 'Ready', 1), row(3, 'Ready', 4)]
+    assert.deepEqual(missingVideos(rows, n => have.has(n)), [2n, 3n])
+  })
+
+  it('looks for the file named after the session and clip count, so a re-render with more clips counts as missing', () => {
+    assert.deepEqual(missingVideos([row(7, 'Ready', 3)], n => n === 'session-7-2.mp4'), [7n])
+    assert.deepEqual(missingVideos([row(7, 'Ready', 3)], n => n === 'session-7-3.mp4'), [])
+  })
+
+  it('ignores sessions that are not Ready: they are being handled by the normal path', () => {
+    assert.deepEqual(missingVideos([row(1, 'Rendering', 0), row(2, 'Failed', 0), row(3, 'Rendering', 2)], () => false), [])
+  })
+
+  it('ignores a Ready row with no clips (nothing to rebuild)', () => {
+    assert.deepEqual(missingVideos([row(1, 'Ready', 0)], () => false), [])
+  })
+
+  it('is empty when every file is present', () => {
+    assert.deepEqual(missingVideos([row(1, 'Ready', 2), row(2, 'Ready', 1)], () => true), [])
   })
 })

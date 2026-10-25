@@ -31,7 +31,9 @@ function runTs() {
     logLevel: 'error'
   }).then(() => {
     const files = readdirSync(out).filter(f => f.endsWith('.mjs')).map(f => join(out, f))
-    const res = spawnSync(process.execPath, ['--test', ...files], { stdio: 'inherit' })
+    // One file at a time (the integration files share a database and compilers would pick up each other's sessions).
+    // A test that waits on a dead server must fail, not hang: 4 min per file, 12 min for the whole run.
+    const res = spawnSync(process.execPath, ['--test', '--test-concurrency=1', '--test-timeout=240000', ...files], { stdio: 'inherit', timeout: 12 * 60 * 1000 })
     rmSync(out, { recursive: true, force: true })
     if (res.status !== 0) failed = true
   })

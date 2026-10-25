@@ -1,6 +1,7 @@
 import { createReadStream, statSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import { join } from 'node:path'
+import { sessionPage, statusJson, type StatusLookup } from './page.ts'
 import { isVideoName } from './plan.ts'
 
 export const VIDEO_PATH = '/compilations/'
@@ -26,12 +27,24 @@ export function parseRange(header: string | undefined, size: number): { start: n
  * Serves finished compilations from `dir` at GET /compilations/<session-ID-N.mp4> (with Range, so players can seek)
  * plus GET /health. Only names the compiler writes are served; nothing else in `dir` is reachable.
  */
-export function createVideoServer(dir: string): Server {
+export function createVideoServer(dir: string, statusOf: StatusLookup = () => ({ state: 'waiting' })): Server {
   return createServer((req, res) => {
     const cors = { 'access-control-allow-origin': '*' }
     const url = new URL(req.url ?? '/', 'http://x')
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, cors).end(); return }
     if (url.pathname === '/health') { res.writeHead(200, { ...cors, 'content-type': 'text/plain' }).end('ok'); return }
+    // Shareable per-session link: /session/<id> (page) and /session/<id>/status (JSON the page polls).
+    const sess = /^\/session\/(\d{1,18})(\/status)?$/.exec(url.pathname)
+    if (sess) {
+      const id = BigInt(sess[1])
+      if (sess[2]) {
+        const body = JSON.stringify(statusJson(id, statusOf(id)))
+        res.writeHead(200, { ...cors, 'content-type': 'application/json', 'cache-control': 'no-store' }).end(req.method === 'HEAD' ? undefined : body)
+      } else {
+        res.writeHead(200, { ...cors, 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }).end(req.method === 'HEAD' ? undefined : sessionPage(id))
+      }
+      return
+    }
     if (!url.pathname.startsWith(VIDEO_PATH)) { res.writeHead(404, cors).end(); return }
     const name = url.pathname.slice(VIDEO_PATH.length)
     if (!isVideoName(name)) { res.writeHead(404, cors).end(); return }

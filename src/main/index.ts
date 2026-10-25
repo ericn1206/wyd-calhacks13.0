@@ -81,7 +81,8 @@ function createWindow(): void {
   mainWindow.on('closed', () => { overlayWindow?.close(); mainWindow = null })
   mainWindow.once('ready-to-show', () => mainWindow?.show())
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('https://')) shell.openExternal(url)
+    // http:// too: the session highlight page is served by the clip compiler on a LAN address.
+    if (url.startsWith('https://') || url.startsWith('http://')) shell.openExternal(url)
     return { action: 'deny' }
   })
 
@@ -159,7 +160,10 @@ function recordDetectorDebug(entry: DetectorDebug): void {
 let overlayWanted = false
 
 function publishFacetime(): void {
-  if (!overlayWanted) return
+  if (!overlayWanted) {
+    console.warn('[clip] face time ignored: overlayWanted=false (main window not on focus/break), so no check-in and no clip')
+    return
+  }
   if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.showInactive()
   sendTo(overlayWindow, 'facetime:start')
   recordClip()
@@ -167,15 +171,30 @@ function publishFacetime(): void {
 
 // Clip of the off-task moment (10 s before, 20 s after) for the session's compilation. Only in a DB session;
 // the detector skips a request while it is still writing the previous clip.
-function recordClip(): void {
+function recordClip(camOnly = false): void {
   const snap = stdb.snapshot()
-  if (!snap.connected || !snap.tables.sessions.some(s => (s.state as { tag: string }).tag !== 'Ended')) return
-  if (!requestClip(newClipPath())) console.warn('[clip] tracking is off; no clip')
+  const states = snap.tables.sessions.map(s => (s.state as { tag: string }).tag)
+  if (!snap.connected || !states.some(tag => tag !== 'Ended')) {
+    console.warn(`[clip] not requested: connected=${snap.connected} session states=[${states.join(',')}]`)
+    return
+  }
+  const path = newClipPath()
+  if (camOnly) joinerClipPaths.add(path)
+  if (requestClip(path, camOnly)) console.log(`[clip] requested ${path}${camOnly ? ' (joiner, webcam only)' : ''}`)
+  else {
+    joinerClipPaths.delete(path)
+    console.warn('[clip] tracking is off; no clip')
+  }
 }
 
+// Webcam-only clips of check-ins this laptop joined (not its own drift); they upload as `join-` clips.
+const joinerClipPaths = new Set<string>()
+
 function handleClip(info: ClipInfo): void {
+  console.log('[clip] detector reply:', JSON.stringify(info))
+  const joiner = info.path !== undefined && joinerClipPaths.delete(info.path)
   if (!info.clip) console.warn('[clip] detector could not record:', info.error)
-  else void uploadClip(stdb, info)
+  else void uploadClip(stdb, info, { joiner })
 }
 
 function registerDesktopApi(): void {
@@ -194,6 +213,8 @@ function registerDesktopApi(): void {
   })
   // While this laptop shares its screen, hide the calling window (overlay with everyone's camera tiles)
   // from screen capture (macOS: excluded from the capture stream, still visible to the user).
+  // The renderer joined a teammate's check-in call: record my webcam so it appears in their clip.
+  ipcMain.handle('wyd:clip:join', () => recordClip(true))
   ipcMain.handle('wyd:window:capture-hidden', (event, hidden: boolean) => {
     BrowserWindow.fromWebContents(event.sender)?.setContentProtection(Boolean(hidden))
   })
@@ -231,7 +252,7 @@ function registerDesktopApi(): void {
   })
 
   // LiveKit call plumbing for the overlay check-in (src/renderer/src/overlay/LiveCheckIn.tsx).
-  ipcMain.handle('call:token', (_e, code: string, identity: string, name: string) => createCallToken(code, identity, name))
+  ipcMain.handle('call:token', (_e, code: string, identity: string, name: string, kind?: string) => createCallToken(code, identity, name, kind))
   ipcMain.handle('window:call-mode', (_e, on: boolean) => {
     // The check-in cameras live on the overlay, which is already above every app.
     if (overlayWindow && !overlayWindow.isDestroyed() && overlayWindow.isVisible()) return
@@ -257,7 +278,7 @@ function registerDesktopApi(): void {
     stopFacetimeTrigger()
     monitor?.stop()
   })
-  ipcMain.handle('wyd:tracking:start', (_e, ctx: { subject: string; goals: string[]; sites?: string; notes?: string }) => {
+  ipcMain.handle('wyd:tracking:start', (_e, ctx: { subject: string; goals: string[]; sites?: string; notes?: string; camera?: string }) => {
     const context: SessionContext = {
       subject: ctx.subject,
       goals: ctx.goals ?? [],
@@ -270,7 +291,7 @@ function registerDesktopApi(): void {
     const goalParts = [context.subject, ...context.goals, context.notes].map((part) => part.trim()).filter(Boolean)
     const goal = goalParts.filter((part, index) => goalParts.findIndex((item) => item.toLowerCase() === part.toLowerCase()) === index).join('. ') || 'study'
     const mentioned = [context.sites, context.notes].map((part) => part.trim()).filter(Boolean).join('. ')
-    startFacetimeTrigger(goal, publishFacetime, (offTask) => sendToRenderer('wyd:detector-status', offTask), recordDetectorDebug, handleClip, mentioned)
+    startFacetimeTrigger(goal, publishFacetime, (offTask) => sendToRenderer('wyd:detector-status', offTask), recordDetectorDebug, handleClip, mentioned, ctx.camera ?? '')
   })
 
   ipcMain.handle('session:start', async () => {
@@ -298,6 +319,9 @@ app.whenReady().then(() => {
   registerDesktopApi()
   createWindow()
 
+  // TODO(session-resting): derive working/resting from the snapshot's session `currentPhase`
+  // here (Work → working, Break → resting) and call `monitor.setResting(...)` on change,
+  // so no off-task checking happens during rest. See ActivityMonitor.poll.
   stdb.onChange(snapshot => sendToRenderer('wyd:db:state', snapshot))
   stdb.connect().catch(err => console.error('[stdb] connect failed', err))
 

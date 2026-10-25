@@ -7,7 +7,7 @@ import { clearClipDir, clipDir, newClipPath, uploadClip } from '../../../src/mai
 import type { StdbClient } from '../../../src/main/db/stdb'
 import type { ClipInfo } from '../../../src/main/facetimeTrigger'
 
-const CHUNK = 192 * 1024
+const CHUNK = 240 * 1024
 type Call = { name: string; args: Record<string, unknown> }
 
 /** Fake StdbClient: records reducer calls; `fail(call, n)` returns an error to throw on the n-th try of that call. */
@@ -40,7 +40,7 @@ function makeClip(bytes: number): { info: ClipInfo; data: Buffer } {
   for (let i = 0; i < bytes; i++) data[i] = (i * 31 + 7) & 0xff
   const clip = newClipPath()
   writeFileSync(clip, data)
-  return { info: { clip, t: 1_700_000_030_000, startedAt: 1_700_000_020_000, durationMs: 30_000, width: 320, height: 240, fps: 8 }, data }
+  return { info: { clip, t: 1_700_000_030_000, startedAt: 1_700_000_020_000, durationMs: 30_000, width: 1280, height: 720, fps: 10 }, data }
 }
 
 describe('uploadClip', () => {
@@ -52,6 +52,16 @@ describe('uploadClip', () => {
     assert.deepEqual(calls.filter(c => c.name === 'uploadClipChunk').map(c => c.args['seq']), [0, 1, 2])
   })
 
+  it('marks a teammate\'s webcam clip with the join- key prefix, an own clip never has it', async () => {
+    const { stdb: a, calls: joined } = fakeStdb()
+    await uploadClip(a, makeClip(100).info, { joiner: true })
+    const { stdb: b, calls: own } = fakeStdb()
+    await uploadClip(b, makeClip(100).info)
+    assert.match(String(joined[0].args['clipKey']), /^join-.{8,}$/)
+    assert.ok(String(joined[0].args['clipKey']).length <= 64)
+    assert.ok(!String(own[0].args['clipKey']).startsWith('join-'))
+  })
+
   it('describes the clip in begin: ids, timing, format, size, chunk count', async () => {
     const { info, data } = makeClip(CHUNK + 1)
     const { stdb, calls } = fakeStdb()
@@ -61,9 +71,9 @@ describe('uploadClip', () => {
     assert.equal(begin['momentAtMs'], BigInt(info.t))
     assert.equal(begin['startedAtMs'], BigInt(info.startedAt))
     assert.equal(begin['durationMs'], 30_000)
-    assert.equal(begin['width'], 320)
-    assert.equal(begin['height'], 240)
-    assert.equal(begin['fps'], 8)
+    assert.equal(begin['width'], 1280)
+    assert.equal(begin['height'], 720)
+    assert.equal(begin['fps'], 10)
     assert.equal(begin['mime'], 'video/mp4')
     assert.equal(begin['sizeBytes'], data.length)
     assert.equal(begin['chunkCount'], 2)
