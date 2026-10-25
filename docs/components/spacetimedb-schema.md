@@ -139,7 +139,8 @@ focus_ratio · indexed_at
 | set_goals(goals[]) | member | 1–3 goals, replaces existing |
 | check_goal(goal_id, done) | goal owner | Logs GoalChecked, recomputes final_score |
 | update_session_context(topic, allowed, blocked) | host | |
-| set_pomodoro(work_secs, break_secs) | host | Lobby only; work 60–7200 s, break 60–3600 s |
+| set_pomodoro(work_secs, break_secs) | host | any state but Ended; while Active/Break it first stops the timer (→ Lobby); work 60–7200 s, break 60–3600 s |
+| stop_pomodoro() | host | Active/Break → Lobby: cancels pomodoro + tick timers, closes focus blocks, cycle 0; Start again with `start_session` |
 | start_session() | host | Lobby → Active, cycle 1, schedules pomodoro + per-member ticks |
 | advance_pomodoro | scheduler only | Work ↔ Break; PomodoroPhaseChange + GoalCheckin alerts |
 | end_session() | host | Ends calls, expires takeovers, finalizes, deletes replay metadata |
