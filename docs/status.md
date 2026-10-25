@@ -73,9 +73,7 @@ Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` â†
 5. Resolve judge + category mismatches.
 
 ## Gotchas
-- 2026-10-24: `session_clip` / `session_clip_chunk` / clip reducers are **not published to maincloud yet** (additive publish, data kept; bindings already regenerated). Until then clip uploads fail with an "unknown reducer" error and are dropped (logged `[clip] upload failed`).
-- Clips put webcam video in SpacetimeDB; `CLAUDE.md` hard rule and `product/privacy.md` still say video never leaves the laptop (`product/decisions.md`, needs team sign-off).
-- 2026-10-24: module published to maincloud with `--delete-data=on-conflict` (data wiped; `init` re-seeded 12 settings): removed `member.joined_at`, `session.host_identity`; added `active_connection`, `CallEndedReason.Superseded`. Client bindings regenerated.
+- 2026-10-24: `session_clip` / `session_clip_chunk` / clip reducers are **not published to maincloud yet** (additive publish, data kept; bindings already regenerated). Until then clip uploads fail with an "unknown reducer" error and are dropped (logged `[clip] upload failed`).- 2026-10-24: module published to maincloud with `--delete-data=on-conflict` (data wiped; `init` re-seeded 12 settings): removed `member.joined_at`, `session.host_identity`; added `active_connection`, `CallEndedReason.Superseded`. Client bindings regenerated.
 - 2026-10-24: db wiped + republished (`--delete-data=on-conflict`) for the binary `AppCategory`; `seed_defaults` re-run. Any old session/token state is gone (identities persist per client token).
 - `set_pomodoro` published to maincloud 2026-10-24 (additive publish, data kept).
 - 2026-10-25: module published to maincloud (additive, data kept): `take_break`, `stop_pomodoro`, unlocked `set_pomodoro`, `disconnect_timer` reaper, `create_session(code?)`. Bindings are generated (no hand-added files).

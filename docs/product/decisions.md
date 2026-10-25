@@ -5,7 +5,6 @@
 |---|---|
 | — | Desktop: Electron + React + TypeScript (electron-vite). |
 | — | Real-time sync: SpacetimeDB (module built in `spacetimedb/`). |
-| — | All webcam processing local; text-only events and AI input. |
 | — | Tone: gentle, social, no public shaming. |
 | — | Claude for summaries + replay captions, one call per session. |
 | 2026-10-24 | Check-in calls: LiveKit (LiveKit Cloud). See `../components/livekit-call.md`. |
@@ -16,7 +15,8 @@
 | 2026-10-24 | Off-task is announced immediately: no hold, `off_task_threshold_secs` default 0; others learn at once. Privacy updated to allow OCR text → Gemini (`privacy.md`). |
 | 2026-10-24 | DB categories are binary: `AppCategory` = `OnTask`/`OffTask`. |
 | 2026-10-24 | Off-task detection: local OCR of screenshots every few seconds → Gemini API → OnTask/OffTask → `ingest_signal` → off-task event → other clients get a call alert. See `../architecture/overview.md#off-task-pipeline`. |
-| 2026-10-24 | Off-task clips: each check-in saves a 30 s webcam clip of the unfocused person (10 s before, 20 s after), uploaded to SpacetimeDB (`session_clip`) as soon as it is recorded, for an end-of-session compilation (not built). Overrides "webcam video never leaves the laptop" (`CLAUDE.md` hard rule, `privacy.md` still say so: **needs team sign-off**). |
+| 2026-10-24 | Off-task clips: each check-in saves a 30 s webcam clip of the unfocused person (10 s before, 20 s after), uploaded to SpacetimeDB (`session_clip`) as soon as it is recorded, for an end-of-session compilation (not built). |
+| 2026-10-25 | No privacy restrictions: video/screenshots/text may leave the laptop and be stored (`privacy.md`, `CLAUDE.md`). Replaces "all webcam processing local". |
 | 2026-10-24 | No pause. Host can force a break (`take_break`) and end the session (`end_session`); only the host ends a session (no auto-end). Disconnected members are removed after 60 s. |
 
 ## Open (ask, don't assume)
