@@ -11,6 +11,19 @@ import { Icon } from './components/ui/Icon'
 import { people } from './data/people'
 import { useDb } from './db/useDb'
 
+/** Short label for the front window: the site for browsers, else the app name. */
+function activityLabel(appName: string, url?: string): string {
+  if (url) {
+    try {
+      const host = new URL(url).hostname.replace(/^www\./, '')
+      if (host) return host
+    } catch {
+      // not a URL; fall back to the app
+    }
+  }
+  return appName && appName !== 'Unknown' ? appName : ''
+}
+
 type Screen = 'join' | 'consent' | 'voice' | 'goals' | 'focus' | 'break' | 'summary'
 type VoicePhase = 'idle' | 'speaking' | 'listening' | 'processing' | 'done'
 type VoiceContext = { subject: string; goals: string[]; sites: string; notes: string }
@@ -261,6 +274,12 @@ export default function App() {
   }))
   const membersKey = members.map((person) => `${person.name}:${person.status}:${person.hex ?? ''}`).join('|')
   // My status exactly as partners see it (status table), so my dock and their screens agree.
+  // What I'm on right now (activityMonitor polls every 2 s once tracking starts); shown on my dock.
+  const [currentActivity, setCurrentActivity] = useState('')
+  useEffect(() => {
+    window.wydDesktop?.onActivityUpdate((state) => setCurrentActivity(activityLabel(state.appName, state.url)))
+    return () => window.wydDesktop?.removeActivityListeners()
+  }, [])
   const selfStatus = dbSession ? ((db.people.find((person) => person.me)?.status as 'focused' | 'drifting' | undefined) ?? 'focused') : null
 
   // Report each detector verdict (vision/facetime_trigger.py, every 10 s) to SpacetimeDB: the server
@@ -283,10 +302,10 @@ export default function App() {
       host: isHost, serverPhase: dbSession?.state ?? null, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, started: sessionStarted,
       onBreak: screen === 'break', breakSeconds, breakMinutes: upcomingBreakMinutes, checked,
       currentGoal: goals.find((g) => g.trim()) || '', isTired, tiredNotice, checkInCorner,
-      sessionCode: shareCall ? sessionCode : '', displayName: callName, members, selfStatus,
+      sessionCode: shareCall ? sessionCode : '', displayName: callName, members, selfStatus, currentActivity,
     }
     window.wydDesktop?.bridge.send({ type: 'state', state })
-  }, [overlayReady, isHost, dbSession?.state, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, sessionStarted, screen, breakSeconds, upcomingBreakMinutes, checked, goals, isTired, tiredNotice, checkInCorner, shareCall, sessionCode, callName, membersKey, selfStatus])
+  }, [overlayReady, isHost, dbSession?.state, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, sessionStarted, screen, breakSeconds, upcomingBreakMinutes, checked, goals, isTired, tiredNotice, checkInCorner, shareCall, sessionCode, callName, membersKey, selfStatus, currentActivity])
 
   const activeGoals = goals.filter((goal) => goal.trim())
   const finishPomodoro = () => {
