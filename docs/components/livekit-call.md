@@ -1,36 +1,40 @@
 # LiveKit check-in call
 
 ## Purpose
-Session presence (who's in the circle) and the short group video check-in. Works on any network; no LAN discovery.
+Live 30 s group check-in when someone drifts: the drifter's camera, mic and screen; teammates join by invite. One LiveKit room per session code.
 
 ## Files
 | File | Role |
 |---|---|
 | `src/main/livekitToken.ts` | `createCallToken(code, identity, name)`: HS256 JWT signed with `LIVEKIT_API_SECRET` |
-| `src/main/index.ts`, `src/preload/index.ts` | IPC `call:token`, `window:call-mode`; media access via `wyd:media:request`; exposed as `window.circleAPI` |
-| `src/renderer/src/useCircleCall.ts` | Room connect/retry, peers, call state, publish/unpublish, mute/camera |
-| `outdated/src/renderer/src/VideoCall.tsx` | Old full-screen call overlay, countdown, tiles (reference for wiring into the new UI) |
-| `outdated/src/renderer/src/App.tsx` | Old lobby (name + code), circle bar, auto-call on local `alert` (5 min cooldown) |
+| `src/main/index.ts`, `src/preload/index.ts` | IPC `call:token`, `window:call-mode`, `wyd:window:capture-hidden`, `wyd:media:request`; `circleAPI`; `publishFacetime()` sends `facetime:start` to the overlay |
+| `src/renderer/src/useCircleCall.ts` | Room connect/retry, peers, call state (participant attributes), publish/unpublish, screen share, `autoJoin`, `callFrom`, `screenShare`, `declineCall` |
+| `src/renderer/src/overlay/LiveCheckIn.tsx` | Overlay check-in: trigger → own call (+ screen share) or duck window; teammates' calls → 3 s Join invite; share window for joiners |
+| `src/renderer/src/overlay/OverlayApp.tsx`, `components/overlays/FocusDock.tsx` | Invite toast under the dock, duck window (+ Resume), mock check-ins for the Demo menu |
 
 ## Inputs / Outputs
-Room name, identity, token grants, participant attributes: `../architecture/contracts.md#livekit-room`. IPC: `../architecture/contracts.md#desktop-ipc-srcpreloadindexts`.
+Room name, identity, token grants, attributes (`callEndsAt`, `inCall`): `../architecture/contracts.md#livekit-room`. IPC: `../architecture/contracts.md`. Trigger: `../components/vision.md` (`face time`).
+
+## Behavior
+| Case | Result |
+|---|---|
+| My detector prints `face time`, teammates in the room | `startCall({ shareScreen: true })`: camera + mic + entire screen (no picker; `setDisplayMediaRequestHandler` picks the first screen source) |
+| No session room, or alone in it | Duck reflection window (no camera), 30 s, **Resume** ends it early |
+| A teammate's call starts | Invite under the dock: "`<name>` drifted off task · Join", 3 s (`INVITE_SECONDS`); no click → `declineCall()` |
+| Joined a call with a screen share | Share window: screen big, sharer's webcam bottom-right, others + me bottom-left, countdown, Leave, progress bar |
+| Call length | `CALL_DURATION_MS` 30 s, same end time for everyone (copied into each joiner's `callEndsAt`) |
+| While sharing | The sharer's overlay gets `setContentProtection(true)` so the camera tiles aren't in the shared screen |
 
 ## Run & test
-Only worked in the old UI (`outdated/`). The new UI does not call `useCircleCall` yet.
-1. Each laptop: `.env` with `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` (`../architecture/stack.md`).
-2. `npm run dev` on both, same session code → each name appears in the other's circle bar.
-3. "Call circle" → both join automatically; call ends after 30 s (`CALL_DURATION_MS`, matches the check-in countdown).
+1. Each laptop: `.env` `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` (`../architecture/stack.md`); Screen Recording allowed for Electron.
+2. Two laptops, or `npm run dev:two`: same session, host presses Start, one goes off task ~20 s → the other gets the invite → Join → sees the drifter's screen.
 Credential check without the app: `POST <https URL>/twirp/livekit.RoomService/ListRooms` with a `roomList` token → 200.
-
-## Current state
-- **Unwired in the new UI** (placeholder check-in tiles in `src/renderer/src/overlay/OverlayApp.tsx`). Wiring it in is a top next step: the overlay window would join the room and render real tiles; media permission is requested via `circleAPI.requestMediaAccess`.
-- Call trigger is the desktop's local alert or the button, not the DB `CallIncoming` alert.
-- Leaving keeps `callEndsAt`, so "Rejoin call" works until it expires.
 
 ## Gotchas & don'ts
 - Don't add `livekit-server-sdk` to main: needs Node 19+, Electron 28 = Node 18.
 - Never send `LIVEKIT_API_SECRET` to the renderer; tokens come only from `call:token`.
-- `Room({ adaptiveStream: false })` is required: tiles render raw `MediaStream`s, and adaptiveStream pauses video not attached through LiveKit.
-- Camera off/on stops and restarts the camera track (new `MediaStreamTrack`); `syncLocalStream()` rebuilds the local preview.
-- A remote with camera off shows a black tile, not their initial: hiding the `<video>` would also cut their audio.
-- A failed camera/mic open marks that call declined so attribute updates don't retry in a loop; "Call circle"/"Rejoin" clears it.
+- `Room({ adaptiveStream: false, dynacast: false })` is required: tiles render raw `MediaStream`s.
+- `app.configureHostResolver({ enableBuiltInResolver: false })` (main): Chromium's own DNS failed on `*.turn.livekit.cloud` / `*.host.livekit.cloud` with a VPN up.
+- Electron 28 can log `BUNDLE group contains a codec collision for payload_type='96'`; if remote video stays black, pin `publishTrack(track, { videoCodec: 'vp8', backupCodec: false, red: false })`.
+- Without Screen Recording permission the call runs camera-only (screen share fails silently, logged).
+- Not linked to the DB `group_call` / `CallIncoming` flow; the trigger is the local detector.

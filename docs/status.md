@@ -11,7 +11,8 @@ Last updated: 2026-10-24. Biggest gap: only the detector's OnTask/OffTask verdic
 | Desktop `.env` loader | `src/main/env.ts` | Loads root `.env` into `process.env` at startup (no override of shell vars). |
 | Desktop categorization | `src/main/categorize.ts` | Rules + cache → contract categories (`coding`…`unknown`). Fills `activity.category`. |
 | Desktop judge | `src/main/claudeJudge.ts` | Claude call every 8 s once session context exists; output drives local alerts (30 s warning, 60 s alert). |
-| Check-in calls (LiveKit) | `src/main/livekitToken.ts`, `src/renderer/src/useCircleCall.ts` (old UI in `outdated/`: `VideoCall.tsx`) | One LiveKit room per session code: presence, 30 s video call, late joiners auto-join. Worked in the old UI; **unwired** in the new UI. See `components/livekit-call.md`. |
+| Check-in calls (LiveKit) | `src/main/livekitToken.ts`, `src/renderer/src/useCircleCall.ts` (old UI in `outdated/`: `VideoCall.tsx`) | Detector `face time` → own 30 s call with camera + screen share (overlay hidden from the capture); teammates get a 3 s Join invite and see the share window; alone → duck window with Resume. See `components/livekit-call.md`. |
+| Detector debug + status sync | `vision/facetime_trigger.py` (`status`/`debug` lines), `src/main/facetimeTrigger.ts`, `components/session/DetectorLog.tsx` | Verdict → `ingest_signal` → status dots on every screen; Demo menu: dock debug strip toggle + detector log (last 300). Dock shows Idle / Not tracking / Camera off outside a running round. See `components/vision.md`. |
 | Desktop UI | `src/renderer/src/` (+ `docs/ui_integration.md`) · dock + check-ins in full-screen overlay window (`overlay/OverlayApp.tsx`) | New Figma-Make UI: entry, intro, goals, focus workspace, dock, check-in windows, break, summary. All data hardcoded/local; Demo menu simulates events. Goals submit calls `wyd:tracking:start`. |
 | Desktop DB client | `src/main/db/stdb.ts`, `src/renderer/src/db/useDb.ts` | Single main-process connection; token persisted; create/join session, `set_pomodoro`, `start_session`, shared timer + phase flip to break, goals + `check_goal`, roster, `leave_session`. Verified headless with 2 clients 2026-10-24; UI click-through untested. Debug log: see `architecture/stack.md` (`WYD_DEBUG`). |
 | Worker judge | `worker/judge.ts` | Text-only judge over 2-min window → `{status, confidence, reason}`; failure → confidence 0 (neutral). |
@@ -20,7 +21,6 @@ Last updated: 2026-10-24. Biggest gap: only the detector's OnTask/OffTask verdic
 
 ## Stubbed
 - Voice AI onboarding: prod's `VoiceScreen.tsx` / `cartesiaCall.ts` / `session:*` IPC are merged but unrouted (voice off for now, `product/decisions.md`); goals come from the Goals screen.
-- LiveKit calls: `circleAPI` preload + `useCircleCall.ts` exist but nothing in the new UI uses them. **Important next step:** replace the UI's placeholder check-in tiles with real LiveKit video (see `components/livekit-call.md`).
 - Call room: `call_room_base_url` setting is `""`; no provider chosen.
 
 ## Missing
@@ -42,8 +42,6 @@ Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` �
 |---|---|
 | Off-task detection → DB | Done for the verdict: detector → `wyd:detector-status` → `ingest_signal` (`App.tsx`). Still to send: real webcam/activity fields (`architecture/contracts.md#signalinput`). |
 | Off-task → check-in | Drive the overlay check-in from `my_alerts` (`CallIncoming`) / `my_session_group_calls` + `respond_to_call`/`end_call`, replacing the Demo menu |
-| Check-in video | Wire LiveKit (`useCircleCall.ts`, `circleAPI`) into placeholder tiles; room from `group_call.room_url`. **Important.** |
-| Screen share in check-in | Hardcoded calculus mock; use `desktopCapturer` source |
 | "I'm tired" signal | Local only; no matching reducer (new contract item) |
 | Avatar | Name input done (`set_profile`); avatar color fixed `#7C8CF8` |
 | Break / goal check-in | Show `GoalCheckin` alerts + `mark_alert_delivered`; long (20 min) break not supported by module (one `pomodoro_break_secs`) |
@@ -51,7 +49,7 @@ Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` �
 | Host leave | Module moves `is_host` to the lowest-id active member; UI shows no notice |
 | Overlay direct DB feed | Currently relayed through `App.tsx` |
 | Worker | Subscribe `worker_pending_signal_events`, `write_judgment`; hosting undecided (see `product/decisions.md`) |
-| Camera-on disclosure / vision | MediaPipe not built |
+| Camera-on disclosure | Dock shows Camera on/off (follows tracking); no extra disclosure UI |
 
 ## Mismatches (unresolved; decisions tracked in `product/decisions.md`)
 | Area | Variants in code |
@@ -60,7 +58,7 @@ Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` �
 | Categories | `categorize.ts`: contract lowercase 9 · `appClassifier.ts`: `productive`/`distracted`/`neutral`/`unknown` (drives alerts) · DB `AppCategory`: `OnTask`/`OffTask` (published 2026-10-24). Desktop sets still to be replaced by the OCR + Gemini verdict (`architecture/overview.md#off-task-pipeline`). |
 | Event format | Contract JSON (`worker/types.ts`) vs DB `SignalInput`. See `architecture/contracts.md`. |
 | Timing | Spec: drift 2 min, call cooldown 30 min, call ~60 s · DB: call immediately on OffTask (`off_task_threshold_secs` 0), cooldown 600 s, max call 90 s · Desktop: alerts at 30/60 s, auto-call cooldown 5 min, LiveKit call 30 s |
-| Calls | LiveKit: call state in participant attributes, triggered by desktop alert · DB: `group_call` + `CallIncoming` alert, `call_room_base_url` `""`. Not linked. |
+| Calls | LiveKit: call state in participant attributes, triggered by the local detector (`face time`) · DB: `group_call` + `CallIncoming` alert (also created by `ingest_signal`), `call_room_base_url` `""`. Not linked; the UI ignores DB calls. |
 | Active window | Old docs said `get-windows`; code uses `osascript`. |
 | Scope | DB has scores, awards, takeover, stuck-helper, DeepFace expression fields, `factory_run_id`; decisions lean against several. |
 | SDK | `@anthropic-ai/sdk ^0.27` (old); worker casts around missing `output_config` type. |
