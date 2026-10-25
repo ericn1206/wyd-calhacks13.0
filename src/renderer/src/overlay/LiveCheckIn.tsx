@@ -60,7 +60,7 @@ function Countdown({ endsAt }: { endsAt: number | null }) {
  * Real circle check-in. Joins the LiveKit room for this session code, and turns
  * cameras on when the distraction detector fires — or when someone else in the room does.
  */
-export function LiveCheckIn({ sessionCode, displayName, corner, onActive, onLocalStart, onEnded, onRoster }: {
+export function LiveCheckIn({ sessionCode, displayName, corner, onActive, onLocalStart, onEnded, onRoster, onNoRoom }: {
   sessionCode: string
   displayName: string
   corner: string
@@ -68,6 +68,8 @@ export function LiveCheckIn({ sessionCode, displayName, corner, onActive, onLoca
   onLocalStart: () => void
   onEnded: () => void
   onRoster: (ready: boolean, people: Person[]) => void
+  /** The detector fired but there is no session room to call (no DB session): show the local check-in instead. */
+  onNoRoom: () => void
 }) {
   const room = sessionCode.length >= 4 ? { name: displayName, sessionCode } : null
   const circle = useCircleCall(room)
@@ -105,7 +107,11 @@ export function LiveCheckIn({ sessionCode, displayName, corner, onActive, onLoca
       pending.current = false
       return
     }
-    if (!room) return
+    if (!room) {
+      pending.current = false
+      onNoRoom()
+      return
+    }
     if (circle.status === 'error') {
       pending.current = false
       setNotice(circle.error || 'Could not start the check-in.')
@@ -115,7 +121,18 @@ export function LiveCheckIn({ sessionCode, displayName, corner, onActive, onLoca
     pending.current = false
     onLocalStart()
     startRef.current()
-  }, [pulse, sessionCode, displayName, circle.status, circle.error, circle.inCall, circle.joining, circle.callActive, onLocalStart])
+  }, [pulse, sessionCode, displayName, circle.status, circle.error, circle.inCall, circle.joining, circle.callActive, onLocalStart, onNoRoom])
+
+  // Don't wait silently on LiveKit: if the room hasn't connected shortly after a trigger, say why.
+  useEffect(() => {
+    if (!pulse) return
+    const id = window.setTimeout(() => {
+      if (!pending.current) return
+      pending.current = false
+      setNotice(circle.error || 'Could not reach the check-in call. Check your connection (VPN?) and try again.')
+    }, 8000)
+    return () => window.clearTimeout(id)
+  }, [pulse])
 
   useEffect(() => {
     onActive(live)

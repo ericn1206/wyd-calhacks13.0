@@ -35,7 +35,10 @@ export function startFacetimeTrigger(goal: string, onTrigger: () => void, onStat
     while (nl !== -1) {
       const line = pending.slice(0, nl).trim()
       pending = pending.slice(nl + 1)
-      if (line === 'face time') onTrigger()
+      if (line === 'face time') {
+        console.log('[facetime] face time → opening check-in')
+        onTrigger()
+      }
       else if (line === 'status on' || line === 'status off') onStatus(line === 'status off')
       else if (line) process.stdout.write(`${line}\n`)
       nl = pending.indexOf('\n')
