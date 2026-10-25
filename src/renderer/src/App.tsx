@@ -228,7 +228,6 @@ export default function App() {
     if (!dbSession || screen !== 'join' || entryStarted.current) return
     if (db.myName && !displayName) setDisplayName(db.myName)
     if (!db.myGoals.length) return setScreen('goals')
-    window.wydDesktop?.startTracking({ subject: dbSession.name, goals: db.myGoals.map((g) => g.text) })
     setScreen(dbSession.state === 'Break' ? 'break' : 'focus')
   }, [dbSession?.id, db.myGoals.length])
 
@@ -272,12 +271,6 @@ export default function App() {
     })
     return () => bridge.removeListeners()
   }, [])
-
-  // Outside a session (summary / entry screen) the webcam, screen checks and activity polling stop;
-  // they start again on the next Goals submit (wyd:tracking:start).
-  useEffect(() => {
-    if (screen === 'summary' || screen === 'join') void window.wydDesktop?.stopTracking()
-  }, [screen])
 
   useEffect(() => {
     // The dock stays up through breaks; reset the overlay only when it first appears.
@@ -331,6 +324,18 @@ export default function App() {
   }, [overlayReady, isHost, dbSession?.state, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, sessionStarted, screen, breakSeconds, upcomingBreakMinutes, checked, goals, isTired, tiredNotice, checkInCorner, shareCall, sessionCode, callName, membersKey, selfStatus, currentActivity, dockDebug, latestDebug])
 
   const activeGoals = goals.filter((goal) => goal.trim())
+
+  // The detector (webcam + screen checks) and activity polling run only while the timer runs on the
+  // focus screen: DB session Active (not Lobby, Break or Ended); offline demo once the local timer started.
+  // Everything else (entry, lobby, break, summary) stops them, so the camera is off outside a round.
+  const tracking = screen === 'focus' && (dbSession ? dbSession.state === 'Active' : sessionStarted)
+  useEffect(() => {
+    if (!tracking) {
+      void window.wydDesktop?.stopTracking()
+      return
+    }
+    void window.wydDesktop?.startTracking({ subject: sessionName, goals: activeGoals })
+  }, [tracking])
   const finishPomodoro = () => {
     setTimerRunning(false)
     const completed = pomodorosDone + 1
@@ -471,7 +476,6 @@ export default function App() {
       }
     }
     if (!dbSession && cleanCode(code).length < 4) setCode(makeSessionCode())
-    window.wydDesktop?.startTracking({ subject: subject.trim() || sessionName, goals: active, sites, notes })
     if (!dbSession && entryMode === 'join') setTimerRunning(true)
     voiceStream?.getTracks().forEach((track) => track.stop())
     setScreen('focus')
@@ -488,7 +492,7 @@ export default function App() {
 
   if (screen === 'consent') return <IntroductionScreen onComplete={finishTutorial} />
 
-  if (screen === 'goals') return <GoalsScreen goals={goals} setGoals={setGoals} onStart={async () => { if (dbSession) { const error = await db.call('setGoals', { goals: activeGoals }); if (error) return window.alert(error) }; window.wydDesktop?.startTracking({ subject: sessionName, goals: activeGoals }); if (!dbSession && entryMode === 'join') setTimerRunning(true); setScreen(dbSession?.state === 'Break' ? 'break' : 'focus') }} />
+  if (screen === 'goals') return <GoalsScreen goals={goals} setGoals={setGoals} onStart={async () => { if (dbSession) { const error = await db.call('setGoals', { goals: activeGoals }); if (error) return window.alert(error) }; if (!dbSession && entryMode === 'join') setTimerRunning(true); setScreen(dbSession?.state === 'Break' ? 'break' : 'focus') }} />
 
   if (screen === 'break') return <BreakScreen minutes={upcomingBreakMinutes} seconds={breakSeconds} goals={activeGoals} checked={checked} setChecked={updateChecked} onReturn={dbSession ? undefined : returnFromBreak} onEnd={dbSession?.isHost ? endSession : undefined} />
 
