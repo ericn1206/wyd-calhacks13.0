@@ -214,19 +214,44 @@ Breaking schema changes need `--delete-data=on-conflict` on publish and wipe the
 What gets recorded: when the check-in fires, the drifting person's own laptop saves 10 s before and 20 s after as one 1280x720 clip (their screen, with their webcam in the corner), recorded locally and uploaded straight from that laptop, not taken from the video call. After the session ends, the compiler joins every clip of the session into one video and hosts it. The clips themselves stay in the database.
 
 ```bash
-# worker identity: the token of the account that published the database...
-export WYD_WORKER_TOKEN=$(grep spacetimedb_token ~/.config/spacetime/cli.toml | cut -d'"' -f2)
-# ...or start without it once and run the `authorize_worker` command it prints
-
 npm run clips:host            # links use this Mac's network address, so other devices can open them
 npm run worker:compile        # links use COMPILE_PUBLIC_URL, else localhost (single-machine tests)
 ```
 
 - Needs `ffmpeg` (`brew install ffmpeg`), only on the Mac that runs the compiler.
-- **One compiler per database.** It takes a lease in the database; a second one exits with `a clip compiler is already running: <host>`. `npm run clips:host -- --takeover` replaces the running one (the old one stops itself). A crashed compiler's lease frees itself after 20 s.
-- It re-renders any video whose file is missing (new Mac, wiped folder) while it holds the lease.
+- **Run one compiler per database.** Nothing enforces it: two would write different URLs into the same rows and re-render each other's videos. Tell the team who runs it.
+- It re-renders any video whose file is missing (new Mac, wiped folder).
 - Videos are written to `worker/out/compilations/` and served on port 8787 while it runs. `http://<host>:8787/session/<id>` is a page that waits, then plays the video; `/health` checks the server.
 - Options (`COMPILE_PORT`, `COMPILE_PUBLIC_URL`, `COMPILE_QUIET_SECS`, `FFMPEG_BIN`, ...): `docs/components/clip-compiler.md`.
+
+### Find a compiled video by hand
+
+Run these on the Mac that runs the compiler, from the repo root. Videos are named `session-<session id>-<clip count>.mp4`, so you need the session's numeric id, not its name or join code.
+
+1. **Get the session id** from its name or join code:
+   ```bash
+   spacetime sql calhacks-13-wyd "SELECT id, name, code, state FROM session WHERE name = 'My session'"
+   spacetime sql calhacks-13-wyd "SELECT id, name, code, state FROM session WHERE code = 'ABC123'"
+   spacetime sql calhacks-13-wyd "SELECT id, name, code, state FROM session"   # all sessions, newest id last
+   ```
+   Names are not unique. If several rows match, pick by `id` (higher = newer). The id is also the number in the share link `http://<host>:8787/session/<id>`.
+2. **Check it compiled** (`status` should print `(ready = ())`; `clip_count` is the `<n>` in the file name; `url` is `(some = "/compilations/session-<id>-<n>.mp4")`):
+   ```bash
+   spacetime sql calhacks-13-wyd "SELECT session_id, status, clip_count, url, error FROM session_compilation WHERE session_id = 7"
+   ```
+   No row yet means the compiler has not started on it (the session must be `Ended`, then it waits `COMPILE_QUIET_SECS`, 30 s by default).
+3. **Open the file**:
+   ```bash
+   ls worker/out/compilations/ | grep '^session-7-'      # the file for session 7
+   open worker/out/compilations/session-7-3.mp4          # plays it (3 clips)
+   ```
+   Or in a browser while the compiler runs: `http://<host>:8787/session/7` (page) or `http://<host>:8787/compilations/session-7-3.mp4` (file).
+
+Notes:
+- The compiler deletes older videos of the same session when a late clip makes a new one, so at most one file per session remains.
+- No file, but the row is `Ready`: the video was made on another Mac or the folder was wiped. Start the compiler on this Mac (it rebuilds missing files), or look in `COMPILE_OUT_DIR` on the original Mac.
+- `status` `(failed = ())`: read `error`; failed sessions are retried every 60 s.
+- `spacetime sql` shows the clips themselves too: `SELECT id, session_id, moment_at_ms, size_bytes, complete FROM session_clip WHERE session_id = 7`. The video bytes stay in the database (`session_clip_chunk`).
 
 ## 7. Tests and build
 

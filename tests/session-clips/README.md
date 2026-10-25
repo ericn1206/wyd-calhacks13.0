@@ -20,9 +20,8 @@ Feature: `contracts.md#session-clips`. No extra dependencies.
 | `ts/compile-serve.test.ts` | `worker/compile/serve.ts`: Range/206/416, HEAD, CORS, 404 for anything but compiled videos, path tricks; `/session/<id>` page and `/status` JSON for every state, numeric ids only |
 | `ts/compile-render.test.ts` | `worker/compile/render.ts` with real ffmpeg: order, mixed size/codec, no leftovers, errors. Skipped without ffmpeg |
 | `ts/network.test.ts` | `worker/compile/network.ts` `lanAddress`: Wi-Fi first, VPN/virtual last, loopback/link-local/IPv6 ignored |
-| `ts/compile.lease.integration.test.ts` | One-compiler lease on a real db: refuse + who holds it, nothing left behind, graceful release, `--takeover` (old one stops itself), stale takeover after 20 s, reconnect keeps the lease; rebuilding of missing videos (a deleted file comes back, a compiler on another folder rebuilds, no rebuild without a lease). Needs the same env as `compile.integration` |
 | `ts/summary-link.test.ts` | `useDb.ts` `clipInfo`: summary-screen link, state and video address (stored path + current base) from `app_setting` + `session_compilation` |
-| `ts/compile.integration.test.ts` | Full flow on a real db: upload clips, end session, compiler renders + hosts, URL in `compilations`, late clip re-render, ended session without clips → `empty`, dropped connection → `offline` then recovers, non-worker rejected. Needs ffmpeg + `WYD_TEST_WORKER_TOKEN` |
+| `ts/compile.integration.test.ts` | Full flow on a real db: upload clips, end session, compiler renders + hosts, URL in `compilations`, late clip re-render, ended session without clips → `empty`, dropped connection → `offline` then recovers. Needs ffmpeg |
 
 Python needs `cv2` + `numpy`: uses `vision/.venv` (`npm run setup:vision`), else `WYD_TEST_PYTHON=/path/to/python`; skipped with a message if missing.
 
@@ -33,7 +32,6 @@ spacetime start --listen-addr 127.0.0.1:3917
 spacetime publish clipscratch --server http://127.0.0.1:3917 --module-path spacetimedb --anonymous -y
 WYD_TEST_STDB_URI=ws://127.0.0.1:3917 WYD_TEST_STDB_DB=clipscratch npm run test:clips -- ts
 ```
-`compile.integration` also needs the token of an authorized worker (the identity that published the db): `WYD_TEST_WORKER_TOKEN=<spacetimedb_token from the CLI config used to publish>`. Publish with a throwaway CLI config (`spacetime --config-path /tmp/cli.toml login --server-issued-login http://127.0.0.1:3917`) so your real login is untouched.
 Each run adds sessions and up to 20 clips per test identity; use a fresh db when it gets crowded.
 
 ## Not covered

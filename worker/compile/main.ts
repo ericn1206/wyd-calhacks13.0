@@ -1,8 +1,6 @@
 // Clip compiler entry. Run with `npm run clips:host` (shares links on this laptop's network address) or
 // `npm run worker:compile` (links use COMPILE_PUBLIC_URL / localhost). Both bundle this file, then run it.
-// Flags: --host  use this laptop's network address in the links · --takeover  replace a compiler that is already running.
-// Only one compiler may run against a database at a time: it takes a lease in SpacetimeDB (docs/components/clip-compiler.md).
-import { hostname } from 'node:os'
+// Flag: --host  use this laptop's network address in the links. Run only one compiler per database (docs/components/clip-compiler.md).
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { startCompiler } from './compiler.ts'
@@ -28,8 +26,6 @@ const compiler = await startCompiler({
   retryMs: 60_000,
   pollMs: 2000,
   ffmpegBin: env['FFMPEG_BIN'] || 'ffmpeg',
-  lease: { label: `${hostname()} (${publicUrl})`, takeover: flags.has('--takeover') },
-  onLeaseLost: () => process.exit(0),
   log: m => console.log(`[compile ${new Date().toTimeString().slice(0, 8)}] ${m}`)
 }).catch(err => {
   console.error(`[compile] could not start: ${err instanceof Error ? err.message : err}`)
@@ -40,6 +36,4 @@ if (flags.has('--host')) {
   console.log(`[compile] session pages: ${publicUrl}/session/<session id>  (teammates must be on the same network)`)
   if (!lan && !env['COMPILE_PUBLIC_URL']) console.log('[compile] no network address found; links only work on this laptop')
 }
-console.log(`[compile] if renders fail with "only the AI worker may call this", authorize this identity once:`)
-console.log(`  spacetime call ${database} authorize_worker '"0x${compiler.identity}"'`)
 for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => { void compiler.stop().then(() => process.exit(0)) })

@@ -1,7 +1,6 @@
-// End to end: clips uploaded by a member -> session ends -> the compiler (as a worker identity) joins them ->
+// End to end: clips uploaded by a member -> session ends -> the compiler joins them ->
 // the video is served over HTTP and its URL appears in the member's `compilations` view.
-// Opt-in: needs WYD_TEST_STDB_URI, WYD_TEST_STDB_DB (scratch db with this module) and WYD_TEST_WORKER_TOKEN
-// (token of an authorized worker, i.e. the identity that published the db). Also needs ffmpeg. See ../README.md.
+// Opt-in: needs WYD_TEST_STDB_URI, WYD_TEST_STDB_DB (scratch db with this module). Also needs ffmpeg. See ../README.md.
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -15,9 +14,8 @@ import { newClipPath, uploadClip } from '../../../src/main/clipUpload'
 
 const uri = process.env['WYD_TEST_STDB_URI']
 const db = process.env['WYD_TEST_STDB_DB']
-const workerToken = process.env['WYD_TEST_WORKER_TOKEN']
 const hasFfmpeg = spawnSync('ffmpeg', ['-version']).status === 0
-const skip = !uri || !db || !workerToken ? 'set WYD_TEST_STDB_URI, WYD_TEST_STDB_DB, WYD_TEST_WORKER_TOKEN to run' : !hasFfmpeg ? 'ffmpeg not installed' : false
+const skip = !uri || !db ? 'set WYD_TEST_STDB_URI, WYD_TEST_STDB_DB to run' : !hasFfmpeg ? 'ffmpeg not installed' : false
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const dirs: string[] = []
@@ -96,7 +94,6 @@ describe('clip compilation, end to end', { skip }, () => {
     compiler = await startCompiler({
       uri: uri!,
       database: db!,
-      token: workerToken,
       tokenFile: join(outDir, 'token'),
       outDir,
       port,
@@ -150,7 +147,7 @@ describe('clip compilation, end to end', { skip }, () => {
     const port = await freePort()
     const logs: string[] = []
     const c = await startCompiler({
-      uri: uri!, database: db!, token: workerToken, tokenFile: join(outDir, 'token'), outDir, port,
+      uri: uri!, database: db!, tokenFile: join(outDir, 'token'), outDir, port,
       publicUrl: `http://127.0.0.1:${port}`, quietMs: 0, emptyGraceMs: 1500, reconnectMs: 200, callTimeoutMs: 3000, retryMs: 1000, pollMs: 300, ffmpegBin: 'ffmpeg',
       log: m => logs.push(m)
     })
@@ -191,7 +188,7 @@ describe('clip compilation, end to end', { skip }, () => {
     const port = await freePort()
     // A long quiet period: if the startup snapshot counted as activity this would stay `waiting` for a minute.
     const c = await startCompiler({
-      uri: uri!, database: db!, token: workerToken, tokenFile: join(outDir, 'token'), outDir, port,
+      uri: uri!, database: db!, tokenFile: join(outDir, 'token'), outDir, port,
       publicUrl: `http://127.0.0.1:${port}`, quietMs: 60_000, emptyGraceMs: 0, retryMs: 1000, pollMs: 300, ffmpegBin: 'ffmpeg', log: () => {}
     })
     let state = ''
@@ -224,7 +221,7 @@ describe('clip compilation, end to end', { skip }, () => {
     dirs.push(outDir)
     const port = await freePort()
     const c = await startCompiler({
-      uri: uri!, database: db!, token: workerToken, tokenFile: join(outDir, 'token'), outDir, port,
+      uri: uri!, database: db!, tokenFile: join(outDir, 'token'), outDir, port,
       publicUrl: `http://127.0.0.1:${port}`, quietMs: 0, retryMs: 1000, pollMs: 300, ffmpegBin: 'ffmpeg', log: () => {}
     })
     const row = await until('Ready compilation with 2 clips', () => ready(member, 2))
@@ -244,7 +241,7 @@ describe('clip compilation, end to end', { skip }, () => {
     dirs.push(outDir)
     const port = await freePort()
     const second = await startCompiler({
-      uri: uri!, database: db!, token: workerToken, tokenFile: join(outDir, 'token'), outDir, port,
+      uri: uri!, database: db!, tokenFile: join(outDir, 'token'), outDir, port,
       publicUrl: `http://10.1.2.3:${port}/`, quietMs: 60_000, retryMs: 1000, pollMs: 300, ffmpegBin: 'ffmpeg', log: () => {}
     })
     const row = await until('clip_page_base_url setting', () => reader.snapshot().tables.settings.find(s => s.key === 'clip_page_base_url' && String(s.valueJson).includes('10.1.2.3')))
@@ -253,34 +250,12 @@ describe('clip compilation, end to end', { skip }, () => {
     reader.disconnect()
   })
 
-  it('only a worker can set the page address', async () => {
-    const stranger = await client()
-    await assert.rejects(stranger.call('setClipPageBaseUrl', { url: 'http://evil:1' }), /only the AI worker/)
-    stranger.disconnect()
-  })
-
   it('the page address must be an http(s) url', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'wyd-it-'))
-    dirs.push(dir)
-    writeFileSync(join(dir, 'stdb-token.json'), JSON.stringify({ token: workerToken }))
-    process.env['WYD_TEST_USERDATA'] = dir
-    process.env['SPACETIME_URI'] = uri
-    process.env['SPACETIME_DB'] = db
-    const asWorker = new StdbClient()
-    await asWorker.connect()
+    const member = await client()
     await sleep(1500)
     for (const bad of ['javascript:alert(1)', 'ftp://h/x', 'http://has space', '', `http://h/${'x'.repeat(250)}`]) {
-      await assert.rejects(asWorker.call('setClipPageBaseUrl', { url: bad }), /bad url/, bad)
+      await assert.rejects(member.call('setClipPageBaseUrl', { url: bad }), /bad url/, bad)
     }
-    asWorker.disconnect()
-  })
-
-  it('only a worker can write compilation state', async () => {
-    const stranger = await client()
-    await assert.rejects(
-      stranger.call('setSessionCompilation', { sessionId: 1n, status: { tag: 'Ready' }, clipCount: 1, url: 'http://evil', error: none }),
-      /only the AI worker/
-    )
-    stranger.disconnect()
+    member.disconnect()
   })
 })

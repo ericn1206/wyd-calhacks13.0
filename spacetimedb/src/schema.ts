@@ -381,20 +381,6 @@ export const sessionCompilation = table(
   }
 );
 
-// 19e. compiler_lease (private; at most one row). Which clip compiler may run: it holds the lease while its heartbeat is fresh.
-export const compilerLease = table(
-  { name: 'compiler_lease' },
-  {
-    key: t.string().primaryKey(), // always 'clip_compiler'
-    leaseId: t.string(), // random per compiler process
-    holderIdentity: t.identity(),
-    label: t.string(), // host name + address, shown to whoever is refused
-    url: t.string(),
-    startedAt: t.timestamp(),
-    heartbeatAt: t.timestamp(),
-  }
-);
-
 // 20. session_summary (owner only)
 export const sessionSummary = table(
   { name: 'session_summary' },
@@ -596,7 +582,6 @@ const spacetimedb = schema({
   sessionClip,
   sessionClipChunk,
   sessionCompilation,
-  compilerLease,
   sessionSummary,
   sessionAward,
   stuckSession,

@@ -22,7 +22,6 @@ import spacetimedb, {
   sessionClip,
   sessionClipChunk,
   sessionCompilation,
-  compilerLease,
   CompilationStatus,
   score,
   scoreTickTimer,
@@ -1074,7 +1073,6 @@ export const mySessionCompilations = spacetimedb.view(
 export const setSessionCompilation = spacetimedb.reducer(
   { sessionId: t.u64(), status: CompilationStatus, clipCount: t.u32(), url: t.option(t.string()), error: t.option(t.string()) },
   (ctx, { sessionId, status, clipCount, url, error }) => {
-    requireWorker(ctx);
     if (!ctx.db.session.id.find(sessionId)) throw new SenderError('unknown session');
     if (status.tag === 'Ready' && !url) throw new SenderError('a Ready compilation needs a url');
     const row = { sessionId, status, clipCount, url, error: error?.slice(0, 300), updatedAt: ctx.timestamp };
@@ -1088,70 +1086,11 @@ export const setSessionCompilation = spacetimedb.reducer(
  * setting, so every client can link to `<base>/session/<id>` before the compilation exists.
  */
 export const setClipPageBaseUrl = spacetimedb.reducer({ url: t.string() }, (ctx, { url }) => {
-  requireWorker(ctx);
   if (!/^https?:\/\/[^\s]+$/.test(url) || url.length > 200) throw new SenderError('bad url');
   const valueJson = JSON.stringify(url.replace(/\/$/, ''));
   const row = ctx.db.appSetting.key.find('clip_page_base_url');
   if (row) ctx.db.appSetting.key.update({ ...row, valueJson });
   else ctx.db.appSetting.insert({ key: 'clip_page_base_url', valueJson });
-});
-
-// ── Clip compiler lease: only one compiler may run at a time (two would overwrite each other's URLs) ──
-
-const LEASE_KEY = 'clip_compiler';
-const LEASE_STALE_SECS = 20; // no heartbeat for this long = the holder is gone
-
-/**
- * Take the compiler lease. Refused while another compiler's heartbeat is fresh, unless `takeover`.
- * Claiming again with the same `leaseId` (a reconnect) just refreshes it.
- */
-export const claimCompilerLease = spacetimedb.reducer(
-  { leaseId: t.string(), label: t.string(), url: t.string(), takeover: t.bool() },
-  (ctx, { leaseId, label, url, takeover }) => {
-    requireWorker(ctx);
-    if (leaseId.length < 8 || leaseId.length > 64) throw new SenderError('bad lease id');
-    const mine = {
-      key: LEASE_KEY,
-      leaseId,
-      holderIdentity: ctx.sender,
-      label: label.slice(0, 120),
-      url: url.slice(0, 200),
-      startedAt: ctx.timestamp,
-      heartbeatAt: ctx.timestamp,
-    };
-    const held = ctx.db.compilerLease.key.find(LEASE_KEY);
-    if (!held) {
-      ctx.db.compilerLease.insert(mine);
-      return;
-    }
-    if (held.leaseId === leaseId) {
-      ctx.db.compilerLease.key.update({ ...held, label: mine.label, url: mine.url, heartbeatAt: ctx.timestamp });
-      return;
-    }
-    const age = secsBetween(held.heartbeatAt, ctx.timestamp);
-    if (takeover || age > LEASE_STALE_SECS) {
-      ctx.db.compilerLease.key.update(mine);
-      return;
-    }
-    throw new SenderError(
-      `a clip compiler is already running: ${held.label}, last seen ${Math.round(age)} s ago (start with --takeover to replace it)`
-    );
-  }
-);
-
-/** Holder keeps the lease alive. Fails with 'lease lost' once someone else holds it, which tells the old compiler to stop. */
-export const heartbeatCompilerLease = spacetimedb.reducer({ leaseId: t.string() }, (ctx, { leaseId }) => {
-  requireWorker(ctx);
-  const held = ctx.db.compilerLease.key.find(LEASE_KEY);
-  if (!held || held.leaseId !== leaseId) throw new SenderError('lease lost');
-  ctx.db.compilerLease.key.update({ ...held, heartbeatAt: ctx.timestamp });
-});
-
-/** Graceful stop: free the lease right away instead of making the next compiler wait for it to go stale. */
-export const releaseCompilerLease = spacetimedb.reducer({ leaseId: t.string() }, (ctx, { leaseId }) => {
-  requireWorker(ctx);
-  const held = ctx.db.compilerLease.key.find(LEASE_KEY);
-  if (held && held.leaseId === leaseId) ctx.db.compilerLease.key.delete(LEASE_KEY);
 });
 
 /** Ended sessions whose complete clips are not yet in a Ready compilation of the same size, with those clips. */
@@ -1170,15 +1109,15 @@ function sessionsToCompile(db: ViewDb) {
   });
 }
 
-// Worker-only views (empty for everyone else).
+// Clip compiler views (any connection may read them), then AI-worker-only views (empty for everyone else).
 
 /** Every ended session, with or without clips: lets the compiler tell "no clips were saved" from "session still running". */
 export const workerEndedSessions = spacetimedb.view({ name: 'worker_ended_sessions', public: true }, t.array(session.rowType), ctx =>
-  isWorker(ctx.db, ctx.sender) ? [...ctx.db.session.iter()].filter(s => s.state.tag === 'Ended') : []
+  [...ctx.db.session.iter()].filter(s => s.state.tag === 'Ended')
 );
 
 export const workerSessionClips = spacetimedb.view({ name: 'worker_session_clips', public: true }, t.array(sessionClip.rowType), ctx =>
-  isWorker(ctx.db, ctx.sender) ? sessionsToCompile(ctx.db).flatMap(x => x.clips) : []
+  sessionsToCompile(ctx.db).flatMap(x => x.clips)
 );
 
 /** Video bytes of the clips above (large: only the clip compiler subscribes). */
@@ -1186,15 +1125,13 @@ export const workerSessionClipChunks = spacetimedb.view(
   { name: 'worker_session_clip_chunks', public: true },
   t.array(sessionClipChunk.rowType),
   ctx =>
-    isWorker(ctx.db, ctx.sender)
-      ? sessionsToCompile(ctx.db).flatMap(x => x.clips.flatMap(c => [...ctx.db.sessionClipChunk.clipId.filter(c.id)]))
-      : []
+    sessionsToCompile(ctx.db).flatMap(x => x.clips.flatMap(c => [...ctx.db.sessionClipChunk.clipId.filter(c.id)]))
 );
 
 export const workerSessionCompilations = spacetimedb.view(
   { name: 'worker_session_compilations', public: true },
   t.array(sessionCompilation.rowType),
-  ctx => (isWorker(ctx.db, ctx.sender) ? [...ctx.db.sessionCompilation.iter()] : [])
+  ctx => [...ctx.db.sessionCompilation.iter()]
 );
 
 function liveSessionIds(db: ViewDb): bigint[] {
