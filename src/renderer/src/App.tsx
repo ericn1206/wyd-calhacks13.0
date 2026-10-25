@@ -56,6 +56,9 @@ export default function App() {
   const [sessionName, setSessionName] = useState('Chapter Six Study Crew')
   const [codeCopied, setCodeCopied] = useState(false)
   const [goals, setGoals] = useState(['Finish chapter 6 notes', 'Draft chemistry lab intro', ''])
+  // Optional Goals-screen context for the off-task check (what used to come from the voice intro).
+  const [sites, setSites] = useState('')
+  const [notes, setNotes] = useState('')
   const [complete, setComplete] = useState(false)
   const [pomodoroMinutes, setPomodoroMinutes] = useState(25)
   const [focusSeconds, setFocusSeconds] = useState(25 * 60)
@@ -325,16 +328,16 @@ export default function App() {
 
   const activeGoals = goals.filter((goal) => goal.trim())
 
-  // The detector (webcam + screen checks) and activity polling run only while the timer runs on the
-  // focus screen: DB session Active (not Lobby, Break or Ended); offline demo once the local timer started.
-  // Everything else (entry, lobby, break, summary) stops them, so the camera is off outside a round.
-  const tracking = screen === 'focus' && (dbSession ? dbSession.state === 'Active' : sessionStarted)
+  // The detector (webcam + screen checks) and activity polling run on the focus screen, from the lobby on
+  // (like prod, so it is warmed up when the host presses Start), but not on breaks, after the session
+  // ends, or on the entry/summary screens. Status still only reaches the DB while Active/Break.
+  const tracking = screen === 'focus' && (!dbSession || (dbSession.state !== 'Break' && dbSession.state !== 'Ended'))
   useEffect(() => {
     if (!tracking) {
       void window.wydDesktop?.stopTracking()
       return
     }
-    void window.wydDesktop?.startTracking({ subject: sessionName, goals: activeGoals })
+    void window.wydDesktop?.startTracking({ subject: sessionName, goals: activeGoals, sites, notes })
   }, [tracking])
   const finishPomodoro = () => {
     setTimerRunning(false)
@@ -492,7 +495,7 @@ export default function App() {
 
   if (screen === 'consent') return <IntroductionScreen onComplete={finishTutorial} />
 
-  if (screen === 'goals') return <GoalsScreen goals={goals} setGoals={setGoals} onStart={async () => { if (dbSession) { const error = await db.call('setGoals', { goals: activeGoals }); if (error) return window.alert(error) }; if (!dbSession && entryMode === 'join') setTimerRunning(true); setScreen(dbSession?.state === 'Break' ? 'break' : 'focus') }} />
+  if (screen === 'goals') return <GoalsScreen goals={goals} setGoals={setGoals} sites={sites} setSites={setSites} notes={notes} setNotes={setNotes} onStart={async () => { if (dbSession) { const error = await db.call('setGoals', { goals: activeGoals }); if (error) return window.alert(error) }; if (!dbSession && entryMode === 'join') setTimerRunning(true); setScreen(dbSession?.state === 'Break' ? 'break' : 'focus') }} />
 
   if (screen === 'break') return <BreakScreen minutes={upcomingBreakMinutes} seconds={breakSeconds} goals={activeGoals} checked={checked} setChecked={updateChecked} onReturn={dbSession ? undefined : returnFromBreak} onEnd={dbSession?.isHost ? endSession : undefined} />
 

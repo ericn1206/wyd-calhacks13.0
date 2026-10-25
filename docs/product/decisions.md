@@ -12,6 +12,7 @@
 | 2026-10-24 | No roasts, spoken or written. |
 | 2026-10-24 | Phone sensor is optional; the app works fully without it. |
 | 2026-10-24 | Onboarding: typed questionnaire (subject + goals). No AI voice. Prod's voice intro is merged but kept off (unrouted) for now. |
+| 2026-10-24 | Goals screen has optional "Sites & apps you'll use" and "Anything else?" fields → off-task context (replaces what the voice intro collected). Detector runs on the focus screen from the lobby on, off on breaks/outside sessions. Dock shows the current goal, with the current site/app beneath it. |
 | 2026-10-24 | Off-task is announced immediately: no hold, `off_task_threshold_secs` default 0; others learn at once. Privacy updated to allow OCR text → Gemini (`privacy.md`). |
 | 2026-10-24 | DB categories are binary: `AppCategory` = `OnTask`/`OffTask`. |
 | 2026-10-24 | Off-task detection: local OCR of screenshots every few seconds → Gemini API → OnTask/OffTask → `ingest_signal` → off-task event → other clients get a call alert. See `../architecture/overview.md#off-task-pipeline`. |

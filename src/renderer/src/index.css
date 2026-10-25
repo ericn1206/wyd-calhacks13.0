@@ -135,6 +135,10 @@ input:focus { border-color: var(--purple); }
 .goal-input { display: flex; align-items: center; gap: 10px; }
 .goal-input > span { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; flex: none; color: var(--blue-ink); background: var(--purple-soft); font-size: 12px; font-weight: 700; }
 .goal-input input { width: 100%; }
+.context-fields { display: grid; gap: 6px; margin-top: 16px; text-align: left; }
+.context-label { font-size: 12px; font-weight: 700; color: var(--ink); margin-top: 6px; }
+.context-label em { font-style: normal; font-weight: 500; color: var(--muted); margin-left: 4px; }
+.context-fields input { width: 100%; }
 .goals-card .tip { margin-bottom: 22px; }
 .voice-card { text-align: center; }
 .voice-card .icon-bubble { margin-left: auto; margin-right: auto; }
@@ -347,7 +351,9 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
 .dock-detail { display: flex; align-items: center; gap: 9px; min-width: 0; flex: 1; }
 .dock-goal { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; font-size: 11px; cursor: pointer; }
 .dock-goal input { display: none; }
-.dock-activity { cursor: default; }
+/* Second line under the current goal: the site/app the user is on right now. */
+.dock-on { display: flex; align-items: center; gap: 4px; font-style: normal; color: #9fb5b1; font-size: 9px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.dock-on svg { width: 11px; height: 11px; flex: none; }
 /* Own bar under the dock (the dock itself is a single flex row). */
 .dock-debug { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; padding: 7px 10px; border: 1px solid rgba(255,255,255,.14); border-radius: 13px; background: rgba(29,47,45,.88); backdrop-filter: blur(18px); box-shadow: 0 8px 24px rgba(22,34,32,.18); }
 .debug-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 7px; padding: 3px 7px; color: #d7e4e1; background: rgba(255,255,255,.08); font-size: 9px; }
@@ -373,7 +379,6 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
 .live-shared-screen video { object-fit: contain; }
 .live-share .checkin-observers .mirror video { transform: scaleX(-1); }
 .team-empty { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
-.dock-activity > svg { width: 15px; height: 15px; flex: none; color: #9fb5b1; }
 .dock-goal .fake-check { border-color: rgba(255,255,255,.4); flex: none; }
 .dock-goal > span:last-child { display: grid; }
 .dock-goal small { color: #9fb5b1; font-size: 8px; text-transform: uppercase; letter-spacing: .08em; }
