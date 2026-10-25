@@ -30,6 +30,6 @@ SpacetimeDB owns session state, smoothing, cooldowns, call/nudge triggers, and P
 ## Current reality
 - Desktop: Goals submit → `wyd:tracking:start` → `osascript` polling → `categorize.ts` + `claudeJudge.ts` in main → `activity:*` IPC (UI does not consume yet). Same submit starts `vision/facetime_trigger.py`: screen off-task twice in a row, or screen on-task both times with the webcam distracted both times, prints `face time`. It does not open the overlay video popups. Renderer is the new Figma-Make UI (main window + a transparent full-screen overlay window for the dock/check-ins, relayed through main via `wyd:bridge:*`) with hardcoded demo data; spec in `../ui_integration.md`. Local `alert` starts the call. Video popups already in the overlay: `.glass-video`, `.checkin-timer-pop`, `.teammate-share-window`, `.duck-reflection-window` (`OverlayApp.tsx`), opened from the Demo menu.
 - Calls + presence: desktop ↔ LiveKit Cloud directly (`../components/livekit-call.md`); not linked to DB `group_call`.
-- SpacetimeDB client: on a teammate branch, not on `main`. Worker runs only as a fixtures CLI.
+- SpacetimeDB client: `src/main/db/stdb.ts` in desktop main (snapshot/call IPC `wyd:db:*`); no `ingest_signal` sent yet. Worker runs only as a fixtures CLI.
 
 Details: `../status.md`.

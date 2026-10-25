@@ -46,4 +46,4 @@ Desktop build: `electron.vite.config.ts` (main/preload externalize deps; rendere
 | Generate client bindings | `spacetime generate --lang typescript --module-path spacetimedb --out-dir src/main/db/module_bindings -y` |
 
 ## macOS permissions (for the terminal/IDE running dev)
-Accessibility/Automation (System Events via `osascript`) · Screen Recording (window titles) · Camera (webcam) · Microphone (speech onboarding).
+Accessibility/Automation (System Events via `osascript`) · Screen Recording (window titles) · Camera (webcam, Python `vision/` process). Microphone not needed (voice onboarding archived).

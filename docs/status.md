@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-24. Biggest gap: **desktop ↔ SpacetimeDB not on `main`** (client on a teammate branch, unmerged). Desktop and worker run without the DB; the new UI is hardcoded/local.
+Last updated: 2026-10-24. Biggest gap: desktop connects to SpacetimeDB (`src/main/db/stdb.ts`) but sends no `ingest_signal`; the worker is not wired to the DB; most UI data is hardcoded/local.
 
 ## Built
 | Part | Path | What works |
@@ -67,7 +67,7 @@ Last updated: 2026-10-24. Biggest gap: **desktop ↔ SpacetimeDB not on `main`**
 | SDK | `@anthropic-ai/sdk ^0.27` (old); worker casts around missing `output_config` type. |
 
 ## Next up (demo critical path, suggested)
-1. Merge the SpacetimeDB desktop client; desktop joins session and sends `ingest_signal` every 10 s.
+1. Desktop sends `ingest_signal` every 10 s (client + session join exist). Feed the `face time` trigger into it / the check-in call.
 2. Worker subscribes to `worker_pending_signal_events` → `write_judgment`. (DB fallback judge covers the demo meanwhile.)
 3. Wire LiveKit into the new UI's check-in windows; start the call from the DB `CallIncoming` alert instead of the local desktop alert.
 4. Back summary screen with real stats.
