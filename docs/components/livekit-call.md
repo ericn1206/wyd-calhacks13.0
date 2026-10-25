@@ -22,6 +22,7 @@ Room name, identity, token grants, attributes (`callEndsAt`, `inCall`): `../arch
 | No session room, or alone in it | Duck reflection window (no camera), 30 s, **Resume** ends it early |
 | A teammate's call starts | Invite under the dock: "`<name>` drifted off task · Join", 3 s (`INVITE_SECONDS`); no click → `declineCall()` |
 | Joined a call with a screen share | Share window: screen big, sharer's webcam bottom-right, others + me bottom-left, countdown, Leave, progress bar |
+| My call, nobody else joins within `EMPTY_CALL_GRACE_MS` (5 s) | `leaveCall()`: overlay closes, return prompt shows (`LiveCheckIn.tsx`) |
 | Call length | `CALL_DURATION_MS` 30 s, same end time for everyone (copied into each joiner's `callEndsAt`) |
 | While sharing | Our windows are never the shared source, so the overlay's camera tiles can't appear (macOS 15+ ScreenCaptureKit ignores `setContentProtection`, which is still set as a fallback) |
 
