@@ -47,6 +47,18 @@ function makeInviteCode(): string {
   return Array.from(bytes, (b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join('')
 }
 
+async function copyText(text: string): Promise<boolean> {
+  if (!text) return false
+  try { await navigator.clipboard.writeText(text); return true } catch { /* fall back to execCommand */ }
+  const el = document.createElement('textarea')
+  el.value = text
+  el.style.position = 'fixed'
+  el.style.opacity = '0'
+  document.body.appendChild(el)
+  el.select()
+  try { return document.execCommand('copy') } catch { return false } finally { el.remove() }
+}
+
 export default function App() {
   const [screen, setScreen] = useState<Screen>('join')
   const [entryMode, setEntryMode] = useState<'join' | 'create'>('join')
@@ -506,7 +518,7 @@ export default function App() {
   }
   handlers.current = { signalTired, takeBreak, endBreak: returnFromBreak, leaveSession, resetPomodoro, setRunning, setChecked: updateChecked }
 
-  if (screen === 'join') return <EntryScreen error={entryError} busy={entryBusy} mode={entryMode} setMode={setEntryMode} code={entryMode === 'create' && !dbSession ? inviteCode : code} setCode={setCode} sessionName={sessionName} setSessionName={setSessionName} codeCopied={codeCopied} copyCode={() => { navigator.clipboard?.writeText(entryMode === 'create' && !dbSession ? inviteCode : code); setCodeCopied(true); window.setTimeout(() => setCodeCopied(false), 1600) }} continueSetup={beginSessionSetup} displayName={displayName} setDisplayName={setDisplayName} />
+  if (screen === 'join') return <EntryScreen error={entryError} busy={entryBusy} mode={entryMode} setMode={setEntryMode} code={entryMode === 'create' && !dbSession ? inviteCode : code} setCode={setCode} sessionName={sessionName} setSessionName={setSessionName} codeCopied={codeCopied} copyCode={() => { void copyText(entryMode === 'create' && !dbSession ? inviteCode : code).then((ok) => { if (!ok) return; setCodeCopied(true); window.setTimeout(() => setCodeCopied(false), 1600) }) }} continueSetup={beginSessionSetup} displayName={displayName} setDisplayName={setDisplayName} />
 
   if (screen === 'consent') return <IntroductionScreen onComplete={finishTutorial} />
 
