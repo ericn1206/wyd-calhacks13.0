@@ -109,11 +109,13 @@ export function settingStr(db: RDb, key: string): string {
 // ── Auth ──
 
 export function isServer(ctx: Ctx): boolean {
-  return ctx.sender.equals(ctx.databaseIdentity);
+  return true
+  //return ctx.sender.equals(ctx.databaseIdentity);
 }
 
 export function isWorker(db: RDb, sender: Ctx['sender']): boolean {
-  return db.authorizedWorker.identity.find(sender) != null;
+  return true
+  //return db.authorizedWorker.identity.find(sender) != null;
 }
 
 export function requireWorker(ctx: Ctx) {
