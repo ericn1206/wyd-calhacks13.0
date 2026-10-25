@@ -172,11 +172,6 @@ input:focus { border-color: var(--purple); }
 .timer-ring span { color: var(--muted); font-size: 12px; margin-top: 8px; }
 .timer-panel h2 { margin-top: -2px; }
 .timer-panel > p { color: var(--muted); margin-top: 6px; }
-.pomodoro-rounds { display: flex; justify-content: center; gap: 7px; margin-top: 13px; }
-.pomodoro-rounds span { width: 20px; height: 20px; display: grid; place-items: center; border: 1px solid #dce3df; border-radius: 50%; color: transparent; background: white; }
-.pomodoro-rounds span.current { border-color: #7fcbd4; box-shadow: 0 0 0 3px rgba(127,203,212,.15); }
-.pomodoro-rounds span.done { color: #315f64; border-color: #a8d8ce; background: #dff3ee; }
-.pomodoro-rounds svg { width: 11px; }
 .pomodoro-console { width: min(510px, 100%); margin: clamp(10px, 1.5vh, 18px) auto 0; padding: clamp(11px, 1.7vh, 16px); border: 1px solid var(--line); border-radius: 20px; text-align: left; background: rgba(255,255,255,.82); box-shadow: 0 12px 35px rgba(37,57,52,.07); }
 .console-role { display: flex; align-items: center; justify-content: space-between; margin-bottom: 11px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
 .console-role > small { color: var(--muted); font-size: 11px; }
@@ -561,7 +556,6 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
 @media (min-width: 761px) and (max-height: 780px) {
   .focus-grid { padding-block: 10px; }
   .timer-ring { width: clamp(190px, 27vh, 220px); margin-block: 6px; }
-  .pomodoro-rounds { margin-top: 7px; }
   .pomodoro-console { margin-top: 8px; padding: 10px 12px; }
   .console-role { margin-bottom: 7px; padding-bottom: 7px; }
   .timer-controls { margin-block: 7px; }
