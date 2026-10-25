@@ -19,7 +19,7 @@ Opt-in group focus app: sustained drift → rare, short surprise group check-in 
 
 ## Hard rules
 
-- **Privacy:** webcam frames/video never leave the laptop. Only small text events go to SpacetimeDB. Replay clips are local, deleted at session end. No consent screen (hackathon scope). Details: `docs/product/privacy.md`/.
+- **Privacy:** webcam frames/video never leave the laptop. Only small text events go to SpacetimeDB. Replay clips are local, deleted at session end. No consent screen (hackathon scope). Details: `docs/product/privacy.md`.
 - **Contract:** don't change `contracts.md` items (event fields, enums) without telling the team.
 - **Open decisions** (`decisions.md`): ask, don't assume.
 - Never commit API keys; use `.env` (gitignored).
