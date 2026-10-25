@@ -6,7 +6,7 @@
 | Desktop | `/` (`src/`) | Electron ^28, electron-vite ^2 | react ^18.2, react-dom, @vitejs/plugin-react ^4, tailwindcss ^4 + @tailwindcss/vite ^4 (renderer), vite ^5.4 (explicit; `npm install` without it breaks), typescript ^5, @anthropic-ai/sdk ^0.27, livekit-client 2.23.0 (exact) |
 | Worker | `worker/` | Node 24, ESM, runs `.ts` directly (no build) | @anthropic-ai/sdk ^0.27 |
 | SpacetimeDB module | `spacetimedb/` | SpacetimeDB TS module (V8) | spacetimedb 2.13.*, typescript ~5.6 |
-| Webcam detector | `vision/` | Python 3.12 venv `vision/.venv`, spawned by desktop main | `requirements.txt`: mediapipe 0.10.21 (last with `mp.solutions`), opencv-contrib-python 4.11.0.86, numpy 1.26.4 · `requirements-train.txt` adds xgboost 3.4.1, pandas 3.0.6, scikit-learn 1.9.1 |
+| Webcam detector | `vision/` | Python 3.12 venv `vision/.venv`, spawned by desktop main | `requirements.txt`: mediapipe 0.10.21 (last with `mp.solutions`), opencv-contrib-python 4.11.0.86, numpy 1.26.4, pillow 11.1.0, google-generativeai 0.8.5 (screen monitor only) · `requirements-train.txt` adds xgboost 3.4.1, pandas 3.0.6, scikit-learn 1.9.1 |
 
 Desktop build: `electron.vite.config.ts` (main/preload externalize deps; renderer uses React + Tailwind plugins). Root `tsconfig.json`: ES2020, CommonJS, strict.
 
@@ -32,6 +32,7 @@ Desktop build: `electron.vite.config.ts` (main/preload externalize deps; rendere
 | `CARTESIA_API_KEY`, `CARTESIA_AGENT_ID`, `CARTESIA_VOICE_ID` | used only by archived `outdated/` voice code |
 | `LOCKIN_DEMO` | `1` → desktop joins the LiveKit room and shows the live camera view switch in the Demo menu |
 | `VISION_MODEL` | optional path override for the webcam model (default `vision/distraction_model.json`) |
+| `GEMINI_API_KEY` | `vision/04_screen_monitor.py` only (screen OCR → Gemini). Not read by the Electron app. |
 
 ## Commands
 | Do | Run |
@@ -40,6 +41,7 @@ Desktop build: `electron.vite.config.ts` (main/preload externalize deps; rendere
 | Desktop build | `npm run build` |
 | Webcam detector env | `npm run setup:vision` (add `-- --train` for training deps) |
 | Run detector alone | `vision/.venv/bin/python vision/detector.py --model <json>` (prints JSON lines; Ctrl-D/Ctrl-C to stop) |
+| Screen OCR test | `vision/.venv/bin/python vision/04_screen_monitor.py` (Vision text → Gemini; press `q`) |
 | Worker fixtures | `cd worker && npm run fixtures` |
 | Build / publish module | `cd spacetimedb && spacetime build` / `spacetime publish` |
 | Re-seed after publish | `spacetime call calhacks-13-wyd seed_defaults` |

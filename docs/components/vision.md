@@ -13,6 +13,7 @@ Local webcam focus signal: face present, looking away (distracted), eyes. Frames
 | `src/main/index.ts` | Asks Camera permission, starts on `wyd:tracking:start`, stops on quit |
 | `src/main/activityMonitor.ts` | `setVision()` → `ActivityState.vision` |
 | `vision/distraction_model.json` | Windows-trained XGBoost model. Frames are resized to 640×480 before the 8 features, which is the size those trees split on. |
+| `vision/04_screen_monitor.py` | Screenshot → macOS Vision OCR (`macos_vision_ocr.swift`) → same Gemini prompt as the old Windows `winocr` script. Not wired into the Electron app. |
 
 ## Inputs / Outputs
 JSON line + `VisionState`: `../architecture/contracts.md#vision-sidecar`. Model features (order matters): `pitch, yaw, roll, nose_x_offset, nose_y_offset, left_eye_ratio, right_eye_ratio, shoulder_dist`, pixel space, face-mesh landmarks 1/152/33/263/159/145/386/374, pose 11/12.
@@ -25,7 +26,7 @@ JSON line + `VisionState`: `../architecture/contracts.md#vision-sidecar`. Model 
 ## Merging `webcam-activity-detection`
 1. `git merge origin/webcam-activity-detection`; `README.md` conflicts: keep main's.
 2. `git mv 01_collect_data.py 02_train_model.py 03_detection_server.py distraction_model.json vision/`
-3. `git rm 04_screen_monitor.py api_test.py` (Windows-only OCR + Gemini, hardcoded key).
+3. Do not copy `webcam-activity-detection`'s `04_screen_monitor.py` (Windows `winocr`, hardcoded key). This branch's `vision/04_screen_monitor.py` is the macOS replacement. `api_test.py` stays off this branch.
 
 ## Current state
 - `vision/distraction_model.json` is the Windows-trained model. macOS cameras open larger (this machine: 1920×1080); `detector.py` resizes to 640×480 before features and pumps the CoreFoundation run loop so headless AVFoundation keeps frames.
@@ -41,3 +42,4 @@ JSON line + `VisionState`: `../architecture/contracts.md#vision-sidecar`. Model 
 - Python child gets Electron's Camera permission only if asked first (`askForMediaAccess('camera')`).
 - macOS allows the detector and LiveKit to use the camera at once.
 - Do not `time.sleep` between captures. AVFoundation stops after one frame unless `CFRunLoopRunInMode` runs (`pump` in `detector.py`).
+- Screen monitor: `GEMINI_API_KEY` in the environment or `.env`. Needs Screen Recording. Run `vision/.venv/bin/python vision/04_screen_monitor.py` after `npm run setup:vision` (Pillow + `google-generativeai` are in `requirements.txt`). OCR text is the Gemini prompt's screen sample; model is `gemini-3.5-flash-lite`.

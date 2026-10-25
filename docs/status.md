@@ -82,7 +82,7 @@ Last updated: 2026-10-24. Biggest gap: **desktop ↔ SpacetimeDB not on `main`**
 - LiveKit tokens are signed by hand in `livekitToken.ts`: `livekit-server-sdk` needs Node 19+, Electron 28 ships Node 18.
 - Vision: run `npm run setup:vision` once (Python 3.12, ~760 MB venv). Model is `vision/distraction_model.json`; macOS frames are resized to 640×480. Without the venv the app runs and vision reports `off`.
 - Webcam detector evaluates the XGBoost JSON in pure Python: runtime needs no `xgboost`/`libomp`. Retraining does (`npm run setup:vision -- --train`, plus `brew install libomp`).
-- Gemini API key is hardcoded in `04_screen_monitor.py` / `api_test.py` on `origin/webcam-activity-detection`: rotate it; those files are excluded from the merge.
+- Screen OCR on this branch is `vision/04_screen_monitor.py` (macOS Vision → Gemini). `origin/webcam-activity-detection:04_screen_monitor.py` and `api_test.py` still use Windows `winocr` and a hardcoded key: do not merge those; rotate that key.
 - Worker runs `.ts` directly: needs Node 24 (`node -v`).
 - `osascript` needs Accessibility/Automation permission for System Events; window titles need Screen Recording.
 - SpacetimeDB `init` seeds only on first publish; after a schema publish run `seed_defaults`.

@@ -4,3 +4,6 @@
 mediapipe==0.10.21
 opencv-contrib-python==4.11.0.86
 numpy==1.26.4
+# Screen monitor only (vision/04_screen_monitor.py). OCR itself is macOS Vision, not a pip package.
+pillow==11.1.0
+google-generativeai==0.8.5
