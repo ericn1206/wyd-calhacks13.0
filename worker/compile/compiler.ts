@@ -71,7 +71,7 @@ export async function startCompiler(o: CompilerOptions): Promise<RunningCompiler
   const lastActivity = new Map<bigint, number>()
   const failedAt = new Map<bigint, number>()
   const rendering = new Set<bigint>()
-  let applied = false
+
   let stopped = false
   let timer: NodeJS.Timeout | null = null
   /** The live connection; undefined while (re)connecting. */
@@ -102,23 +102,25 @@ export async function startCompiler(o: CompilerOptions): Promise<RunningCompiler
   function connect(): Promise<string> {
     return new Promise<string>((resolve, reject) => {
       let built: DbConnection | undefined
-      const bump = (sessionId: bigint) => { if (applied) lastActivity.set(sessionId, Date.now()) }
+      // Only changes caused by a reducer while connected count as activity; the initial snapshot (old sessions) does not.
+      const live = (ctx: unknown) => (ctx as { event?: { tag?: string } } | undefined)?.event?.tag === 'Reducer'
+      const bump = (ctx: unknown, sessionId: bigint) => { if (live(ctx)) lastActivity.set(sessionId, Date.now()) }
       built = DbConnection.builder()
         .withUri(o.uri)
         .withDatabaseName(o.database)
         .withToken(savedToken)
         .onConnect((c, id, token) => {
           if (!o.token) { try { mkdirSync(dirname(o.tokenFile), { recursive: true }); writeFileSync(o.tokenFile, token) } catch { /* in memory only */ } }
-          c.db.workerSessionClips.onInsert((_ctx, clip) => bump(clip.sessionId))
-          c.db.workerEndedSessions.onInsert((_ctx, s) => bump(s.id))
+          c.db.workerSessionClips.onInsert((ctx, clip) => bump(ctx, clip.sessionId))
+          c.db.workerEndedSessions.onInsert((ctx, s) => bump(ctx, s.id))
           c.subscriptionBuilder()
-            .onApplied(() => { applied = true; conn = built; resolve(id.toHexString()) })
+            .onApplied(() => { conn = built; resolve(id.toHexString()) })
             .onError(() => reject(new Error('subscription failed (is this identity an authorized worker?)')))
             .subscribe(VIEWS.map(v => `SELECT * FROM ${v}`))
         })
         .onConnectError((_c, err) => reject(err))
         .onDisconnect((_c, err) => {
-          if (conn === built) { conn = undefined; applied = false }
+          if (conn === built) conn = undefined
           if (stopped) return
           o.log(`disconnected${err ? `: ${err.message}` : ''}; reconnecting`)
           void reconnectLoop()

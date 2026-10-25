@@ -172,6 +172,36 @@ describe('clip compilation, end to end', { skip }, () => {
     member.disconnect()
   })
 
+  it('a session that ended before the compiler started is not treated as fresh activity (restart)', async () => {
+    const member = await client()
+    await member.call('createSession', {
+      name: 'ended before start',
+      settings: { pomodoroWorkSecs: none, pomodoroBreakSecs: none, offTaskThresholdSecs: none, callCooldownSecs: none, maxCallSecs: none, scoreboardEnabled: none, groupCallEnabled: none, topicDescription: none, allowedDomains: none, blockedDomains: none },
+      code: none
+    })
+    await sleep(300)
+    const sessionId = member.snapshot().tables.sessions.map(s => Number(s.id)).sort((a, b) => b - a)[0]
+    await member.call('endSession', {})
+    await sleep(500)
+    const outDir = mkdtempSync(join(tmpdir(), 'wyd-out-'))
+    dirs.push(outDir)
+    const port = await freePort()
+    // A long quiet period: if the startup snapshot counted as activity this would stay `waiting` for a minute.
+    const c = await startCompiler({
+      uri: uri!, database: db!, token: workerToken, tokenFile: join(outDir, 'token'), outDir, port,
+      publicUrl: `http://127.0.0.1:${port}`, quietMs: 60_000, emptyGraceMs: 0, retryMs: 1000, pollMs: 300, ffmpegBin: 'ffmpeg', log: () => {}
+    })
+    let state = ''
+    const end = Date.now() + 8_000
+    while (Date.now() < end && state !== 'empty') {
+      state = ((await (await fetch(`http://127.0.0.1:${port}/session/${sessionId}/status`)).json()) as { state: string }).state
+      if (state !== 'empty') await sleep(300)
+    }
+    assert.equal(state, 'empty')
+    await c.stop()
+    member.disconnect()
+  })
+
   it('the compiler publishes its page address, which every client can read', async () => {
     const reader = await client()
     const outDir = mkdtempSync(join(tmpdir(), 'wyd-out-'))
