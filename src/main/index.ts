@@ -248,8 +248,11 @@ function registerDesktopApi(): void {
     }
     monitor?.setSessionContext(context)
     monitor?.start()
-    const goal = [context.subject, ...context.goals, context.sites, context.notes].filter((part) => part && part.trim()).join('. ') || 'study'
-    startFacetimeTrigger(goal, publishFacetime, (offTask) => sendToRenderer('wyd:detector-status', offTask), recordDetectorDebug, handleClip)
+    // Gemini judges the OCR text against what they said they are doing. Sites/notes are optional extra context.
+    const goalParts = [context.subject, ...context.goals, context.notes].map((part) => part.trim()).filter(Boolean)
+    const goal = goalParts.filter((part, index) => goalParts.findIndex((item) => item.toLowerCase() === part.toLowerCase()) === index).join('. ') || 'study'
+    const mentioned = [context.sites, context.notes].map((part) => part.trim()).filter(Boolean).join('. ')
+    startFacetimeTrigger(goal, publishFacetime, (offTask) => sendToRenderer('wyd:detector-status', offTask), recordDetectorDebug, handleClip, mentioned)
   })
 
   ipcMain.handle('session:start', async () => {

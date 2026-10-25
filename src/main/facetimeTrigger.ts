@@ -5,7 +5,7 @@ import { app } from 'electron'
 
 let child: ChildProcess | null = null
 
-/** One `debug {...}` line from vision/facetime_trigger.py (one per 10 s interval), plus arrival time. */
+/** One `debug {...}` line from vision/facetime_trigger.py (one per 5 s interval), plus arrival time. */
 export interface DetectorDebug {
   t: number
   status: 'on' | 'off' | 'none'
@@ -49,7 +49,8 @@ export function startFacetimeTrigger(
   onTrigger: () => void,
   onStatus: (offTask: boolean) => void,
   onDebug: (entry: DetectorDebug) => void,
-  onClip: (info: ClipInfo) => void
+  onClip: (info: ClipInfo) => void,
+  sites = ''
 ): void {
   stopFacetimeTrigger()
   const root = projectRoot()
@@ -59,7 +60,11 @@ export function startFacetimeTrigger(
     console.error('[facetime] no vision/.venv. Run npm run setup:vision')
     return
   }
-  const proc = spawn(python, [script, goal], { cwd: root, stdio: ['pipe', 'pipe', 'pipe'] })
+  // Second argument: sites/apps they mentioned. Passed to Gemini as context, not a hard allowlist.
+  const args = [script, goal]
+  if (sites.trim()) args.push(sites)
+  // stdin stays open: `clip <path>` lines request a session clip (see requestClip).
+  const proc = spawn(python, args, { cwd: root, stdio: ['pipe', 'pipe', 'pipe'] })
   child = proc
   let pending = ''
   proc.stdout?.on('data', (buf: Buffer) => {

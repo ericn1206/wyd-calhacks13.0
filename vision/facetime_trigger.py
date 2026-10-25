@@ -1,8 +1,8 @@
 """Start the webcam detector and the screen monitor, then print face time.
 
-An interval is 10 seconds. Print face time when either streak hits 2:
-1. Screen monitor off-task two intervals in a row (webcam is ignored).
-2. Screen monitor on-task both intervals, and the webcam distracted both times.
+An interval is 5 seconds. Print face time when either streak hits 2:
+1. Gemini says the OCR text is off the study goal, twice in a row (webcam is ignored). The front app and named sites are context, not a hard block.
+2. Screen looks on-task both intervals, and the webcam distracted both times.
 
 Electron stdin `clip <path>` is passed to the detector, which records 10 s before to 20 s after
 and writes an mp4. The detector's `{"clip": ...}` reply goes to stdout as `clip {...}`.
@@ -18,7 +18,7 @@ import threading
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-INTERVAL_SEC = 10
+INTERVAL_SEC = 5
 STREAK_TO_FIRE = 2
 
 stop = threading.Event()
@@ -26,6 +26,18 @@ lock = threading.Lock()
 webcam_distracted = False
 saw_webcam = False
 webcam_last = {}  # latest detector.py JSON line, for the debug output
+
+
+def frontmost_app():
+    proc = subprocess.run(
+        ["osascript", "-e", 'tell application "System Events" to get name of first application process whose frontmost is true'],
+        capture_output=True,
+        text=True,
+        timeout=3,
+    )
+    if proc.returncode != 0:
+        return ""
+    return proc.stdout.strip()
 
 
 def load_screen():
@@ -74,9 +86,23 @@ def forward_clip_requests(proc):
             return
 
 
-def screen_vote(screen, goal):
-    """'off' is a screen hit. 'ok' is on-task. 'unknown' is blank or an error."""
-    screen.check_once(goal)
+def screen_vote(screen, goal, sites):
+    """'off' is a screen hit. 'ok' is on-task. 'unknown' is blank or an error.
+
+    Gemini decides from the OCR text. The front app and the sites/apps the user mentioned are
+    passed as context only (not a strict allowlist), so e.g. Google Calendar can still be on task.
+    """
+    if screen is None:
+        return "unknown"
+    try:
+        front = frontmost_app()
+    except (OSError, subprocess.TimeoutExpired):
+        front = ""
+    context = "; ".join(part for part in (
+        f"front app is {front}" if front else "",
+        f"they said they would use: {sites}" if sites.strip() else "",
+    ) if part)
+    screen.check_once(goal, context)
     reason = str(screen.ui_state.get("reason", ""))
     if reason == "Screen mostly desktop/blank" or reason.startswith("Error:"):
         return "unknown"
@@ -85,6 +111,7 @@ def screen_vote(screen, goal):
 
 def main():
     goal = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1].strip() else "study"
+    sites = sys.argv[2] if len(sys.argv) > 2 else ""
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
 
     detector = os.path.join(HERE, "detector.py")
@@ -119,12 +146,11 @@ def main():
         while not stop.is_set():
             started = time.monotonic()
             vote = "unknown"
-            if screen is not None:
-                try:
-                    vote = screen_vote(screen, goal)
-                except Exception as err:
-                    print(f"screen check failed: {type(err).__name__}: {err}", file=sys.stderr)
-                    vote = "unknown"
+            try:
+                vote = screen_vote(screen, goal, sites)
+            except Exception as err:
+                print(f"screen check failed: {type(err).__name__}: {err}", file=sys.stderr)
+                vote = "unknown"
             with lock:
                 cam_off = saw_webcam and webcam_distracted
                 cam_seen = saw_webcam

@@ -1,6 +1,5 @@
-"""Screen check for macOS. Vision OCR text goes to the same Gemini call as the Windows script.
+"""Screen check for macOS. A local screenshot is OCR'd; Gemini sees the text, not the image.
 
-Replaces winocr.recognize_pil. Prompt, model, JSON parse, and 10s interval are unchanged.
 Set GEMINI_API_KEY. Grant Screen Recording if OCR comes back empty. Press q to close the banner.
 """
 
@@ -18,7 +17,7 @@ import numpy as np
 from PIL import ImageGrab
 import google.generativeai as genai
 
-CHECK_INTERVAL = 10
+CHECK_INTERVAL = 5
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 SWIFT = os.path.join(HERE, "macos_vision_ocr.swift")
@@ -138,18 +137,23 @@ def capture_screen_text():
     return proc.stdout.strip()
 
 
-def call_gemini_api(user_goal, screen_text):
+def call_gemini_api(user_goal, screen_text, context=""):
+    """`context`: front app and the sites/apps the user said they'd use (a guide, not a whitelist)."""
+    context_block = f"\nContext: {context}\n" if context else ""
     prompt = f"""
-You are an anti-distraction monitor for a hackathon product.
-User's Goal: "{user_goal}"
-Screen Text Sample:
+You are a focus monitor. Decide whether the text on screen is relevant to what the user said they are working on.
+
+User's goal: "{user_goal}"{context_block}
+Screen text:
 \"\"\"{screen_text[:1200]}\"\"\"
 
-Rule: Mark "is_off_task": true ONLY if the user is clearly playing games (Steam, Valorant),
-watching entertainment streams (Twitch, Netflix), or doomscrolling social media.
-Mark false for study, research, articles, terminals, or documentation.
+Mark is_off_task true when the screen content is not related to the user's goal or to organizing that work: a clearly different subject, messaging, social media, entertainment, games, shopping, or unrelated browsing.
+Mark is_off_task false when the content is about the stated goal or a closely related subtopic that supports it (e.g. goal "algorithms" -> data structures, complexity, pseudocode, a specific algorithm article is fine; ancient history is not).
+Planning and organizing the work also counts as on task: calendar, to-do lists, notes, email or course pages about the task.
+Apps and sites the user named are expected, but they are not the only allowed ones: judge by what is on screen, not by which app it is in.
+If the text is too thin or ambiguous to tell, mark is_off_task false.
 
-Return strict JSON: {{"is_off_task": false, "reason": "Short summary under 8 words"}}
+Return strict JSON with boolean is_off_task and reason (under 8 words).
 """
     response = _generate(prompt)
     data = json.loads(response.text)
@@ -158,7 +162,7 @@ Return strict JSON: {{"is_off_task": false, "reason": "Short summary under 8 wor
     return data
 
 
-def check_once(user_goal):
+def check_once(user_goal, context=""):
     ui_state["checking"] = True
     ui_state["ocr_chars"] = 0
     try:
@@ -169,7 +173,7 @@ def check_once(user_goal):
         if len(text) < 20:
             ui_state["reason"] = "Screen mostly desktop/blank"
             return
-        result = call_gemini_api(user_goal, text)
+        result = call_gemini_api(user_goal, text, context)
         ui_state["is_off_task"] = bool(result.get("is_off_task", False))
         ui_state["reason"] = result.get("reason", "On task")
         print(f" -> {'OFF-TASK' if ui_state['is_off_task'] else 'ON-TASK'}: {ui_state['reason']}")

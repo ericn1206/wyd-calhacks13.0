@@ -1,25 +1,33 @@
-import Anthropic from '@anthropic-ai/sdk'
-
-// Fallback judge per docs/architecture/stack.md (primary is the small model on Inferentia).
-export const MODEL = 'claude-haiku-5-5'
-
-let client: Anthropic | null = null
+const GEMINI_MODEL = 'gemini-3.5-flash-lite'
+export const MODEL = GEMINI_MODEL
 
 // One short call that must answer with a single JSON object. Returns null if
 // the model refused or didn't produce parseable JSON.
 export async function askJson(system: string, user: string): Promise<Record<string, unknown> | null> {
-  client ??= new Anthropic()
-  const res = await client.messages.create({
-    model: MODEL,
-    max_tokens: 1024,
-    system,
-    messages: [{ role: 'user', content: user }],
-    // Classification doesn't need deep thinking. `output_config` isn't in
-    // SDK 0.27's types, but the SDK sends the body through unchanged.
-    ...({ output_config: { effort: 'low' } } as object)
-  })
+  const key = process.env.GEMINI_API_KEY?.trim()
+  if (!key) throw new Error('GEMINI_API_KEY is not set')
 
-  const text = res.content.find((b): b is Anthropic.TextBlock => b.type === 'text')?.text ?? ''
+  const prompt = `${system}\n\n${user}`
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 1024, temperature: 0, responseMimeType: 'application/json' },
+      }),
+      signal: AbortSignal.timeout(20000),
+    }
+  )
+
+  const body = await response.json().catch(() => null) as {
+    error?: { message?: string }
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+  } | null
+  if (!response.ok) throw new Error(body?.error?.message || `Gemini request failed (${response.status})`)
+
+  const text = body?.candidates?.[0]?.content?.parts?.map(p => p.text ?? '').join('').trim() ?? ''
   const match = text.match(/\{[\s\S]*\}/)
   if (!match) return null
   try {

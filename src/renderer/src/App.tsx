@@ -55,10 +55,7 @@ export default function App() {
   const [inviteCode] = useState(makeInviteCode)
   const [sessionName, setSessionName] = useState('Chapter Six Study Crew')
   const [codeCopied, setCodeCopied] = useState(false)
-  const [goals, setGoals] = useState(['Finish chapter 6 notes', 'Draft chemistry lab intro', ''])
-  // Optional Goals-screen context for the off-task check (what used to come from the voice intro).
-  const [sites, setSites] = useState('')
-  const [notes, setNotes] = useState('')
+  const [goals, setGoals] = useState([''])
   const [complete, setComplete] = useState(false)
   const [pomodoroMinutes, setPomodoroMinutes] = useState(25)
   const [focusSeconds, setFocusSeconds] = useState(25 * 60)
@@ -113,6 +110,10 @@ export default function App() {
     return window.wydDesktop?.onDetectorDebug((entry) => setDetectorLog((log) => [...log, entry].slice(-300)))
   }, [])
   const latestDebug = detectorLog[detectorLog.length - 1] ?? null
+  // Screenshot one-liner (Gemini, every detector interval). Empty until that check returns ok/off.
+  const shotReason = latestDebug && (latestDebug.screen === 'ok' || latestDebug.screen === 'off') && latestDebug.reason && !latestDebug.reason.startsWith('Error:')
+    ? latestDebug.reason
+    : ''
   const toggleDockDebug = () => {
     const next = !dockDebug
     setDockDebug(next)
@@ -296,15 +297,24 @@ export default function App() {
   }))
   const membersKey = members.map((person) => `${person.name}:${person.status}:${person.hex ?? ''}`).join('|')
   // My status exactly as partners see it (status table), so my dock and their screens agree.
-  // What I'm on right now (activityMonitor polls every 2 s once tracking starts); shown on my dock.
+  // What I'm on right now (activityMonitor polls every 2 s once tracking starts).
+  // `reason` is the short line for the dock until a screenshot verdict arrives, then the screenshot line wins.
   const [currentActivity, setCurrentActivity] = useState('')
+  const [activityReason, setActivityReason] = useState('')
+  const [activityOff, setActivityOff] = useState(false)
   useEffect(() => {
-    window.wydDesktop?.onActivityUpdate((state) => setCurrentActivity(activityLabel(state.appName, state.url)))
+    window.wydDesktop?.onActivityUpdate((state) => {
+      setCurrentActivity(activityLabel(state.appName, state.url))
+      setActivityReason(state.reason ?? '')
+      setActivityOff(state.category === 'distracted')
+    })
     return () => window.wydDesktop?.removeActivityListeners()
   }, [])
+  const statusReason = shotReason || activityReason
+  const statusReasonOff = shotReason ? latestDebug?.screen === 'off' : activityOff
   const selfStatus = dbSession ? ((db.people.find((person) => person.me)?.status as 'focused' | 'drifting' | undefined) ?? 'focused') : null
 
-  // Report each detector verdict (vision/facetime_trigger.py, every 10 s) to SpacetimeDB: the server
+  // Report each detector verdict (vision/facetime_trigger.py, every 5 s) to SpacetimeDB: the server
   // applies OnTask/OffTask immediately and every client's status dots read the same row.
   useEffect(() => {
     if (!serverActive) return
@@ -324,10 +334,10 @@ export default function App() {
       host: isHost, serverPhase: dbSession?.state ?? null, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, started: sessionStarted,
       onBreak: screen === 'break', breakSeconds, breakMinutes: upcomingBreakMinutes, checked,
       currentGoal: goals.find((g) => g.trim()) || '', isTired, tiredNotice, checkInCorner,
-      sessionCode: shareCall ? sessionCode : '', displayName: callName, members, selfStatus, currentActivity, debugEnabled: dockDebug, debug: latestDebug, tracking,
+      sessionCode: shareCall ? sessionCode : '', displayName: callName, members, selfStatus, currentActivity, debugEnabled: dockDebug, debug: latestDebug, tracking, statusReason, statusReasonOff,
     }
     window.wydDesktop?.bridge.send({ type: 'state', state })
-  }, [overlayReady, isHost, dbSession?.state, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, sessionStarted, screen, breakSeconds, upcomingBreakMinutes, checked, goals, isTired, tiredNotice, checkInCorner, shareCall, sessionCode, callName, membersKey, selfStatus, currentActivity, dockDebug, latestDebug, tracking])
+  }, [overlayReady, isHost, dbSession?.state, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, sessionStarted, screen, breakSeconds, upcomingBreakMinutes, checked, goals, isTired, tiredNotice, checkInCorner, shareCall, sessionCode, callName, membersKey, selfStatus, currentActivity, dockDebug, latestDebug, tracking, statusReason, statusReasonOff])
 
   const activeGoals = goals.filter((goal) => goal.trim())
 
@@ -337,10 +347,12 @@ export default function App() {
   useEffect(() => {
     if (!tracking) {
       void window.wydDesktop?.stopTracking()
-      setCurrentActivity('') // don't show the last round's site while idle
+      setCurrentActivity('')
+      setActivityReason('')
       return
     }
-    void window.wydDesktop?.startTracking({ subject: sessionName, goals: activeGoals, sites, notes })
+    const task = activeGoals[0] || 'study'
+    void window.wydDesktop?.startTracking({ subject: task, goals: activeGoals.length ? activeGoals : [task], sites: '', notes: '' })
   }, [tracking])
   const finishPomodoro = () => {
     setTimerRunning(false)
@@ -498,7 +510,7 @@ export default function App() {
 
   if (screen === 'consent') return <IntroductionScreen onComplete={finishTutorial} />
 
-  if (screen === 'goals') return <GoalsScreen goals={goals} setGoals={setGoals} sites={sites} setSites={setSites} notes={notes} setNotes={setNotes} onStart={async () => { if (dbSession) { const error = await db.call('setGoals', { goals: activeGoals }); if (error) return window.alert(error) }; if (!dbSession && entryMode === 'join') setTimerRunning(true); setScreen(dbSession?.state === 'Break' ? 'break' : 'focus') }} />
+  if (screen === 'goals') return <GoalsScreen task={goals[0] ?? ''} setTask={(task) => setGoals([task])} onStart={async () => { const task = (goals[0] ?? '').trim(); if (!task) return; setGoals([task]); if (dbSession) { const error = await db.call('setGoals', { goals: [task] }); if (error) return window.alert(error) }; if (!dbSession && entryMode === 'join') setTimerRunning(true); setScreen(dbSession?.state === 'Break' ? 'break' : 'focus') }} />
 
   if (screen === 'break') return <BreakScreen minutes={upcomingBreakMinutes} seconds={breakSeconds} goals={activeGoals} checked={checked} setChecked={updateChecked} onReturn={dbSession ? undefined : returnFromBreak} onEnd={dbSession?.isHost ? endSession : undefined} />
 
