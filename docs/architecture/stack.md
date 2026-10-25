@@ -6,6 +6,7 @@
 | Desktop | `/` (`src/`) | Electron ^28, electron-vite ^2 | react ^18.2, react-dom, @vitejs/plugin-react ^4, tailwindcss ^4 + @tailwindcss/vite ^4 (renderer), vite ^5.4 (explicit; `npm install` without it breaks), typescript ^5, @anthropic-ai/sdk ^0.27, livekit-client 2.23.0 (exact), spacetimedb 2.13.* (client), undici ^6 (WebSocket for the SDK on Node 18) |
 | Worker | `worker/` | Node 24, ESM, runs `.ts` directly (no build) | @anthropic-ai/sdk ^0.27 |
 | SpacetimeDB module | `spacetimedb/` | SpacetimeDB TS module (V8) | spacetimedb 2.13.*, typescript ~5.6 |
+| Distraction trigger | `vision/` | Python 3.12 venv `vision/.venv`, spawned by desktop main on Goals submit | `requirements.txt`: mediapipe 0.10.21, opencv-contrib-python 4.11.0.86, numpy 1.26.4, pillow 11.1.0, google-generativeai 0.8.5. OCR is macOS Vision (`macos_vision_ocr.swift`), not a pip package. |
 
 Desktop build: `electron.vite.config.ts` (main/preload externalize deps; renderer uses React + Tailwind plugins). Root `tsconfig.json`: ES2020, CommonJS, strict.
 
@@ -32,11 +33,14 @@ Desktop build: `electron.vite.config.ts` (main/preload externalize deps; rendere
 | `WYD_DEBUG` (`1`/`0`; default on unless packaged) | desktop main, `src/main/db/debugLog.ts`: logs DB connect/subscribe/reducer calls/state changes to the terminal and `~/Library/Application Support/attentionmaxx/logs/stdb.log` |
 | `GEMINI_API_KEY` (planned, not read by any code yet) | desktop main, off-task classification (see `overview.md#off-task-pipeline`) |
 | `CARTESIA_API_KEY`, `CARTESIA_AGENT_ID`, `CARTESIA_VOICE_ID` | used only by archived `outdated/` voice code |
+| `GEMINI_API_KEY` | `vision/04_screen_monitor.py` (screen text → Gemini). Not read by the renderer. |
 
 ## Commands
 | Do | Run |
 |---|---|
 | Desktop dev | `npm run dev` (root) |
+| Vision env | `npm run setup:vision` (creates `vision/.venv`) |
+| Distraction trigger alone | `vision/.venv/bin/python vision/facetime_trigger.py "circuits"` (prints `face time`) |
 | Desktop build | `npm run build` |
 | Worker fixtures | `cd worker && npm run fixtures` |
 | Build / publish module | `cd spacetimedb && spacetime build` / `spacetime publish` |

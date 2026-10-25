@@ -7,6 +7,7 @@ Last updated: 2026-10-24. Biggest gap: **activity signals do not reach Spacetime
 |---|---|---|
 | SpacetimeDB module | `spacetimedb/` | Full schema + 37 reducers: sessions, goals, Pomodoro timers, `ingest_signal`, smoothing, fallback judge, scoring, call/nudge trigger, phone pairing, finalize + awards. Configured for maincloud db `calhacks-13-wyd`. See `components/spacetimedb.md`. |
 | Desktop activity tracking | `src/main/activityMonitor.ts` | Polls front app + window title + browser URL (Chrome/Safari/Arc/Brave) every 2 s via `osascript`. macOS only. |
+| Distraction trigger | `vision/facetime_trigger.py`, `vision/detector.py`, `vision/04_screen_monitor.py`, `src/main/facetimeTrigger.ts` | Goals submit starts both detectors. Screen off-task twice in a row, or screen on-task twice with webcam distracted both times, prints `face time`. See `components/vision.md`. |
 | Desktop `.env` loader | `src/main/env.ts` | Loads root `.env` into `process.env` at startup (no override of shell vars). |
 | Desktop categorization | `src/main/categorize.ts` | Rules + cache → contract categories (`coding`…`unknown`). Fills `activity.category`. |
 | Desktop judge | `src/main/claudeJudge.ts` | Claude call every 8 s once session context exists; output drives local alerts (30 s warning, 60 s alert). |
@@ -29,7 +30,7 @@ Last updated: 2026-10-24. Biggest gap: **activity signals do not reach Spacetime
 - Pause: decided against. Host has `take_break` (force a break now, work round only) and `end_session`; the DB-session dock shows Start (lobby) + Take a break only.
 - Session lifecycle (published to maincloud 2026-10-25, additive): resume after restart, ended session → summary with real stats, host End session, 60 s disconnect reaper (`disconnect_timer`), name input (`set_profile`). Module verified via CLI on a scratch db; UI click-through untested.
 - Worker ↔ SpacetimeDB: no subscription to `worker_pending_signal_events`, no `write_judgment`.
-- Vision (MediaPipe), phone sensor page (`phone/`, optional), replay clips.
+- Phone sensor page (`phone/`, optional), replay clips.
 - Screens: replay (no consent screen by decision; see `product/privacy.md`).
 - Worker: summary + replay captions.
 - Inferentia small model (Claude Haiku is the only judge).
@@ -84,7 +85,8 @@ Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` �
 - Every laptop needs `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` in `.env`; each signs its own call token.
 - LiveKit tokens are signed by hand in `livekitToken.ts`: `livekit-server-sdk` needs Node 19+, Electron 28 ships Node 18.
 - Worker runs `.ts` directly: needs Node 24 (`node -v`).
-- `osascript` needs Accessibility/Automation permission for System Events; window titles need Screen Recording.
+- `osascript` needs Accessibility/Automation permission for System Events; window titles need Screen Recording. Screen monitor OCR also needs Screen Recording. `GEMINI_API_KEY` for `vision/04_screen_monitor.py`.
+- Facetime trigger: `npm run setup:vision` once so `vision/.venv` exists. Prints `face time` when the screen is off-task twice in a row, or when the screen is on-task both times and the webcam is distracted both times. Video check-in popups stay on the Demo menu (`OverlayApp.tsx`: `.glass-video`, `.checkin-timer-pop`, `.teammate-share-window`).
 - SpacetimeDB `init` seeds only on first publish; after a schema publish run `seed_defaults`.
 
 Kevin-specific (his machine/setup only):

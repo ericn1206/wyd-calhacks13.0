@@ -2,6 +2,7 @@ import { app, BrowserWindow, desktopCapturer, ipcMain, screen, session as electr
 import { promises as fs } from 'fs'
 import { join } from 'path'
 import { ActivityMonitor } from './activityMonitor'
+import { startFacetimeTrigger, stopFacetimeTrigger } from './facetimeTrigger'
 import type { SessionContext } from './claudeJudge'
 import { loadEnv } from './env'
 import { createCallToken } from './livekitToken'
@@ -187,6 +188,8 @@ function registerDesktopApi(): void {
     const context: SessionContext = { subject: ctx.subject, goals: ctx.goals, sites: '', notes: '' }
     monitor?.setSessionContext(context)
     monitor?.start()
+    const goal = [ctx?.subject, ...(ctx?.goals ?? [])].filter((part) => part && part.trim()).join('. ') || 'study'
+    startFacetimeTrigger(goal)
   })
 }
 
@@ -215,6 +218,9 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   monitor?.stop()
+  stopFacetimeTrigger()
   stdb.disconnect()
   if (process.platform !== 'darwin') app.quit()
 })
+
+app.on('before-quit', () => stopFacetimeTrigger())
