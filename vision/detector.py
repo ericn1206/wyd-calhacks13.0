@@ -204,9 +204,12 @@ clip_requests = queue.Queue()
 def watch_stdin():
     for line in sys.stdin:
         if line.startswith('clip '):
+            print(f'[clipdbg] detector: stdin clip request {line[5:].strip()}', file=sys.stderr, flush=True)
             clip_requests.put(line[5:].strip())
         elif line.startswith('clip-cam '):
+            print(f'[clipdbg] detector: stdin clip-cam request {line[9:].strip()}', file=sys.stderr, flush=True)
             clip_requests.put((line[9:].strip(), True))  # webcam-only clip of a teammate who joined the check-in
+    print('[clipdbg] detector: stdin closed, stopping', file=sys.stderr, flush=True)
     stop.set()
 
 
@@ -243,7 +246,10 @@ def main():
     parser.add_argument('--fps', type=float, default=10)
     args = parser.parse_args()
 
-    signal.signal(signal.SIGTERM, lambda *_: stop.set())
+    def on_sigterm(*_):
+        print('[clipdbg] detector: SIGTERM, stopping (an open clip job is flushed)', file=sys.stderr, flush=True)
+        stop.set()
+    signal.signal(signal.SIGTERM, on_sigterm)
     threading.Thread(target=watch_stdin, daemon=True).start()
 
     model = TreeModel(args.model)
@@ -321,8 +327,10 @@ def main():
                 pump(rest)
     finally:
         cap.release()
+        print(f'[clipdbg] detector: loop ended, open job={clips.job is not None}, flushing', file=sys.stderr, flush=True)
         clips.tick(time.monotonic(), flush=True)
         clips.wait()
+        print('[clipdbg] detector: clip writers done, exiting', file=sys.stderr, flush=True)
     return 0
 
 

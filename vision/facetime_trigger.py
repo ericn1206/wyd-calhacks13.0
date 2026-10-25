@@ -54,6 +54,11 @@ def load_screen():
     return mod
 
 
+def dbg(msg):
+    """Timestamped stderr line for tracing clips and shutdown (grep `[clipdbg]`)."""
+    print(f'[clipdbg] {time.strftime("%H:%M:%S")}.{int(time.time() * 1000) % 1000:03d} trigger: {msg}', file=sys.stderr, flush=True)
+
+
 def read_webcam(proc):
     global webcam_distracted, saw_webcam, webcam_last
     if proc.stdout is None:
@@ -67,6 +72,7 @@ def read_webcam(proc):
         except json.JSONDecodeError:
             continue
         if "clip" in msg:
+            dbg(f'relaying detector reply to Electron: {json.dumps(msg)}')
             print("clip " + json.dumps(msg), flush=True)
             continue
         with lock:
@@ -82,6 +88,7 @@ def request_stop(grace=None):
     watchdog kills the webcam detector and exits regardless: nothing may keep the camera and screen capture
     running after the app is gone."""
     global _stopping
+    dbg(f'request_stop (already stopping={_stopping}), watchdog {STOP_GRACE_SEC if grace is None else grace}s')
     stop.set()
     if _stopping:
         return
@@ -92,7 +99,9 @@ def request_stop(grace=None):
     def watchdog():
         time.sleep(wait)
         proc = detector_proc
-        if proc is not None and proc.poll() is None:
+        alive = proc is not None and proc.poll() is None
+        dbg(f'watchdog fired after {wait}s: detector still running={alive}; killing it and exiting (an unflushed clip is lost)')
+        if alive:
             proc.kill()
         exit_now(0)
 
@@ -108,13 +117,17 @@ def forward_clip_requests(proc):
     """Pass `clip <path>` lines from Electron on to the detector. stdin closing means Electron is gone: stop."""
     for line in sys.stdin:
         if not line.startswith(("clip ", "clip-cam ")) or stop.is_set():
+            dbg(f'dropped stdin line (stopping={stop.is_set()}): {line.strip()[:80]}')
             continue
+        dbg(f'forwarding to detector: {line.strip()}')
         try:
             if proc.stdin is not None:
                 proc.stdin.write(line.encode())
                 proc.stdin.flush()
         except (BrokenPipeError, ValueError, OSError):
+            dbg('detector stdin is gone; clip request lost')
             return
+    dbg('Electron closed stdin')
     request_stop()
 
 
@@ -229,12 +242,15 @@ def main():
                 break
     finally:
         stop.set()
+        dbg('main loop ended; terminating detector')
         if proc.stdin:
             proc.stdin.close()
         proc.terminate()
         try:
             proc.wait(timeout=3)
+            dbg(f'detector exited ({proc.returncode})')
         except subprocess.TimeoutExpired:
+            dbg('detector did not exit in 3s; killing it (an unflushed clip is lost)')
             proc.kill()
     return 0
 

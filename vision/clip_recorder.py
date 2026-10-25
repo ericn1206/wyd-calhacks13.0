@@ -8,6 +8,7 @@ size; the compiler overlays it on the drifter's clip.
 """
 
 import collections
+import sys
 import threading
 import time
 
@@ -62,6 +63,11 @@ def compose(screen, cam):
     return canvas
 
 
+def dbg(msg):
+    """One timestamped stderr line for tracing a clip from request to reply (grep `[clipdbg]`)."""
+    print(f'[clipdbg] {time.strftime("%H:%M:%S")}.{int(time.time() * 1000) % 1000:03d} recorder: {msg}', file=sys.stderr, flush=True)
+
+
 class ClipRecorder:
     """Thread-safe: the camera loop calls add_cam, a sampler thread calls add_screen, the camera loop calls request/tick."""
 
@@ -106,6 +112,7 @@ class ClipRecorder:
                     'moment_ms': int(time.time() * 1000),
                     'end_mono': now + POST_SECS,
                 }
+        dbg(f'request {path} busy={busy} cam_frames={len(self.cam)} screen_frames={len(self.screen)}')
         if busy:
             self.emit({'clip': None, 'error': 'busy', 'path': path})
 
@@ -115,6 +122,7 @@ class ClipRecorder:
             if job is None or (now < job['end_mono'] and not flush):
                 return
             self.job = None
+        dbg(f'writing {job["path"]} early={now < job["end_mono"]} (flush={flush}) cam={len(job["cam"])} screen={len(job["screen"])}')
         thread = threading.Thread(target=self._write, args=(job,), daemon=False)
         self.writers.append(thread)
         thread.start()
@@ -124,6 +132,7 @@ class ClipRecorder:
             thread.join(timeout=60)
 
     def _write(self, job):
+        wrote_from = time.monotonic()
         try:
             cam, screen = job['cam'], job['screen']
             if not cam and not screen:
@@ -168,6 +177,7 @@ class ClipRecorder:
                 else:
                     writer.write(compose(current('screen', screen, at), current('cam', cam, at)))
             writer.release()
+            dbg(f'wrote {job["path"]} in {time.monotonic() - wrote_from:.1f}s, {count} frames')
             self.emit({
                 'clip': job['path'],
                 't': job['moment_ms'],
@@ -180,6 +190,7 @@ class ClipRecorder:
                 'path': job['path'],
             })
         except Exception as err:
+            dbg(f'write failed after {time.monotonic() - wrote_from:.1f}s: {type(err).__name__}: {err}')
             self.emit({'clip': None, 'error': f'{type(err).__name__}: {err}', 'path': job['path']})
 
 

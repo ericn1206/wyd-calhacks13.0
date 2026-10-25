@@ -105,16 +105,19 @@ export function startFacetimeTrigger(
   })
   proc.stderr?.on('data', (buf: Buffer) => process.stderr.write(buf))
   proc.stdin?.on('error', () => { /* trigger already exited */ })
-  proc.on('exit', (code) => {
+  proc.on('exit', (code, signal) => {
     if (child === proc) child = null
-    if (code) console.error(`[facetime] trigger exited (${code})`)
+    console.log(`[facetime] trigger exited code=${code} signal=${signal}`)
   })
 }
 
 /** Ask the webcam detector for a 30 s clip (10 s before now, 20 s after) written to `path`. False when tracking is off. */
 export function requestClip(path: string, camOnly = false): boolean {
   const stdin = child?.stdin
-  if (!stdin || stdin.destroyed) return false
+  if (!stdin || stdin.destroyed) {
+    console.warn(`[clip] requestClip: no trigger process (child=${child !== null}), request dropped`)
+    return false
+  }
   // `clip-cam`: webcam only, from now on (20 s) - the clip of a teammate who joined the drifter's check-in.
   stdin.write(`${camOnly ? 'clip-cam' : 'clip'} ${path}\n`)
   return true
@@ -124,6 +127,7 @@ export function stopFacetimeTrigger(): void {
   const proc = child
   child = null
   if (!proc) return
+  console.log(`[clip] stopFacetimeTrigger: stopping pid ${proc.pid}; a clip still recording is flushed only if the detector is terminated before the trigger's 4 s watchdog`)
   proc.stdin?.end() // the trigger treats a closed pipe as "the app is gone" and stops itself
   proc.kill('SIGTERM')
   // The trigger has its own watchdog; this is the backstop if it is stuck anyway (e.g. blocked in a network call).
