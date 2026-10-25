@@ -160,7 +160,10 @@ function recordDetectorDebug(entry: DetectorDebug): void {
 let overlayWanted = false
 
 function publishFacetime(): void {
-  if (!overlayWanted) return
+  if (!overlayWanted) {
+    console.warn('[clip] face time ignored: overlayWanted=false (main window not on focus/break), so no check-in and no clip')
+    return
+  }
   if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.showInactive()
   sendTo(overlayWindow, 'facetime:start')
   recordClip()
@@ -170,11 +173,18 @@ function publishFacetime(): void {
 // the detector skips a request while it is still writing the previous clip.
 function recordClip(): void {
   const snap = stdb.snapshot()
-  if (!snap.connected || !snap.tables.sessions.some(s => (s.state as { tag: string }).tag !== 'Ended')) return
-  if (!requestClip(newClipPath())) console.warn('[clip] tracking is off; no clip')
+  const states = snap.tables.sessions.map(s => (s.state as { tag: string }).tag)
+  if (!snap.connected || !states.some(tag => tag !== 'Ended')) {
+    console.warn(`[clip] not requested: connected=${snap.connected} session states=[${states.join(',')}]`)
+    return
+  }
+  const path = newClipPath()
+  if (requestClip(path)) console.log(`[clip] requested ${path}`)
+  else console.warn('[clip] tracking is off; no clip')
 }
 
 function handleClip(info: ClipInfo): void {
+  console.log('[clip] detector reply:', JSON.stringify(info))
   if (!info.clip) console.warn('[clip] detector could not record:', info.error)
   else void uploadClip(stdb, info)
 }

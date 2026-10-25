@@ -48,6 +48,7 @@ export async function uploadClip(stdb: StdbClient, info: ClipInfo): Promise<void
     const bytes = readFileSync(path)
     const chunkCount = Math.ceil(bytes.length / CHUNK_BYTES)
     const clipKey = randomUUID()
+    console.log(`[clip] uploading ${path}: ${bytes.length} bytes, ${chunkCount} chunks, key ${clipKey}, ${info.width}x${info.height} ${info.durationMs} ms`)
     await withRetry('begin', () => stdb.call('beginSessionClip', {
       clipKey,
       momentAtMs: BigInt(info.t),
