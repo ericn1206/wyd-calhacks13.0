@@ -27,7 +27,7 @@
 | Pause/stop for everyone | Module has no pause reducer; add one (contract change) or drop pause/stop from the host console. |
 | Gemini pipeline vs project rules | `CLAUDE.md` says rules + cache first, only ambiguous titles go to a model, Claude judge. The decided pipeline calls Gemini every few seconds on OCR text. Update `CLAUDE.md`/`privacy.md` wording or add a cache; cost + on-screen text sent to Gemini. |
 | Which judge runs in the demo | Desktop `claudeJudge.ts`, worker `judge.ts`, or DB fallback. |
-| Timing numbers | Spec (2 min / 30 min / ~60 s) vs DB defaults (~60 s / 600 s / 90 s) vs LiveKit call 90 s. |
+| Timing numbers | Spec (2 min / 30 min / ~60 s) vs DB defaults (~60 s / 600 s / 90 s) vs LiveKit call 30 s. |
 | Inferentia small model vs Haiku only | Not started. |
 | Facial expression (DeepFace) | Fields exist in DB; not in the contract. |
 | Alerts/integrations: Creao vs Factory, Slack recap, Notability PDF, Elastic | All optional; none built. |

@@ -13,7 +13,7 @@ Each laptop (Electron)                         Phone (web page, optional)
                judge: Inferentia small model (fallback Claude Haiku)
                summary + replay captions: Claude
 
-CallIncoming alert (DB) → each laptop joins LiveKit room lockin-<CODE> → 90 s video check-in
+CallIncoming alert (DB) → each laptop joins LiveKit room lockin-<CODE> → 30 s video check-in
 ```
 SpacetimeDB owns session state, smoothing, cooldowns, call/nudge triggers, and Pomodoro timers (scheduled reducers). Clients subscribe to `my_*` views. See `../components/spacetimedb.md`.
 
