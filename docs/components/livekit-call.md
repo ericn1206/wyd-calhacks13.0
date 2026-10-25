@@ -25,6 +25,9 @@ Room name, identity, token grants, attributes (`callEndsAt`, `inCall`): `../arch
 | Call length | `CALL_DURATION_MS` 30 s, same end time for everyone (copied into each joiner's `callEndsAt`) |
 | While sharing | Our windows are never the shared source, so the overlay's camera tiles can't appear (macOS 15+ ScreenCaptureKit ignores `setContentProtection`, which is still set as a fallback) |
 
+## Break room
+`components/session/BreakRoom.tsx`, rendered by `BreakScreen` (main window) in DB sessions only: separate room `lockin-<CODE>-break`, everyone connects when the break starts (no prompt), camera + mic on, video grid for the rest of the break (`startCall({ durationMs })`); leaving the break screen disconnects. No screen share, no mute/camera buttons.
+
 ## Run & test
 1. Each laptop: `.env` `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` (`../architecture/stack.md`); Screen Recording allowed for Electron.
 2. Two laptops, or `npm run dev:two`: same session, host presses Start, one goes off task ~20 s → the other gets the invite → Join → sees the drifter's screen.
