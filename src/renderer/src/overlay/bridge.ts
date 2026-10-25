@@ -9,6 +9,12 @@ export type OverlayState = {
   pomodoroMinutes: number
   pomodorosDone: number
   timerRunning: boolean
+  /** Session has started (DB: Active/Break; local: timer has run). Stop is shown only then. */
+  started: boolean
+  /** Break screen is open: the dock shows the break countdown instead of the focus timer. */
+  onBreak: boolean
+  breakSeconds: number
+  breakMinutes: number
   checked: boolean[]
   currentGoal: string
   isTired: boolean
@@ -29,6 +35,7 @@ export type OverlayAction =
   | { type: 'signalTired' }
   | { type: 'dismissTired' }
   | { type: 'takeBreak' }
+  | { type: 'endBreak' }
   | { type: 'leave' }
 
 export type ToOverlay =
