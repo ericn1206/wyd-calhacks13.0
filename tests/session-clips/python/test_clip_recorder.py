@@ -175,8 +175,9 @@ class ClipTests(RecorderCase):
     def test_second_request_while_recording_is_rejected(self):
         self.feed(70, 100)
         self.rec.request(self.path, 100.0)
-        self.rec.request(os.path.join(self.dir.name, "other.mp4"), 101.0)
-        self.assertEqual(self.emitted, [{"clip": None, "error": "busy"}])
+        other = os.path.join(self.dir.name, "other.mp4")
+        self.rec.request(other, 101.0)
+        self.assertEqual(self.emitted, [{"clip": None, "error": "busy", "path": other}])
         self.assertEqual(self.rec.job["path"], self.path)
 
     def test_new_request_allowed_after_the_clip_is_written(self):

@@ -52,6 +52,16 @@ describe('uploadClip', () => {
     assert.deepEqual(calls.filter(c => c.name === 'uploadClipChunk').map(c => c.args['seq']), [0, 1, 2])
   })
 
+  it('marks a teammate\'s webcam clip with the join- key prefix, an own clip never has it', async () => {
+    const { stdb: a, calls: joined } = fakeStdb()
+    await uploadClip(a, makeClip(100).info, { joiner: true })
+    const { stdb: b, calls: own } = fakeStdb()
+    await uploadClip(b, makeClip(100).info)
+    assert.match(String(joined[0].args['clipKey']), /^join-.{8,}$/)
+    assert.ok(String(joined[0].args['clipKey']).length <= 64)
+    assert.ok(!String(own[0].args['clipKey']).startsWith('join-'))
+  })
+
   it('describes the clip in begin: ids, timing, format, size, chunk count', async () => {
     const { info, data } = makeClip(CHUNK + 1)
     const { stdb, calls } = fakeStdb()

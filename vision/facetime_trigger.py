@@ -107,7 +107,7 @@ def install_signal_handlers():
 def forward_clip_requests(proc):
     """Pass `clip <path>` lines from Electron on to the detector. stdin closing means Electron is gone: stop."""
     for line in sys.stdin:
-        if not line.startswith("clip ") or stop.is_set():
+        if not line.startswith(("clip ", "clip-cam ")) or stop.is_set():
             continue
         try:
             if proc.stdin is not None:

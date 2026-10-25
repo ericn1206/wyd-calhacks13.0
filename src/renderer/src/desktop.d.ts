@@ -14,6 +14,7 @@ declare global {
       setAlwaysOnTop(enabled: boolean): Promise<void>
       setIgnoreMouseEvents(enabled: boolean): Promise<void>
       setCaptureHidden(hidden: boolean): Promise<void>
+      recordJoinClip(): Promise<void>
       moveToCorner(corner: CheckInCorner, size?: { width?: number; height?: number }): Promise<void>
       getDisplays(): Promise<unknown[]>
       setOverlayVisible(visible: boolean): Promise<void>

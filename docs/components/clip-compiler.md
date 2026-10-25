@@ -7,8 +7,8 @@ Purpose: after a session ends, join its clips (`session_clip`, `contracts.md#ses
 |---|---|
 | `worker/compile/main.ts` | Entry: env → `startCompiler` |
 | `worker/compile/compiler.ts` | Subscribes as a worker identity, decides, renders, reports (`setSessionCompilation`) |
-| `worker/compile/plan.ts` | Pure: `orderClips`, `dueSessions`, `videoName`, `staleVideos` |
-| `worker/compile/render.ts` | ffmpeg join + soundtrack (`ffmpegArgs`, `renderCompilation`) |
+| `worker/compile/plan.ts` | Pure: `orderClips`, `groupClips` (drifter clips + joiners), `dueSessions`, `videoName`, `staleVideos` |
+| `worker/compile/render.ts` | ffmpeg join + joiner insets + soundtrack (`ffmpegArgs`, `renderCompilation`) |
 | `worker/compile/audio/background.mp3` | Soundtrack; you supply it (committed so every host has it) |
 | `worker/compile/serve.ts` | HTTP: `GET /compilations/session-<id>-<n>.mp4` (Range, CORS `*`), `GET /session/<id>` (shareable page), `GET /session/<id>/status` (JSON), `GET /health` |
 | `worker/compile/network.ts` | `lanAddress()`: the laptop's address for shareable links |
@@ -23,6 +23,7 @@ worker: wait COMPILE_QUIET_SECS since the last change (clips of the last 20 s ar
   → setSessionCompilation(Ready, clipCount n, url) → members read it from my_session_compilations (desktop snapshot key `compilations`)
 ```
 - Views list only sessions whose complete clips are not already in a `Ready` compilation of the same `clipCount`: a late clip makes the session reappear, it is re-rendered to a new file name (`-<n>`), and older files of that session are deleted.
+- Teammates who joined a check-in: their webcam-only `join-` clips (`contracts.md#session-clips`) are not segments. `groupClips` attaches each to the drifter's clip it overlaps most (other member, ≥ 3 s, max 4); `render.ts` scales it to 200 px wide with a white border, shifts it to start at `startedAtMs − base.startedAtMs`, and overlays it bottom-left (`overlay … eof_action=pass`, side by side from x=20; the drifter's own webcam is bottom-right). The segment keeps the drifter clip's length. `clip_count` and the file name (`-<n>`) count **all** clips, joiners included (the module compares that number). Unmatched teammate clips are left out and named in `error`. An unreadable teammate clip drops only its inset.
 - Order: `momentAtMs`, then clip id. Output: 1280×720, 10 fps, H.264 (crf 20), faststart. Audio: `worker/compile/audio/background.mp3` (or `COMPILE_AUDIO`) is laid over the whole video, looped if shorter, cut at the video's end (AAC 160k); file absent = silent video. Checked on every render, no restart needed; the clips' own audio is not used. Each input is fitted into the frame (letterboxed, never stretched) and joined with ffmpeg's concat filter (older 320×240 webcam-only clips, mixed size/codec are fine).
 - `Failed` → error text in the row; retried after 60 s.
 - Connection: drops are logged (`disconnected; reconnecting`) and retried with backoff 2 s → 30 s; the page reports `offline` meanwhile. Every database call has a 20 s timeout (a call on a dropped connection never answers and would otherwise block the worker).
@@ -68,7 +69,7 @@ Two compilers would write different URLs into the same rows. A compiler therefor
 `tests/session-clips/` (`npm run test:clips`): `compile-plan`, `compile-serve`, `compile-render` (needs ffmpeg), `network`, `compile.integration` and `compile.lease.integration` (scratch db + `WYD_TEST_WORKER_TOKEN`; full flow incl. late clip, empty session, reconnect, corrupt clip, lease).
 
 ## Gotchas
-- A clip with no readable video (checked with ffprobe, which must sit next to ffmpeg; without it nothing is skipped) is left out of the video instead of failing the session; the row stays Ready with `error` = `N unreadable clip(s) left out (ids …)` and `clip_count` still counts it (the module compares that number).
+- A clip with no readable video (checked with ffprobe, which must sit next to ffmpeg; without it nothing is skipped) is left out of the video instead of failing the session; the row stays Ready with `error` = `N unreadable clip(s) left out (ids …)` (plus `; N teammate clip(s) without a matching check-in left out (ids …)` for unmatched `join-` clips) and `clip_count` still counts it (the module compares that number).
 - If every clip of a session is unreadable the render fails (`no readable clips`) and is retried every 60 s.
 - Videos are tied to the machine's folder (`COMPILE_OUT_DIR`), so a new machine or a wiped folder would leave Ready rows without files. A compiler that holds the lease therefore checks every Ready row each poll: if `session-<id>-<n>.mp4` is missing it sets the row back to `Rendering` (the module's views then list that session's clips again, since they hide Ready sessions), and the normal path renders it (up to 5 per poll, no quiet wait). Meanwhile the page says "putting your clips together". Off without a lease (`rebuildMissing`): several compilers with different folders would keep invalidating each other's videos. A first start on a new machine re-renders every old session, which streams their clips again.
 - `session_compilation.url` holds a path (`/compilations/session-<id>-<n>.mp4`), not an address: a changed IP or host never stales it. Readers add `app_setting` `clip_page_base_url` (desktop: `clipInfo().clipVideo`). Rows written before 2026-10-25 hold a full address; readers keep those as they are.

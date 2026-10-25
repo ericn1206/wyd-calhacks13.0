@@ -168,15 +168,24 @@ function publishFacetime(): void {
 
 // Clip of the off-task moment (10 s before, 20 s after) for the session's compilation. Only in a DB session;
 // the detector skips a request while it is still writing the previous clip.
-function recordClip(): void {
+function recordClip(camOnly = false): void {
   const snap = stdb.snapshot()
   if (!snap.connected || !snap.tables.sessions.some(s => (s.state as { tag: string }).tag !== 'Ended')) return
-  if (!requestClip(newClipPath())) console.warn('[clip] tracking is off; no clip')
+  const path = newClipPath()
+  if (camOnly) joinerClipPaths.add(path)
+  if (!requestClip(path, camOnly)) {
+    joinerClipPaths.delete(path)
+    console.warn('[clip] tracking is off; no clip')
+  }
 }
 
+// Webcam-only clips of check-ins this laptop joined (not its own drift); they upload as `join-` clips.
+const joinerClipPaths = new Set<string>()
+
 function handleClip(info: ClipInfo): void {
+  const joiner = info.path !== undefined && joinerClipPaths.delete(info.path)
   if (!info.clip) console.warn('[clip] detector could not record:', info.error)
-  else void uploadClip(stdb, info)
+  else void uploadClip(stdb, info, { joiner })
 }
 
 function registerDesktopApi(): void {
@@ -195,6 +204,8 @@ function registerDesktopApi(): void {
   })
   // While this laptop shares its screen, hide the calling window (overlay with everyone's camera tiles)
   // from screen capture (macOS: excluded from the capture stream, still visible to the user).
+  // The renderer joined a teammate's check-in call: record my webcam so it appears in their clip.
+  ipcMain.handle('wyd:clip:join', () => recordClip(true))
   ipcMain.handle('wyd:window:capture-hidden', (event, hidden: boolean) => {
     BrowserWindow.fromWebContents(event.sender)?.setContentProtection(Boolean(hidden))
   })

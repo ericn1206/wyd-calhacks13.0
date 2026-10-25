@@ -63,3 +63,59 @@ export const isVideoName = (name: string) => /^session-\d+-\d+\.mp4$/.test(name)
 /** Other videos of the same session (older renders), to delete once a newer one is Ready. */
 export const staleVideos = (files: readonly string[], sessionId: bigint, keep: string) =>
   files.filter(f => isVideoName(f) && f !== keep && f.startsWith(`session-${sessionId}-`))
+
+/** `clip_key` prefix of a teammate's webcam-only clip (written by `src/main/clipUpload.ts`); duplicated because that file imports electron. */
+export const JOINER_KEY_PREFIX = 'join-'
+/** A joiner clip must overlap the drifter's clip at least this long to be attached to it. */
+export const MIN_JOIN_OVERLAP_MS = 3000
+/** Insets that fit along the bottom-left of the frame without touching the drifter's own inset. */
+export const MAX_JOINERS_PER_CLIP = 4
+
+export interface JoinPlanClip extends PlanClip {
+  clipKey: string
+  memberId: bigint
+  startedAtMs: bigint
+  durationMs: number
+}
+
+export interface ClipGroup<T> {
+  /** The drifter's clip: one segment of the video. */
+  base: T
+  /** Teammates who joined that check-in, strongest overlap first. */
+  joiners: T[]
+}
+
+const overlapMs = (a: JoinPlanClip, b: JoinPlanClip): number => {
+  const start = a.startedAtMs > b.startedAtMs ? a.startedAtMs : b.startedAtMs
+  const aEnd = a.startedAtMs + BigInt(a.durationMs)
+  const bEnd = b.startedAtMs + BigInt(b.durationMs)
+  return Number((aEnd < bEnd ? aEnd : bEnd) - start)
+}
+
+/**
+ * Segments of the video: every clip without the `join-` key prefix, in `orderClips` order, each with the joiner
+ * clips (other members) that overlap it most. A joiner clip with no drifter clip to attach to (overlap under
+ * `MIN_JOIN_OVERLAP_MS`, same member, or beyond `MAX_JOINERS_PER_CLIP`) is an orphan and is left out.
+ */
+export function groupClips<T extends JoinPlanClip>(clips: readonly T[]): { groups: ClipGroup<T>[]; orphans: T[] } {
+  const isJoiner = (c: T) => c.clipKey.startsWith(JOINER_KEY_PREFIX)
+  const groups: ClipGroup<T>[] = orderClips(clips.filter(c => !isJoiner(c))).map(base => ({ base, joiners: [] }))
+  const scored = new Map<ClipGroup<T>, { clip: T; overlap: number }[]>(groups.map(g => [g, []]))
+  const orphans: T[] = []
+  for (const joiner of orderClips(clips.filter(isJoiner))) {
+    let best: { group: ClipGroup<T>; overlap: number } | undefined
+    for (const group of groups) {
+      if (group.base.memberId === joiner.memberId) continue
+      const overlap = overlapMs(group.base, joiner)
+      if (overlap >= MIN_JOIN_OVERLAP_MS && (!best || overlap > best.overlap)) best = { group, overlap }
+    }
+    if (best) scored.get(best.group)!.push({ clip: joiner, overlap: best.overlap })
+    else orphans.push(joiner)
+  }
+  for (const group of groups) {
+    const list = scored.get(group)!.sort((a, b) => b.overlap - a.overlap)
+    group.joiners = list.slice(0, MAX_JOINERS_PER_CLIP).map(x => x.clip)
+    orphans.push(...list.slice(MAX_JOINERS_PER_CLIP).map(x => x.clip))
+  }
+  return { groups, orphans }
+}

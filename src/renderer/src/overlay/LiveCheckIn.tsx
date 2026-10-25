@@ -133,6 +133,8 @@ export function LiveCheckIn({ sessionCode, displayName, corner, onActive, onLoca
     handledCall.current = invite.endsAt
     setInvite(null)
     circle.joinCall()
+    // Record my webcam for the drifter's clip (the compiler overlays it); never for my own call.
+    void window.wydDesktop?.recordJoinClip?.().catch(() => undefined)
   }
   const rosterKey = circle.peers.map((peer) => `${peer.peerId}:${peer.name}`).join('|')
 

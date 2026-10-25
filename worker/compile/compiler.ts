@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { dirname, join } from 'node:path'
 import { DbConnection } from '../../src/main/db/module_bindings/index.ts'
 import type { CompileState } from './page.ts'
-import { dueSessions, missingVideos, orderClips, staleVideos, videoName } from './plan.ts'
+import { dueSessions, groupClips, missingVideos, staleVideos, videoName } from './plan.ts'
 import type { PlanClip } from './plan.ts'
 import { renderCompilation } from './render.ts'
 import { createVideoServer, VIDEO_PATH } from './serve.ts'
@@ -235,8 +235,12 @@ export async function startCompiler(o: CompilerOptions): Promise<RunningCompiler
     rendering.add(sessionId)
     rebuilding.delete(sessionId)
     try {
-      const clips = orderClips([...c.db.workerSessionClips.iter()].filter(clip => clip.sessionId === sessionId))
-      o.log(`session ${sessionId}: rendering ${clips.length} clip(s)`)
+      // `clips` = everything the session has (what the module compares as clipCount); the video's segments are the
+      // drifters' clips, with the joined teammates' webcam clips laid over the one they overlap.
+      const clips = [...c.db.workerSessionClips.iter()].filter(clip => clip.sessionId === sessionId)
+      const { groups, orphans } = groupClips(clips)
+      if (groups.length === 0) throw new Error(`no clips to show (${orphans.length} teammate clip(s) without a check-in)`)
+      o.log(`session ${sessionId}: rendering ${groups.length} clip(s) + ${clips.length - groups.length - orphans.length} teammate video(s)`)
       await setState(c, sessionId, 'Rendering', 0)
       const chunks = new Map<bigint, { seq: number; data: Uint8Array }[]>()
       for (const ch of c.db.workerSessionClipChunks.iter()) {
@@ -244,18 +248,29 @@ export async function startCompiler(o: CompilerOptions): Promise<RunningCompiler
         list.push({ seq: ch.seq, data: ch.data })
         chunks.set(ch.clipId, list)
       }
-      const files = clips.map(clip => {
+      const fileOf = (clip: (typeof clips)[number]) => {
         const parts = (chunks.get(clip.id) ?? []).sort((a, b) => a.seq - b.seq).map(p => p.data)
         const file = Buffer.concat(parts)
         if (file.length !== clip.sizeBytes) throw new Error(`clip ${clip.id}: ${file.length}/${clip.sizeBytes} bytes held`)
         return file
-      })
+      }
+      const bases = groups.map(g => g.base)
+      const files = bases.map(fileOf)
+      const joiners = groups.flatMap((g, base) => g.joiners.map(clip => ({
+        clip,
+        input: { base, data: fileOf(clip), offsetSecs: Math.max(0, Number(clip.startedAtMs) - Number(g.base.startedAtMs)) / 1000 }
+      })))
       const name = videoName(sessionId, clips.length)
       const started = Date.now()
-      const { skipped } = await renderCompilation(files, join(o.outDir, name), o.ffmpegBin, o.audioPath)
+      const { skipped, skippedJoiners } = await renderCompilation(files, join(o.outDir, name), o.ffmpegBin, o.audioPath, joiners.map(j => j.input))
       for (const old of staleVideos(readdirSync(o.outDir), sessionId, name)) rmSync(join(o.outDir, old), { force: true })
-      // clipCount stays the number of clips the session has (what the module compares), even when some were unreadable.
-      const note = skipped.length ? `${skipped.length} unreadable clip(s) left out (ids ${skipped.map(i => clips[i].id).join(', ')})` : undefined
+      // clipCount stays the number of clips the session has (what the module compares), even when some were left out.
+      const unreadable = [...skipped.map(i => bases[i].id), ...skippedJoiners.map(i => joiners[i].clip.id)]
+      const notes = [
+        unreadable.length ? `${unreadable.length} unreadable clip(s) left out (ids ${unreadable.join(', ')})` : '',
+        orphans.length ? `${orphans.length} teammate clip(s) without a matching check-in left out (ids ${orphans.map(clip => clip.id).join(', ')})` : ''
+      ].filter(Boolean)
+      const note = notes.length ? notes.join('; ') : undefined
       if (note) o.log(`session ${sessionId}: ${note}`)
       // Stored without the host: clients add the current clip_page_base_url, so a changed address never stales it.
       await setState(c, sessionId, 'Ready', clips.length, `${VIDEO_PATH}${name}`, note)

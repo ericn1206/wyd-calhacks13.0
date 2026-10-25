@@ -8,6 +8,12 @@ import type { ClipInfo } from './facetimeTrigger'
 const CHUNK_BYTES = 240 * 1024 // module limit is 256 KiB per upload_clip_chunk
 const RETRIES = 2
 
+/**
+ * `clip_key` prefix of a webcam-only clip from a teammate who joined someone's check-in. The compiler
+ * (`worker/compile/plan.ts`) lays it over the drifter's clip it overlaps in time.
+ */
+export const JOINER_KEY_PREFIX = 'join-'
+
 /** Local clips live here until uploaded (or the next app start). */
 export function clipDir(): string {
   const dir = join(app.getPath('userData'), 'clips')
@@ -40,14 +46,14 @@ async function withRetry(label: string, fn: () => Promise<void>): Promise<void> 
  * Send a finished clip to SpacetimeDB (`begin_session_clip` → `upload_clip_chunk` × n → `finish_session_clip`)
  * and delete the local file afterwards, whether or not the upload worked.
  */
-export async function uploadClip(stdb: StdbClient, info: ClipInfo): Promise<void> {
+export async function uploadClip(stdb: StdbClient, info: ClipInfo, opts: { joiner?: boolean } = {}): Promise<void> {
   const path = info.clip
   if (!path) return
   const started = Date.now()
   try {
     const bytes = readFileSync(path)
     const chunkCount = Math.ceil(bytes.length / CHUNK_BYTES)
-    const clipKey = randomUUID()
+    const clipKey = opts.joiner ? `${JOINER_KEY_PREFIX}${randomUUID()}` : randomUUID()
     await withRetry('begin', () => stdb.call('beginSessionClip', {
       clipKey,
       momentAtMs: BigInt(info.t),

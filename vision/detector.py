@@ -175,6 +175,8 @@ def watch_stdin():
     for line in sys.stdin:
         if line.startswith('clip '):
             clip_requests.put(line[5:].strip())
+        elif line.startswith('clip-cam '):
+            clip_requests.put((line[9:].strip(), True))  # webcam-only clip of a teammate who joined the check-in
     stop.set()
 
 
@@ -243,7 +245,9 @@ def main():
             now = time.monotonic()
             clips.add_cam(raw, now)  # the camera's own frame, not the 640x480 one the model needs
             while not clip_requests.empty():
-                clips.request(clip_requests.get(), now)
+                request = clip_requests.get()
+                path, cam_only = request if isinstance(request, tuple) else (request, False)
+                clips.request(path, now, cam_only)
             clips.tick(now)
 
             h, w, _ = frame.shape

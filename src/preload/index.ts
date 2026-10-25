@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('wydDesktop', {
   setAlwaysOnTop: (enabled: boolean) => ipcRenderer.invoke('wyd:window:always-on-top', enabled),
   setIgnoreMouseEvents: (enabled: boolean) => ipcRenderer.invoke('wyd:window:ignore-mouse', enabled),
   setCaptureHidden: (hidden: boolean) => ipcRenderer.invoke('wyd:window:capture-hidden', hidden),
+  // Joined a teammate's check-in: record + upload my webcam for their clip (src/main/clipUpload.ts).
+  recordJoinClip: () => ipcRenderer.invoke('wyd:clip:join'),
   moveToCorner: (corner: CheckInCorner, size?: { width?: number; height?: number }) =>
     ipcRenderer.invoke('wyd:window:move-to-corner', corner, size),
   getDisplays: () => ipcRenderer.invoke('wyd:displays:get'),

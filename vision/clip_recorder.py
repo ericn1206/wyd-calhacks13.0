@@ -3,6 +3,8 @@
 Both streams are recorded locally on the laptop of the person who drifted (never taken from the LiveKit call).
 A clip request freezes the last PRE_SECS, keeps recording for POST_SECS, then composes 1280x720 H.264 at CLIP_FPS:
 screen full frame with the webcam as an inset (webcam full frame when there is no screen stream).
+A `cam_only` request (a teammate who joined the check-in) records just the webcam from now on, at the camera's own
+size; the compiler overlays it on the drifter's clip.
 """
 
 import collections
@@ -73,7 +75,7 @@ class ClipRecorder:
 
     def _add(self, ring, key, item):
         with self.lock:
-            if self.job is not None:
+            if self.job is not None and not (self.job['cam_only'] and key == 'screen'):
                 self.job[key].append(item)
             ring.append(item)
             while ring and item[0] - ring[0][0] > PRE_SECS:
@@ -89,7 +91,7 @@ class ClipRecorder:
         if jpg:
             self._add(self.screen, 'screen', (now, jpg))
 
-    def request(self, path, now):
+    def request(self, path, now, cam_only=False):
         with self.lock:
             if self.job is not None:
                 busy = True
@@ -97,14 +99,15 @@ class ClipRecorder:
                 busy = False
                 self.job = {
                     'path': path,
-                    'cam': list(self.cam),
-                    'screen': list(self.screen),
+                    'cam_only': cam_only,
+                    'cam': [] if cam_only else list(self.cam),
+                    'screen': [] if cam_only else list(self.screen),
                     'moment_mono': now,
                     'moment_ms': int(time.time() * 1000),
                     'end_mono': now + POST_SECS,
                 }
         if busy:
-            self.emit({'clip': None, 'error': 'busy'})
+            self.emit({'clip': None, 'error': 'busy', 'path': path})
 
     def tick(self, now, flush=False):
         with self.lock:
@@ -125,9 +128,14 @@ class ClipRecorder:
             cam, screen = job['cam'], job['screen']
             if not cam and not screen:
                 raise RuntimeError('no frames buffered')
+            width, height = CANVAS_W, CANVAS_H
+            if job['cam_only']:
+                # The camera's own size (even, for H.264), so an overlay of it has no black bars.
+                first_frame = cv2.imdecode(np.frombuffer(cam[0][1], np.uint8), cv2.IMREAD_COLOR)
+                height, width = first_frame.shape[0] // 2 * 2, first_frame.shape[1] // 2 * 2
             writer = None
             for code in ('avc1', 'mp4v'):
-                writer = cv2.VideoWriter(job['path'], cv2.VideoWriter_fourcc(*code), CLIP_FPS, (CANVAS_W, CANVAS_H))
+                writer = cv2.VideoWriter(job['path'], cv2.VideoWriter_fourcc(*code), CLIP_FPS, (width, height))
                 if writer.isOpened():
                     break
                 writer.release()
@@ -155,20 +163,24 @@ class ClipRecorder:
 
             for k in range(count):
                 at = first + k / CLIP_FPS
-                writer.write(compose(current('screen', screen, at), current('cam', cam, at)))
+                if job['cam_only']:
+                    writer.write(cv2.resize(current('cam', cam, at), (width, height), interpolation=cv2.INTER_AREA))
+                else:
+                    writer.write(compose(current('screen', screen, at), current('cam', cam, at)))
             writer.release()
             self.emit({
                 'clip': job['path'],
                 't': job['moment_ms'],
                 'startedAt': job['moment_ms'] - int((job['moment_mono'] - first) * 1000),
                 'durationMs': int(count * 1000 / CLIP_FPS),
-                'width': CANVAS_W,
-                'height': CANVAS_H,
+                'width': width,
+                'height': height,
                 'fps': CLIP_FPS,
                 'hasScreen': bool(screen),
+                'path': job['path'],
             })
         except Exception as err:
-            self.emit({'clip': None, 'error': f'{type(err).__name__}: {err}'})
+            self.emit({'clip': None, 'error': f'{type(err).__name__}: {err}', 'path': job['path']})
 
 
 class ScreenSampler(threading.Thread):

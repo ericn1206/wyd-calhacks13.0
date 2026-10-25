@@ -32,6 +32,8 @@ export interface ClipInfo {
   fps: number
   /** The clip includes the person's screen (not just the webcam). */
   hasScreen?: boolean
+  /** The file the request asked for (also set on errors), to match the reply to its request. */
+  path?: string
 }
 
 function projectRoot(): string {
@@ -108,10 +110,11 @@ export function startFacetimeTrigger(
 }
 
 /** Ask the webcam detector for a 30 s clip (10 s before now, 20 s after) written to `path`. False when tracking is off. */
-export function requestClip(path: string): boolean {
+export function requestClip(path: string, camOnly = false): boolean {
   const stdin = child?.stdin
   if (!stdin || stdin.destroyed) return false
-  stdin.write(`clip ${path}\n`)
+  // `clip-cam`: webcam only, from now on (20 s) - the clip of a teammate who joined the drifter's check-in.
+  stdin.write(`${camOnly ? 'clip-cam' : 'clip'} ${path}\n`)
   return true
 }
 

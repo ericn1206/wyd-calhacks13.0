@@ -10,6 +10,10 @@ Feature: `contracts.md#session-clips`. No extra dependencies.
 | File | Covers |
 |---|---|
 | `python/test_clip_recorder.py` | `vision/clip_recorder.py`: webcam + screen buffers (10 s, thread-safe), 10 s before + 20 s after, 1280x720 / 10 fps composite (screen picture, webcam inset, letterbox, webcam-only, screen-only), busy rejection, flush, errors, `mp4v` fallback, `ScreenSampler` (rate, failures, give-up) |
+| `python/test_clip_cam_only.py` | Webcam-only clips (`clip-cam`): no pre-roll, camera's own even size, no screen, replies carry `path` (busy/errors too), `clip-cam` stdin line queued and forwarded with spaces kept |
+| `ts/compile-plan-join.test.ts` | `groupClips`: old order without joiners, overlap matching, other member only, ≥ 3 s, max 4, orphans, every clip counted once; uploader/compiler prefix agree |
+| `ts/compile-render-join.test.ts` | Joiner insets with real ffmpeg: absent before / present after joining (pixel check), duration = drifter clip even if the joiner runs past it, own segment only, several side by side, soundtrack kept, unreadable joiner / unreadable base |
+| `ts/compile.join.integration.test.ts` | Two members on a real db: drifter clip + `join-` clip + an unmatched one → inset in the video, `clip_count` 3, orphan noted. Same env as `compile.integration` |
 | `python/test_detector_stdin.py` | `vision/detector.py`: stdin `clip <path>` reader, raw + model-sized camera frame, screen sampler start (`WYD_APP_PID`, off-macOS fallback, no Screen Recording permission → webcam only + message) |
 | `python/test_screen_capture.py` | `vision/screen_capture.py` on the real window server (macOS): BGR frame, excluding a process removes exactly its windows |
 | `python/test_trigger_forwarding.py` | `vision/facetime_trigger.py`: `clip {json}` re-print without touching the webcam vote, stdin → detector forwarding, stop on stdin EOF/SIGTERM with the watchdog (incl. two real-process tests: a hung trigger and its child both die) |
