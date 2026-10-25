@@ -18,12 +18,12 @@ Room name, identity, token grants, attributes (`callEndsAt`, `inCall`): `../arch
 ## Behavior
 | Case | Result |
 |---|---|
-| My detector prints `face time`, teammates in the room | `startCall({ shareScreen: true })`: camera + mic + entire screen (no picker; `setDisplayMediaRequestHandler` picks the first screen source) |
+| My detector prints `face time`, teammates in the room | `startCall({ shareScreen: true })`: camera + mic + the front-most non-WYD window, i.e. the app they drifted to (no picker; `setDisplayMediaRequestHandler` skips our windows by `getMediaSourceId()`; whole screen only if no window is found) |
 | No session room, or alone in it | Duck reflection window (no camera), 30 s, **Resume** ends it early |
 | A teammate's call starts | Invite under the dock: "`<name>` drifted off task · Join", 3 s (`INVITE_SECONDS`); no click → `declineCall()` |
 | Joined a call with a screen share | Share window: screen big, sharer's webcam bottom-right, others + me bottom-left, countdown, Leave, progress bar |
 | Call length | `CALL_DURATION_MS` 30 s, same end time for everyone (copied into each joiner's `callEndsAt`) |
-| While sharing | The sharer's overlay gets `setContentProtection(true)` so the camera tiles aren't in the shared screen |
+| While sharing | Our windows are never the shared source, so the overlay's camera tiles can't appear (macOS 15+ ScreenCaptureKit ignores `setContentProtection`, which is still set as a fallback) |
 
 ## Run & test
 1. Each laptop: `.env` `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` (`../architecture/stack.md`); Screen Recording allowed for Electron.
