@@ -48,6 +48,8 @@ export default function App() {
   const entryStarted = useRef(false)
   // Length the host just picked, shown until the server's work_secs catches up (or the call fails).
   const [pendingWorkSecs, setPendingWorkSecs] = useState<number | null>(null)
+  // Length picked while a session runs; switching stops the timer, so ask first.
+  const [confirmLength, setConfirmLength] = useState<number | null>(null)
   // The session this client is in; only its end should open the summary (db.ended can be an older one).
   const watchedSessionId = useRef<number | null>(null)
   const db = useDb()
@@ -206,6 +208,12 @@ export default function App() {
     setComplete(true)
   }
   const selectPomodoroLength = (minutes: number) => {
+    if (minutes === pomodoroMinutes) return
+    if (dbSession && !dbSession.isHost) return
+    if (sessionStarted) return setConfirmLength(minutes)
+    applyPomodoroLength(minutes)
+  }
+  const applyPomodoroLength = (minutes: number) => {
     if (dbSession) {
       if (!dbSession.isHost) return
       // Show it now; the server stops a running timer and confirms the new length.
@@ -335,5 +343,6 @@ export default function App() {
       <SessionSidebar sessionName={sessionName} role={isHost ? 'Host' : 'Participant'} goals={activeGoals} checked={checked} setChecked={updateChecked} people={dbSession ? db.people.filter((p) => !p.me) : people} />
     </section>
     {complete && <div className="overlay"><div className="complete-modal"><div className="icon-bubble mint"><Icon name="check" /></div><div className="eyebrow">{pomodoroMinutes} minutes complete</div><h2>Pomodoro complete.</h2><p>{upcomingBreakMinutes >= 20 ? 'That’s four rounds. Take a longer 20-minute break so your brain can recharge.' : 'Mark it complete and take a five-minute break before the next round.'}</p><div className="button-row"><button className="secondary" onClick={() => { setComplete(false); endSession() }}>{dbSession && !isHost ? 'Leave session' : 'End session'}</button><button className="primary" onClick={() => { setComplete(false); setScreen('break') }}>Take {upcomingBreakMinutes} min break <Icon name="arrow" /></button></div></div></div>}
+    {confirmLength !== null && <div className="overlay"><div className="complete-modal"><div className="icon-bubble mint"><Icon name="clock" /></div><div className="eyebrow">Switch to {confirmLength} minutes</div><h2>End the current session?</h2><p>Are you sure you want to end the current session? Switching to {confirmLength} minutes stops the timer{dbSession ? ' for everyone' : ''} and starts the round over.</p><div className="button-row"><button className="secondary" onClick={() => setConfirmLength(null)}>Keep going</button><button className="primary" onClick={() => { applyPomodoroLength(confirmLength); setConfirmLength(null) }}>End and switch <Icon name="arrow" /></button></div></div></div>}
   </main>
 }
