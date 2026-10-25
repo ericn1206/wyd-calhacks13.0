@@ -18,6 +18,8 @@
 
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-serif; }
+/* Example/fill-in text in every box is grey, so it never reads like something the user typed. */
+input::placeholder, textarea::placeholder { color: #a3ada9; opacity: 1; }
 button, input { font: inherit; }
 button { cursor: pointer; }
 button:focus-visible, input:focus-visible { outline: 3px solid #a9d7d0; outline-offset: 2px; }
@@ -200,7 +202,6 @@ input:focus { border-color: var(--purple); }
 .focus-oath strong { color: var(--ink); }
 .distraction-capture { position: relative; display: grid; grid-template-columns: 1fr auto; gap: 6px; margin-top: 10px; }
 .distraction-capture input { height: 38px; font-size: 9px; }
-.distraction-capture input::placeholder { color: #a3ada9; }
 .distraction-capture button { border: 1px solid #dfe5e2; border-radius: 9px; padding: 0 11px; color: #52645f; background: white; font-size: 9px; font-weight: 700; }
 .distraction-capture small { grid-column: 1 / -1; color: var(--green); font-size: 8px; }
 .participant-console { display: grid; gap: 11px; }
