@@ -192,6 +192,12 @@ def start_screen_sampler(clips):
     except Exception as err:
         print(f'screen recording off: {type(err).__name__}: {err}', file=sys.stderr)
         return None
+    if not grabber.has_permission():
+        # macOS would return wallpaper-only frames, not an error: record the webcam only and say why.
+        grabber.request_permission()
+        print('screen recording off: Screen Recording permission is not granted to the app that launched WYD '
+              '(System Settings > Privacy & Security > Screen Recording); clips will be webcam only', file=sys.stderr)
+        return None
     sampler = ScreenSampler(clips, grabber, stop, log=lambda m: print(m, file=sys.stderr))
     sampler.start()
     return sampler

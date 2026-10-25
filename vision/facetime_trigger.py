@@ -22,6 +22,10 @@ INTERVAL_SEC = 5
 STREAK_TO_FIRE = 2
 
 stop = threading.Event()
+STOP_GRACE_SEC = 4.0
+detector_proc = None  # the webcam detector child, so the watchdog can kill it
+_stopping = False
+_hard_exit = os._exit  # patched in tests
 lock = threading.Lock()
 webcam_distracted = False
 saw_webcam = False
@@ -73,8 +77,35 @@ def read_webcam(proc):
             break
 
 
+def request_stop(grace=None):
+    """Ask the main loop to finish. It can be stuck in a slow network call (Gemini), so after `grace` seconds a
+    watchdog kills the webcam detector and exits regardless: nothing may keep the camera and screen capture
+    running after the app is gone."""
+    global _stopping
+    stop.set()
+    if _stopping:
+        return
+    _stopping = True
+    wait = STOP_GRACE_SEC if grace is None else grace
+    exit_now = _hard_exit  # bound now, so a later change of the module attribute cannot redirect a pending watchdog
+
+    def watchdog():
+        time.sleep(wait)
+        proc = detector_proc
+        if proc is not None and proc.poll() is None:
+            proc.kill()
+        exit_now(0)
+
+    threading.Thread(target=watchdog, daemon=True).start()
+
+
+def install_signal_handlers():
+    for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        signal.signal(sig, lambda *_: request_stop())
+
+
 def forward_clip_requests(proc):
-    """Pass `clip <path>` lines from Electron on to the detector."""
+    """Pass `clip <path>` lines from Electron on to the detector. stdin closing means Electron is gone: stop."""
     for line in sys.stdin:
         if not line.startswith("clip ") or stop.is_set():
             continue
@@ -84,6 +115,7 @@ def forward_clip_requests(proc):
                 proc.stdin.flush()
         except (BrokenPipeError, ValueError, OSError):
             return
+    request_stop()
 
 
 def screen_vote(screen, goal, sites):
@@ -112,11 +144,12 @@ def screen_vote(screen, goal, sites):
 def main():
     goal = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1].strip() else "study"
     sites = sys.argv[2] if len(sys.argv) > 2 else ""
-    signal.signal(signal.SIGTERM, lambda *_: stop.set())
+    install_signal_handlers()
 
+    global detector_proc
     detector = os.path.join(HERE, "detector.py")
     model = os.path.join(HERE, "distraction_model.json")
-    proc = subprocess.Popen(
+    proc = detector_proc = subprocess.Popen(
         [sys.executable, detector, "--model", model],
         cwd=os.path.dirname(HERE),
         stdin=subprocess.PIPE,

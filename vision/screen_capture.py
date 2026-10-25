@@ -52,6 +52,9 @@ def _load():
     for name in ("CGImageGetWidth", "CGImageGetHeight", "CGImageGetBytesPerRow"):
         fn = getattr(cg, name)
         fn.restype, fn.argtypes = sz, [vp]
+    for name in ("CGPreflightScreenCaptureAccess", "CGRequestScreenCaptureAccess"):
+        if hasattr(cg, name):  # macOS 10.15+
+            getattr(cg, name).restype = ctypes.c_bool
     cg.CGImageGetDataProvider.restype, cg.CGImageGetDataProvider.argtypes = vp, [vp]
     cg.CGDataProviderCopyData.restype, cg.CGDataProviderCopyData.argtypes = vp, [vp]
     return cg, cf
@@ -67,6 +70,17 @@ class ScreenGrabber:
         self.cg, self.cf = _load()
         self._key_pid = self.cf.CFStringCreateWithCString(None, b"kCGWindowOwnerPID", _UTF8)
         self._key_num = self.cf.CFStringCreateWithCString(None, b"kCGWindowNumber", _UTF8)
+
+    def has_permission(self):
+        """Screen Recording permission of the app that launched us. Without it macOS hands back wallpaper-only
+        images instead of an error, so check before recording. True when the API is missing (old macOS)."""
+        fn = getattr(self.cg, "CGPreflightScreenCaptureAccess", None)
+        return bool(fn()) if fn else True
+
+    def request_permission(self):
+        """Ask macOS to show its Screen Recording prompt (once per app; returns the current state)."""
+        fn = getattr(self.cg, "CGRequestScreenCaptureAccess", None)
+        return bool(fn()) if fn else True
 
     def window_ids(self, exclude_pid=None):
         """(ids of on-screen windows not owned by `exclude_pid`, total on-screen windows)."""

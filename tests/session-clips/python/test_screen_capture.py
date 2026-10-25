@@ -19,6 +19,9 @@ class ScreenGrabberTests(unittest.TestCase):
         from screen_capture import ScreenGrabber
         cls.grabber = ScreenGrabber()
 
+    def test_permission_is_reported_as_a_bool_without_prompting(self):
+        self.assertIsInstance(self.grabber.has_permission(), bool)
+
     def test_grab_returns_a_bgr_image_of_the_display(self):
         frame = self.grabber.grab()
         self.assertIsNotNone(frame)

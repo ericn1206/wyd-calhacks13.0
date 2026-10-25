@@ -186,9 +186,12 @@ export async function startCompiler(o: CompilerOptions): Promise<RunningCompiler
       })
       const name = videoName(sessionId, clips.length)
       const started = Date.now()
-      await renderCompilation(files, join(o.outDir, name), o.ffmpegBin)
+      const { skipped } = await renderCompilation(files, join(o.outDir, name), o.ffmpegBin)
       for (const old of staleVideos(readdirSync(o.outDir), sessionId, name)) rmSync(join(o.outDir, old), { force: true })
-      await setState(c, sessionId, 'Ready', clips.length, `${pageBase}${VIDEO_PATH}${name}`)
+      // clipCount stays the number of clips the session has (what the module compares), even when some were unreadable.
+      const note = skipped.length ? `${skipped.length} unreadable clip(s) left out (ids ${skipped.map(i => clips[i].id).join(', ')})` : undefined
+      if (note) o.log(`session ${sessionId}: ${note}`)
+      await setState(c, sessionId, 'Ready', clips.length, `${pageBase}${VIDEO_PATH}${name}`, note)
       failedAt.delete(sessionId)
       o.log(`session ${sessionId}: ready ${name} (${Date.now() - started} ms)`)
     } catch (err) {

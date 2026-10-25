@@ -118,5 +118,11 @@ export function requestClip(path: string): boolean {
 export function stopFacetimeTrigger(): void {
   const proc = child
   child = null
-  proc?.kill('SIGTERM')
+  if (!proc) return
+  proc.stdin?.end() // the trigger treats a closed pipe as "the app is gone" and stops itself
+  proc.kill('SIGTERM')
+  // The trigger has its own watchdog; this is the backstop if it is stuck anyway (e.g. blocked in a network call).
+  const force = setTimeout(() => { if (proc.exitCode === null && proc.signalCode === null) proc.kill('SIGKILL') }, 6000)
+  force.unref()
+  proc.once('exit', () => clearTimeout(force))
 }

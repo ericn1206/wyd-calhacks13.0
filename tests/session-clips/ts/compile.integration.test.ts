@@ -202,6 +202,39 @@ describe('clip compilation, end to end', { skip }, () => {
     member.disconnect()
   })
 
+  it('a corrupt clip does not cost the session its video; the row says what was left out', async () => {
+    const member = await client()
+    await member.call('createSession', {
+      name: 'one bad clip',
+      settings: { pomodoroWorkSecs: none, pomodoroBreakSecs: none, offTaskThresholdSecs: none, callCooldownSecs: none, maxCallSecs: none, scoreboardEnabled: none, groupCallEnabled: none, topicDescription: none, allowedDomains: none, blockedDomains: none },
+      code: none
+    })
+    await sleep(300)
+    const now = Date.now()
+    await uploadReal(member, 2, now)
+    const clipKey = `corrupt-${now}`
+    await member.call('beginSessionClip', { clipKey, momentAtMs: BigInt(now + 1000), startedAtMs: BigInt(now - 9000), durationMs: 5000, width: 1280, height: 720, fps: 10, mime: 'video/mp4', sizeBytes: 100, chunkCount: 1 })
+    await member.call('uploadClipChunk', { clipKey, seq: 0, data: new Uint8Array(100).fill(7) })
+    await member.call('finishSessionClip', { clipKey })
+    await member.call('endSession', {})
+    const outDir = mkdtempSync(join(tmpdir(), 'wyd-out-'))
+    dirs.push(outDir)
+    const port = await freePort()
+    const c = await startCompiler({
+      uri: uri!, database: db!, token: workerToken, tokenFile: join(outDir, 'token'), outDir, port,
+      publicUrl: `http://127.0.0.1:${port}`, quietMs: 0, retryMs: 1000, pollMs: 300, ffmpegBin: 'ffmpeg', log: () => {}
+    })
+    const row = await until('Ready compilation with 2 clips', () => ready(member, 2))
+    assert.match(String(row.error), /1 unreadable clip\(s\) left out/)
+    const res = await fetch(row.url as string)
+    assert.equal(res.status, 200)
+    const file = join(outDir, 'partial.mp4')
+    writeFileSync(file, Buffer.from(await res.arrayBuffer()))
+    assert.ok(Math.abs(secs(file) - 2) < 0.5, `video is ${secs(file)} s, expected ~2 (the good clip)`)
+    await c.stop()
+    member.disconnect()
+  })
+
   it('the compiler publishes its page address, which every client can read', async () => {
     const reader = await client()
     const outDir = mkdtempSync(join(tmpdir(), 'wyd-out-'))

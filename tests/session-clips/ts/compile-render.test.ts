@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, before, describe, it } from 'node:test'
-import { ffmpegArgs, renderCompilation } from '../../../worker/compile/render'
+import { ffmpegArgs, ffprobeBin, renderCompilation } from '../../../worker/compile/render'
 
 const hasFfmpeg = spawnSync('ffmpeg', ['-version']).status === 0
 const skip = hasFfmpeg ? false : 'ffmpeg not installed'
@@ -35,6 +35,14 @@ describe('ffmpegArgs', () => {
     assert.match(graph, /\[1:v\]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720.*fps=10.*\[v1\]/)
     assert.match(graph, /\[v0\]\[v1\]concat=n=2:v=1:a=0\[out\]/)
     assert.ok(args.includes('libx264') && args.includes('+faststart'))
+  })
+})
+
+describe('ffprobeBin', () => {
+  it('finds ffprobe next to the given ffmpeg, or on PATH', () => {
+    assert.equal(ffprobeBin('ffmpeg'), 'ffprobe')
+    assert.equal(ffprobeBin('/opt/homebrew/bin/ffmpeg'), '/opt/homebrew/bin/ffprobe')
+    assert.equal(ffprobeBin('/x/ffmpeg-7/bin/ffmpeg'), '/x/ffmpeg-7/bin/ffprobe')
   })
 })
 
@@ -86,12 +94,50 @@ describe('renderCompilation', { skip }, () => {
     assert.equal(readdirSync(dir).some(f => f.endsWith('.part.mp4')), false)
   })
 
-  it('rejects with the ffmpeg error for corrupt input and writes no output', async () => {
+  it('rejects when no clip is readable and writes no output', async () => {
     const out = join(dir, 'bad.mp4')
-    writeFileSync(join(dir, 'junk.bin'), 'not a video')
-    await assert.rejects(renderCompilation([Buffer.from('not a video')], out), /ffmpeg/)
+    await assert.rejects(renderCompilation([Buffer.from('not a video'), Buffer.from('also not')], out), /no readable clips \(2 unreadable\)/)
     assert.equal(existsSync(out), false)
     assert.equal(existsSync(`${out}.part.mp4`), false)
+  })
+
+  it('leaves an unreadable clip out and joins the rest', async () => {
+    const a = join(dir, 'g1.mp4')
+    const b = join(dir, 'g2.mp4')
+    makeClip(a, '320x240', 8, 2)
+    makeClip(b, '320x240', 8, 1)
+    const out = join(dir, 'skip.mp4')
+    const result = await renderCompilation([readFileSync(a), Buffer.from('garbage, not an mp4'), readFileSync(b)], out)
+    assert.deepEqual(result.skipped, [1])
+    assert.ok(Math.abs(probe(out).secs - 3) < 0.4, `duration ${probe(out).secs}`)
+  })
+
+  it('treats a truncated file as unreadable too', async () => {
+    const a = join(dir, 't1.mp4')
+    const b = join(dir, 't2.mp4')
+    makeClip(a, '320x240', 8, 2)
+    makeClip(b, '320x240', 8, 1)
+    const whole = readFileSync(b)
+    const out = join(dir, 'trunc.mp4')
+    const result = await renderCompilation([readFileSync(a), whole.subarray(0, 40)], out)
+    assert.deepEqual(result.skipped, [1])
+    assert.ok(existsSync(out))
+  })
+
+  it('reports nothing skipped when every clip is fine', async () => {
+    const a = join(dir, 'ok.mp4')
+    makeClip(a, '320x240', 8, 1)
+    assert.deepEqual((await renderCompilation([readFileSync(a)], join(dir, 'ok-out.mp4'))).skipped, [])
+  })
+
+  it('still renders when ffprobe is not installed next to ffmpeg (nothing is skipped)', async () => {
+    const bin = join(dir, 'only-ffmpeg')
+    mkdirSync(bin)
+    symlinkSync(execFileSync('which', ['ffmpeg']).toString().trim(), join(bin, 'ffmpeg'))
+    const a = join(dir, 'np.mp4')
+    makeClip(a, '320x240', 8, 1)
+    const result = await renderCompilation([readFileSync(a)], join(dir, 'np-out.mp4'), join(bin, 'ffmpeg'))
+    assert.deepEqual(result.skipped, [])
   })
 
   it('rejects when there are no clips', async () => {

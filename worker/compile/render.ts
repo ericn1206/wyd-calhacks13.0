@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 
 const RENDER_TIMEOUT_MS = 5 * 60 * 1000
 
@@ -33,7 +33,30 @@ export function ffmpegArgs(clipPaths: readonly string[], outPath: string): strin
  * Join the clips into one mp4. Output is written next to `outPath` and renamed, so the file server never
  * serves a half-written video.
  */
-export async function renderCompilation(clips: readonly Uint8Array[], outPath: string, ffmpegBin = 'ffmpeg'): Promise<void> {
+export interface RenderResult {
+  /** Indexes (into the `clips` argument) of clips that had no readable video and were left out. */
+  skipped: number[]
+}
+
+/** The ffprobe that ships with the given ffmpeg (same folder, or on PATH). */
+export function ffprobeBin(ffmpegBin: string): string {
+  const base = basename(ffmpegBin).replace('ffmpeg', 'ffprobe')
+  return dirname(ffmpegBin) === '.' ? base : join(dirname(ffmpegBin), base)
+}
+
+/** true = has a video stream, false = unreadable, 'unknown' = ffprobe is not installed (let ffmpeg decide). */
+async function hasVideo(file: string, probe: string): Promise<boolean | 'unknown'> {
+  return new Promise(resolve => {
+    const proc = spawn(probe, ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=codec_type', '-of', 'csv=p=0', file], { stdio: ['ignore', 'pipe', 'ignore'] })
+    let out = ''
+    proc.stdout.on('data', (b: Buffer) => { out += b.toString() })
+    const timer = setTimeout(() => proc.kill('SIGKILL'), 30_000)
+    proc.on('error', () => { clearTimeout(timer); resolve('unknown') })
+    proc.on('exit', code => { clearTimeout(timer); resolve(code === 0 && out.includes('video')) })
+  })
+}
+
+export async function renderCompilation(clips: readonly Uint8Array[], outPath: string, ffmpegBin = 'ffmpeg'): Promise<RenderResult> {
   if (clips.length === 0) throw new Error('no clips to render')
   const dir = mkdtempSync(join(tmpdir(), 'wyd-compile-'))
   const part = `${outPath}.part.mp4`
@@ -43,8 +66,15 @@ export async function renderCompilation(clips: readonly Uint8Array[], outPath: s
       writeFileSync(p, data)
       return p
     })
-    await run(ffmpegBin, ffmpegArgs(paths, part))
+    // One unreadable clip must not cost the whole session its video: probe each and join the rest.
+    const probe = ffprobeBin(ffmpegBin)
+    const verdicts = await Promise.all(paths.map(p => hasVideo(p, probe)))
+    const skipped = verdicts.flatMap((ok, i) => (ok === false ? [i] : []))
+    const readable = paths.filter((_, i) => !skipped.includes(i))
+    if (readable.length === 0) throw new Error(`no readable clips (${skipped.length} unreadable)`)
+    await run(ffmpegBin, ffmpegArgs(readable, part))
     renameSync(part, outPath)
+    return { skipped }
   } finally {
     rmSync(dir, { recursive: true, force: true })
     rmSync(part, { force: true })

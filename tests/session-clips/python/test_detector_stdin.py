@@ -72,6 +72,9 @@ class ScreenSamplerStartTests(unittest.TestCase):
             def __init__(self, exclude_pid=None):
                 recorded["pid"] = exclude_pid
 
+            def has_permission(self):
+                return True
+
             def grab(self):
                 return None
 
@@ -93,6 +96,33 @@ class ScreenSamplerStartTests(unittest.TestCase):
         fake_module.ScreenGrabber = broken
         with mock.patch.dict(sys.modules, {"screen_capture": fake_module}):
             self.assertIsNone(detector.start_screen_sampler(mock.Mock()))
+
+
+    def test_without_screen_recording_permission_clips_are_webcam_only_and_the_user_is_told(self):
+        calls = []
+
+        class DeniedGrabber:
+            def __init__(self, exclude_pid=None):
+                pass
+
+            def has_permission(self):
+                return False
+
+            def request_permission(self):
+                calls.append("prompted")
+                return False
+
+            def grab(self):  # macOS would return wallpaper-only frames here; they must never be recorded
+                raise AssertionError("must not capture without permission")
+
+        fake_module = types.ModuleType("screen_capture")
+        fake_module.ScreenGrabber = DeniedGrabber
+        err = io.StringIO()
+        with mock.patch.dict(sys.modules, {"screen_capture": fake_module}), mock.patch.object(sys, "stderr", err):
+            self.assertIsNone(detector.start_screen_sampler(mock.Mock()))
+        self.assertEqual(calls, ["prompted"])
+        self.assertIn("Screen Recording permission", err.getvalue())
+        self.assertIn("webcam only", err.getvalue())
 
 
 if __name__ == "__main__":
