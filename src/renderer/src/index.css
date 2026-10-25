@@ -348,7 +348,8 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
 .dock-goal { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; font-size: 11px; cursor: pointer; }
 .dock-goal input { display: none; }
 .dock-activity { cursor: default; }
-.dock-debug { display: flex; flex-wrap: wrap; gap: 5px; padding: 7px 10px 9px; border-top: 1px solid rgba(255,255,255,.1); }
+/* Own bar under the dock (the dock itself is a single flex row). */
+.dock-debug { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; padding: 7px 10px; border: 1px solid rgba(255,255,255,.14); border-radius: 13px; background: rgba(29,47,45,.88); backdrop-filter: blur(18px); box-shadow: 0 8px 24px rgba(22,34,32,.18); }
 .debug-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 7px; padding: 3px 7px; color: #d7e4e1; background: rgba(255,255,255,.08); font-size: 9px; }
 .debug-chip b { color: #9fb5b1; font-weight: 700; margin-right: 3px; }
 .debug-chip.verdict { font-weight: 700; }
