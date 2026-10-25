@@ -31,7 +31,7 @@ function projectRoot(): string {
  * Run vision/facetime_trigger.py. A stdout line `face time` starts a circle check-in;
  * `status on` / `status off` (every interval with a verdict) drive the status dots.
  */
-export function startFacetimeTrigger(goal: string, onTrigger: () => void, onStatus: (offTask: boolean) => void, onDebug: (entry: DetectorDebug) => void): void {
+export function startFacetimeTrigger(goal: string, onTrigger: () => void, onStatus: (offTask: boolean) => void, onDebug: (entry: DetectorDebug) => void, sites = ''): void {
   stopFacetimeTrigger()
   const root = projectRoot()
   const python = join(root, 'vision/.venv/bin/python')
@@ -40,7 +40,10 @@ export function startFacetimeTrigger(goal: string, onTrigger: () => void, onStat
     console.error('[facetime] no vision/.venv. Run npm run setup:vision')
     return
   }
-  const proc = spawn(python, [script, goal], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] })
+  // Second argument: everything the user mentioned (sites/apps); the trigger allows only apps named there.
+  const args = [script, goal]
+  if (sites.trim()) args.push(sites)
+  const proc = spawn(python, args, { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] })
   child = proc
   let pending = ''
   proc.stdout?.on('data', (buf: Buffer) => {

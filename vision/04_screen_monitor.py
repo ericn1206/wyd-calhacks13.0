@@ -1,6 +1,5 @@
-"""Screen check for macOS. Vision OCR text goes to the same Gemini call as the Windows script.
+"""Screen check for macOS. A local screenshot is OCR'd; Gemini sees the text, not the image.
 
-Replaces winocr.recognize_pil. Prompt, model, JSON parse, and 10s interval are unchanged.
 Set GEMINI_API_KEY. Grant Screen Recording if OCR comes back empty. Press q to close the banner.
 """
 
@@ -18,7 +17,7 @@ import numpy as np
 from PIL import ImageGrab
 import google.generativeai as genai
 
-CHECK_INTERVAL = 10
+CHECK_INTERVAL = 5
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 SWIFT = os.path.join(HERE, "macos_vision_ocr.swift")
@@ -140,16 +139,17 @@ def capture_screen_text():
 
 def call_gemini_api(user_goal, screen_text):
     prompt = f"""
-You are an anti-distraction monitor for a hackathon product.
-User's Goal: "{user_goal}"
-Screen Text Sample:
+You are a focus monitor. Decide whether the text on screen is relevant to what the user said they are working on.
+
+User's goal: "{user_goal}"
+Screen text:
 \"\"\"{screen_text[:1200]}\"\"\"
 
-Rule: Mark "is_off_task": true ONLY if the user is clearly playing games (Steam, Valorant),
-watching entertainment streams (Twitch, Netflix), or doomscrolling social media.
-Mark false for study, research, articles, terminals, or documentation.
+Mark is_off_task true when the screen content is not directly related to the user's goal: a clearly different subject, messaging, social media, entertainment, games, unrelated browsing, or reference material on a topic unrelated to the goal.
+Mark is_off_task false only when the content is clearly about the stated goal or a closely related subtopic that directly supports it (e.g. goal "algorithms" → data structures, complexity, pseudocode, a specific algorithm article is fine; ancient history is not).
+If the text is too thin or ambiguous to tell, mark is_off_task false.
 
-Return strict JSON: {{"is_off_task": false, "reason": "Short summary under 8 words"}}
+Return strict JSON with boolean is_off_task and reason (under 8 words).
 """
     response = _generate(prompt)
     data = json.loads(response.text)

@@ -338,8 +338,9 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
 .dock-timer-toggle { width: 65px; }
 .dock-timer-stop { width: 31px; }
 .dock-timer-stop span { display: none; }
-.self-status { width: 78px; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 6px 7px; border-radius: 12px; background: rgba(255,255,255,.08); font-size: 11px; white-space: nowrap; }
-.self-status i { width: 7px; height: 7px; border-radius: 50%; background: #61c795; box-shadow: 0 0 0 3px rgba(97,199,149,.12); }
+.self-status { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; padding: 6px 10px; border-radius: 12px; background: rgba(255,255,255,.08); font-size: 11px; overflow: hidden; }
+.self-status-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.self-status i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: #61c795; box-shadow: 0 0 0 3px rgba(97,199,149,.12); }
 .self-status.off-task i { background: #ec7770; box-shadow: 0 0 0 3px rgba(236,119,112,.12); }
 .self-status.idle { color: #b8c7c3; }
 .camera-live.off { opacity: .55; }

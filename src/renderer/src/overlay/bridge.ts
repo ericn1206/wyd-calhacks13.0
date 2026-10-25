@@ -26,6 +26,9 @@ export type OverlayState = {
   currentActivity: string
   /** Detector running (a round's timer is going). False → dock shows Idle / Not tracking. */
   tracking: boolean
+  /** Latest detector reason for the dock pill (Gemini / allowlist / webcam); '' when none. `statusReasonOff` = it was an off-task verdict. */
+  statusReason: string
+  statusReasonOff: boolean
   /** Dock debug strip (toggled in the Demo menu); `debug` is the latest detector interval, null until one arrives. */
   debugEnabled: boolean
   debug: DetectorDebug | null
