@@ -137,16 +137,20 @@ def capture_screen_text():
     return proc.stdout.strip()
 
 
-def call_gemini_api(user_goal, screen_text):
+def call_gemini_api(user_goal, screen_text, context=""):
+    """`context`: front app and the sites/apps the user said they'd use (a guide, not a whitelist)."""
+    context_block = f"\nContext: {context}\n" if context else ""
     prompt = f"""
 You are a focus monitor. Decide whether the text on screen is relevant to what the user said they are working on.
 
-User's goal: "{user_goal}"
+User's goal: "{user_goal}"{context_block}
 Screen text:
 \"\"\"{screen_text[:1200]}\"\"\"
 
-Mark is_off_task true when the screen content is not directly related to the user's goal: a clearly different subject, messaging, social media, entertainment, games, unrelated browsing, or reference material on a topic unrelated to the goal.
-Mark is_off_task false only when the content is clearly about the stated goal or a closely related subtopic that directly supports it (e.g. goal "algorithms" → data structures, complexity, pseudocode, a specific algorithm article is fine; ancient history is not).
+Mark is_off_task true when the screen content is not related to the user's goal or to organizing that work: a clearly different subject, messaging, social media, entertainment, games, shopping, or unrelated browsing.
+Mark is_off_task false when the content is about the stated goal or a closely related subtopic that supports it (e.g. goal "algorithms" -> data structures, complexity, pseudocode, a specific algorithm article is fine; ancient history is not).
+Planning and organizing the work also counts as on task: calendar, to-do lists, notes, email or course pages about the task.
+Apps and sites the user named are expected, but they are not the only allowed ones: judge by what is on screen, not by which app it is in.
 If the text is too thin or ambiguous to tell, mark is_off_task false.
 
 Return strict JSON with boolean is_off_task and reason (under 8 words).
@@ -158,7 +162,7 @@ Return strict JSON with boolean is_off_task and reason (under 8 words).
     return data
 
 
-def check_once(user_goal):
+def check_once(user_goal, context=""):
     ui_state["checking"] = True
     ui_state["ocr_chars"] = 0
     try:
@@ -169,7 +173,7 @@ def check_once(user_goal):
         if len(text) < 20:
             ui_state["reason"] = "Screen mostly desktop/blank"
             return
-        result = call_gemini_api(user_goal, text)
+        result = call_gemini_api(user_goal, text, context)
         ui_state["is_off_task"] = bool(result.get("is_off_task", False))
         ui_state["reason"] = result.get("reason", "On task")
         print(f" -> {'OFF-TASK' if ui_state['is_off_task'] else 'ON-TASK'}: {ui_state['reason']}")
