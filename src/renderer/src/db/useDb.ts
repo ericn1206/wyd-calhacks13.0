@@ -9,6 +9,8 @@ export type DbSnapshot = {
   connected: boolean
   identity: string | null
   error: string | null
+  /** Local clock minus server clock (ms); null until measured. Server time = Date.now() - clockOffsetMs. */
+  clockOffsetMs: number | null
   tables: Record<'sessions' | 'members' | 'goals' | 'statuses' | 'contexts' | 'scores' | 'calls' | 'callParticipants' | 'alerts' | 'summaries' | 'awards' | 'users', Row[]>
 }
 
@@ -29,7 +31,7 @@ export type DbSession = {
 export type DbEnded = { sessionId: number; name: string; totalSecs: number; deepWorkSecs: number; interruptions: number; goalsCompleted: number; goalsTotal: number } | null
 
 const EMPTY: DbSnapshot = {
-  connected: false, identity: null, error: null,
+  connected: false, identity: null, error: null, clockOffsetMs: null,
   tables: { sessions: [], members: [], goals: [], statuses: [], contexts: [], scores: [], calls: [], callParticipants: [], alerts: [], summaries: [], awards: [], users: [] }
 }
 
