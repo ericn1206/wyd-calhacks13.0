@@ -246,7 +246,8 @@ export default function App() {
   }
   const selectPomodoroLength = (minutes: number) => {
     if (dbSession) {
-      if (dbSession.isHost && dbSession.state === 'Lobby') db.call('setPomodoro', { workSecs: minutes * 60, breakSecs: dbSession.breakSecs })
+      // Server stops a running timer when the length changes; Lobby state resets the clock here.
+      if (dbSession.isHost) db.call('setPomodoro', { workSecs: minutes * 60, breakSecs: dbSession.breakSecs }).then((error) => error && window.alert(error))
       return
     }
     setPomodoroMinutes(minutes)
@@ -254,7 +255,10 @@ export default function App() {
     setTimerRunning(false)
   }
   const resetPomodoro = () => {
-    if (dbSession) return
+    if (dbSession) {
+      if (dbSession.isHost) db.call('stopPomodoro').then((error) => error && window.alert(error))
+      return
+    }
     setTimerRunning(false)
     setFocusSeconds(pomodoroMinutes * 60)
   }

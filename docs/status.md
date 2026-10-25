@@ -78,6 +78,7 @@ Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` �
 ## Gotchas
 - 2026-10-24: db wiped + republished (`--delete-data=on-conflict`) for the binary `AppCategory`; `seed_defaults` re-run. Any old session/token state is gone (identities persist per client token).
 - `set_pomodoro` published to maincloud 2026-10-24 (additive publish, data kept).
+- `stop_pomodoro` + unlocked `set_pomodoro` (host Stop / length change while running): in `spacetimedb/src/index.ts`, binding hand-added (`stop_pomodoro_reducer.ts`, matches generator output). **Not published yet**: run `spacetime publish calhacks-13-wyd` (additive, no data loss); until then Stop/length errors with "unknown reducer"/"timer is locked".
 - Desktop DB client: `src/main/db/stdb.ts` (single connection in main; Node 18 needs `undici` for WebSocket). Renderer reads `window.wydDesktop.db` (`snapshot`, `call`, `onState`) via `src/renderer/src/db/useDb.ts`. Offline/not connected → entry screen falls back to the local demo flow (needs a typed code).
 - Regenerate bindings after any module change: `spacetime generate --lang typescript --module-path spacetimedb --out-dir src/main/db/module_bindings -y`.
 - Breaking schema changes need `spacetime publish calhacks-13-wyd --delete-data=on-conflict -y` (wipes data). Fresh db: `init` seeds defaults; existing db: run `seed_defaults`. Consent columns removed; republished 2026-10-24, db identity `c200f3d8…1bc7`.
