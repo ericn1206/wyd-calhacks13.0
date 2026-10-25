@@ -491,6 +491,16 @@ export const callTimeoutTimer = table(
   }
 );
 
+// One-shot timer: removes a member who stayed disconnected for the grace period.
+export const disconnectTimer = table(
+  { name: 'disconnect_timer' },
+  {
+    scheduledId: t.u64().primaryKey().autoInc(),
+    scheduledAt: t.scheduleAt(),
+    memberId: t.u64().index('btree'),
+  }
+);
+
 const spacetimedb = schema({
   user,
   session,
@@ -523,6 +533,7 @@ const spacetimedb = schema({
   pomodoroTimer,
   scoreTickTimer,
   callTimeoutTimer,
+  disconnectTimer,
 });
 export default spacetimedb;
 

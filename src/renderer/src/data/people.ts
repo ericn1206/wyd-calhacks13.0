@@ -5,6 +5,8 @@ export type Person = {
   status: string
   /** Avatar background from the database; overrides `color` when set. */
   hex?: string
+  /** Member is disconnected (inside the 60 s grace period before the server removes them). */
+  offline?: boolean
 }
 
 export const people: Person[] = [

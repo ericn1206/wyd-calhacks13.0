@@ -17,7 +17,7 @@ Desktop client (not part of the module): `src/main/db/` (`stdb.ts` connection + 
 Only `user`, `app_category_rule`, `app_setting` are public tables.
 **Every other table is private.** Clients read session data through per-sender **views**, which
 return rows only for sessions the caller has a `member` row in. Owner-only data has owner-only
-views. Raw signals, judgments, score events, limiters, cooldowns, and worker heartbeats have no
+views. Live data is visible only while `member.left_at` is unset; ended sessions stay readable (summary, awards, scores) to everyone who was in them. Raw signals, judgments, score events, limiters, cooldowns, and worker heartbeats have no
 client view at all (the worker reads unjudged events through a worker-only view).
 
 Subscribe like: `SELECT * FROM my_session_statuses`.
