@@ -70,8 +70,8 @@ The items below exist to demonstrate intended product behavior. Future agents mu
 #### Focus detection
 
 - Camera-on labels, active-app concepts, phone activity, off-task state, and automatic call triggers are represented in the interface only.
-- No production focus classifier or sustained two-minute off-task detector is connected.
-- The Demo menu currently substitutes for those detector events.
+- The focus-screen chip and the dock’s personal status read the webcam detector (`vision.focus`: Focused / Distracted / No face / Camera off).
+- The sustained two-minute off-task check-in is still the Demo menu. The detector does not start a call.
 
 #### Check-in invitations and calls
 
@@ -278,7 +278,7 @@ The dock is a fixed desktop overlay representation. In the browser prototype it 
 
 - Live Pomodoro countdown and progress ring.
 - Current Pomodoro round.
-- Personal focus status.
+- Personal focus status from the webcam detector (demo “I go off task” still forces Off task).
 - Teammate avatars with focus-state dots.
 - Camera-on disclosure.
 - Current-goal checkbox.

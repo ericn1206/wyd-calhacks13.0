@@ -43,7 +43,7 @@ export default function App() {
 
   // Demo live view (LOCKIN_DEMO=1): LiveKit room per session code + webcam detector badge.
   const [profile, setProfile] = useState({ demo: false, name: 'Friend' })
-  const [cameraFocus, setCameraFocus] = useState('off')
+  const [cameraFocus, setCameraFocus] = useState<'focused' | 'away' | 'noface' | 'off'>('off')
   const [liveGridHidden, setLiveGridHidden] = useState(false)
   useEffect(() => {
     window.circleAPI?.getProfile().then(setProfile).catch(() => undefined)
@@ -105,9 +105,9 @@ export default function App() {
   }, [screen])
 
   useEffect(() => {
-    const state: OverlayState = { host: entryMode === 'create', focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, checked, currentGoal: goals.find((g) => g.trim()) || '', isTired, tiredNotice, checkInCorner }
+    const state: OverlayState = { host: entryMode === 'create', focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, checked, currentGoal: goals.find((g) => g.trim()) || '', isTired, tiredNotice, checkInCorner, cameraFocus: cameraFocus === 'away' || cameraFocus === 'noface' || cameraFocus === 'focused' ? cameraFocus : 'off' }
     window.wydDesktop?.bridge.send({ type: 'state', state })
-  }, [overlayReady, entryMode, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, checked, goals, isTired, tiredNotice, checkInCorner])
+  }, [overlayReady, entryMode, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, checked, goals, isTired, tiredNotice, checkInCorner, cameraFocus])
 
   const activeGoals = goals.filter((goal) => goal.trim())
   const finishPomodoro = () => {
@@ -178,6 +178,7 @@ export default function App() {
   if (screen === 'summary') return <SummaryScreen checked={checked} goalCount={activeGoals.length} />
 
   return <main className="focus-page">
+    <div className={`camera-chip ${cameraFocus}`}><i />{cameraFocus === 'away' ? 'Distracted' : cameraFocus === 'noface' ? 'No face' : cameraFocus === 'focused' ? 'Focused' : 'Camera off'}</div>
     <div className="demo-menu">
       <button className="demo-trigger" onClick={() => setDemoOpen(!demoOpen)}>Demo <Icon name="arrow" /></button>
       {demoOpen && <div className="demo-popover"><span>Prototype controls</span><button onClick={() => { triggerCheckIn('me', 'none'); setDemoOpen(false) }}>I go off task · no one joins</button><button onClick={() => { triggerCheckIn('me', 'people'); setDemoOpen(false) }}>I go off task · people join</button><button onClick={() => { triggerCheckIn('teammate'); setDemoOpen(false) }}>Teammate goes off task</button><div className="corner-setting"><small>Check-in corner</small><div>{(['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const).map((corner) => <button className={checkInCorner === corner ? 'active' : ''} key={corner} onClick={() => { setCheckInCorner(corner); window.wydDesktop?.setPreferences({ checkInCorner: corner }) }} aria-label={corner}>{corner.split('-').map((part) => part[0].toUpperCase()).join('')}</button>)}</div></div>{entryMode === 'create' && <button onClick={() => { finishPomodoro(); setDemoOpen(false) }}>Finish Pomodoro</button>}{profile.demo && <button disabled={circle.status !== 'connected'} onClick={() => { circle.setLiveView(!circle.liveView); setLiveGridHidden(false); setDemoOpen(false) }}>{circle.liveView ? 'Turn off live camera view' : circle.status === 'connected' ? 'Live camera view · everyone' : 'Live camera view (connecting…)'}</button>}<button onClick={() => setScreen('summary')}>End session</button></div>}

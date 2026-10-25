@@ -12,6 +12,8 @@ export type OverlayState = {
   isTired: boolean
   tiredNotice: boolean
   checkInCorner: CheckInCorner
+  /** Webcam detector: focused / away / noface / off. */
+  cameraFocus: 'focused' | 'away' | 'noface' | 'off'
 }
 
 /** Dock buttons the overlay cannot handle itself; the main window owns this state. */

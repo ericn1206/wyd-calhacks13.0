@@ -22,7 +22,7 @@ contextBridge.exposeInMainWorld('wydDesktop', {
     },
     removeListeners: () => ipcRenderer.removeAllListeners('wyd:bridge:message')
   },
-  // Activity tracking (src/main/activityMonitor.ts); UI does not consume these yet.
+  // Activity tracking (src/main/activityMonitor.ts). Focus chip and dock read vision.focus.
   startTracking: (context: { subject: string; goals: string[] }) => ipcRenderer.invoke('wyd:tracking:start', context),
   onActivityUpdate: (cb: (state: ActivityState) => void) => {
     ipcRenderer.on('activity:update', (_e, state) => cb(state))

@@ -62,6 +62,8 @@ patches/mtime-cache.json
 spec/fixtures/logo.png
 
 .yarn/install-state.gz
+.venv/
+vision/.venv
 vision/.venv/
 __pycache__/
 distraction_dataset.csv

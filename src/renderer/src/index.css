@@ -303,9 +303,16 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
 .dock-timer-toggle { width: 65px; }
 .dock-timer-stop { width: 31px; }
 .dock-timer-stop span { display: none; }
-.self-status { width: 78px; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 6px 7px; border-radius: 12px; background: rgba(255,255,255,.08); font-size: 11px; white-space: nowrap; }
+.self-status { width: auto; min-width: 78px; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 6px 10px; border-radius: 12px; background: rgba(255,255,255,.08); font-size: 11px; white-space: nowrap; }
 .self-status i { width: 7px; height: 7px; border-radius: 50%; background: #61c795; box-shadow: 0 0 0 3px rgba(97,199,149,.12); }
 .self-status.off-task i { background: #ec7770; box-shadow: 0 0 0 3px rgba(236,119,112,.12); }
+.self-status.noface i { background: #c5c9c8; box-shadow: none; }
+.self-status.cam-off i { background: #8aa09c; box-shadow: none; }
+.camera-chip { position: fixed; z-index: 20; top: 18px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; background: #1d2f2d; color: #f7fbfa; font-size: 13px; font-weight: 700; }
+.camera-chip i { width: 10px; height: 10px; border-radius: 50%; background: #8aa09c; }
+.camera-chip.focused i { background: #61c795; box-shadow: 0 0 0 4px rgba(97,199,149,.25); }
+.camera-chip.away i { background: #ec7770; box-shadow: 0 0 0 4px rgba(236,119,112,.25); }
+.camera-chip.noface i { background: #c5c9c8; }
 .dock-people { display: flex; padding-left: 6px; }
 .dock-avatar { width: 32px; height: 32px; margin-left: -6px; border: 2px solid #263d3a; font-size: 9px; color: #46504d; }
 .dock-avatar i { position: absolute; right: -1px; bottom: -1px; width: 8px; height: 8px; border: 1.5px solid #263d3a; border-radius: 50%; background: #e0b13f; }

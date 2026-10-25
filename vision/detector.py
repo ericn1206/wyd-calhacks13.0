@@ -10,6 +10,7 @@ The XGBoost model is evaluated in pure Python, so xgboost (and libomp) is only n
 """
 
 import argparse
+import ctypes
 import json
 import math
 import os
@@ -25,8 +26,76 @@ import numpy as np
 HISTORY = 20             # frames averaged, as in 03_detection_server.py
 DISTRACTED_ABOVE = 0.65  # as in 03_detection_server.py
 EYES_CLOSED_BELOW = 0.008  # mean normalized lid gap; rough, tune with real data
+FRAME_W, FRAME_H = 640, 480  # pixel size the Windows-trained model splits on
 
 stop = threading.Event()
+_runloop = None
+
+
+def pump(seconds):
+    """Turn the CoreFoundation run loop so AVFoundation keeps handing over frames.
+
+    cv2.waitKey does this when a window is open. This sidecar has no window, and
+    time.sleep lets the camera die after the first frame.
+    """
+    global _runloop
+    if seconds <= 0:
+        return
+    try:
+        if _runloop is None:
+            lib = ctypes.CDLL("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
+            lib.CFRunLoopRunInMode.argtypes = [ctypes.c_void_p, ctypes.c_double, ctypes.c_bool]
+            lib.CFRunLoopRunInMode.restype = ctypes.c_int
+            mode = ctypes.c_void_p.in_dll(lib, "kCFRunLoopDefaultMode")
+            _runloop = (lib, mode)
+        lib, mode = _runloop
+        lib.CFRunLoopRunInMode(mode, float(seconds), False)
+    except Exception:
+        time.sleep(seconds)
+
+
+def open_camera(index):
+    cap = cv2.VideoCapture(index, cv2.CAP_AVFOUNDATION)
+    if not cap.isOpened():
+        cap.release()
+        cap = cv2.VideoCapture(index)
+    if not cap.isOpened():
+        print(f'could not open camera {index} (check Camera permission)', file=sys.stderr)
+        return None
+    frame = None
+    deadline = time.time() + 8
+    while time.time() < deadline and not stop.is_set():
+        ok, frame = cap.read()
+        if ok and frame is not None and frame.size:
+            break
+        frame = None
+        pump(0.2)
+    if frame is None:
+        cap.release()
+        print(f'camera {index} returned no frames (check Camera permission)', file=sys.stderr)
+        return None
+    print(
+        f'camera {index} delivered {frame.shape[1]}x{frame.shape[0]}; features locked to {FRAME_W}x{FRAME_H}',
+        file=sys.stderr,
+    )
+    return cap
+
+
+def lock_frame(frame):
+    if frame.shape[1] != FRAME_W or frame.shape[0] != FRAME_H:
+        return cv2.resize(frame, (FRAME_W, FRAME_H), interpolation=cv2.INTER_AREA)
+    return frame
+
+
+def read_frame(cap):
+    for _ in range(20):
+        if stop.is_set():
+            return None
+        ok, frame = cap.read()
+        if ok and frame is not None and frame.size:
+            return lock_frame(frame)
+        pump(0.05)
+    return None
 
 
 class TreeModel:
@@ -117,9 +186,8 @@ def main():
     face_mesh = mp.solutions.face_mesh.FaceMesh(max_num_faces=1, refine_landmarks=True)
     pose = mp.solutions.pose.Pose()
 
-    cap = cv2.VideoCapture(args.camera)
-    if not cap.isOpened():
-        print(f'could not open camera {args.camera} (check Camera permission)', file=sys.stderr)
+    cap = open_camera(args.camera)
+    if cap is None:
         return 2
 
     history = []
@@ -131,8 +199,10 @@ def main():
     try:
         while not stop.is_set():
             started = time.monotonic()
-            ok, frame = cap.read()
-            if not ok:
+            frame = read_frame(cap)
+            if frame is None:
+                if stop.is_set():
+                    break
                 print('camera stopped returning frames', file=sys.stderr)
                 return 3
 
@@ -166,8 +236,8 @@ def main():
                 face_seen = False
 
             rest = frame_gap - (time.monotonic() - started)
-            if rest > 0:
-                stop.wait(rest)
+            if rest > 0 and not stop.is_set():
+                pump(rest)
     finally:
         cap.release()
     return 0

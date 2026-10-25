@@ -11,7 +11,7 @@ Last updated: 2026-10-24. Biggest gap: **desktop ↔ SpacetimeDB not on `main`**
 | Desktop categorization | `src/main/categorize.ts` | Rules + cache → contract categories (`coding`…`unknown`). Fills `activity.category`. |
 | Desktop judge | `src/main/claudeJudge.ts` | Claude call every 8 s once session context exists; output drives local alerts (30 s warning, 60 s alert). |
 | Check-in calls (LiveKit) | `src/main/livekitToken.ts`, `src/renderer/src/useCircleCall.ts` (old UI in `outdated/`: `VideoCall.tsx`) | One LiveKit room per session code: presence, 90 s video call, late joiners auto-join. Calls are **unwired** in the new UI; only the demo live view uses the room. See `components/livekit-call.md`. |
-| Webcam detector runtime | `vision/detector.py`, `src/main/visionSidecar.ts`, `scripts/setup-vision.sh` | Python sidecar started on Goals submit; 1 JSON line/s → `ActivityState.vision`. Waits for the model: `vision/distraction_model.json` arrives with the `webcam-activity-detection` merge. See `components/vision.md`. |
+| Webcam detector runtime | `vision/detector.py`, `vision/distraction_model.json`, `src/main/visionSidecar.ts` | Python sidecar on Goals submit; 1 JSON line/s. Frames resized to 640×480. Focus-screen chip and dock status show `vision.focus`. See `components/vision.md`. |
 | Demo live view | `src/renderer/src/components/session/LiveGrid.tsx`, `useCircleCall.ts` | `LOCKIN_DEMO=1` only: Demo menu → everyone's camera in a grid with detector badges; LIVE banner on every laptop. |
 | Desktop UI | `src/renderer/src/` (+ `docs/ui_integration.md`) · dock + check-ins in full-screen overlay window (`overlay/OverlayApp.tsx`) | New Figma-Make UI: entry, intro, goals, focus workspace, dock, check-in windows, break, summary. All data hardcoded/local; Demo menu simulates events. Goals submit calls `wyd:tracking:start`. |
 | Worker judge | `worker/judge.ts` | Text-only judge over 2-min window → `{status, confidence, reason}`; failure → confidence 0 (neutral). |
@@ -24,11 +24,11 @@ Last updated: 2026-10-24. Biggest gap: **desktop ↔ SpacetimeDB not on `main`**
 - Call room: `call_room_base_url` setting is `""`; no provider chosen.
 
 ## Missing
-- UI wiring: `activity:update`/`activity:alert` not consumed (UI uses Demo-menu triggers); real people/timer/session codes/summary stats (see `ui_integration.md` demo-only inventory).
+- UI wiring: focus chip and dock read `activity:update` → `vision.focus`. Alerts, people, timer, session codes, and summary stats are still demo/local (see `ui_integration.md`).
 - Desktop ↔ SpacetimeDB on `main`: no bindings, no `spacetimedb` client dep, no `ingest_signal` calls (exists on a teammate branch).
 - Teammate's Pomodoro timer UI (being pushed) vs the new UI's own local Pomodoro: reconcile when it lands.
 - Worker ↔ SpacetimeDB: no subscription to `worker_pending_signal_events`, no `write_judgment`.
-- Webcam model + training scripts: on `webcam-activity-detection`, unmerged (merge steps: `components/vision.md`). Vision does not feed alerts or the judge yet.
+- Webcam training scripts: still on `webcam-activity-detection` (macOS port stashed there). The model file is on this branch. Vision does not feed alerts, the Claude judge, or `ingest_signal` yet.
 - Phone sensor page (`phone/`, optional), replay clips.
 - Screens: replay (no consent screen by decision; see `product/privacy.md`).
 - Worker: summary + replay captions.
@@ -80,7 +80,7 @@ Last updated: 2026-10-24. Biggest gap: **desktop ↔ SpacetimeDB not on `main`**
 - `ui_to_integrate/` is the untouched UI source; safe to delete once the team confirms.
 - Every laptop needs `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` in `.env`; each signs its own call token.
 - LiveKit tokens are signed by hand in `livekitToken.ts`: `livekit-server-sdk` needs Node 19+, Electron 28 ships Node 18.
-- Vision: run `npm run setup:vision` once (Python 3.12, ~760 MB venv). Without it the app runs and vision reports `off`.
+- Vision: run `npm run setup:vision` once (Python 3.12, ~760 MB venv). Model is `vision/distraction_model.json`; macOS frames are resized to 640×480. Without the venv the app runs and vision reports `off`.
 - Webcam detector evaluates the XGBoost JSON in pure Python: runtime needs no `xgboost`/`libomp`. Retraining does (`npm run setup:vision -- --train`, plus `brew install libomp`).
 - Gemini API key is hardcoded in `04_screen_monitor.py` / `api_test.py` on `origin/webcam-activity-detection`: rotate it; those files are excluded from the merge.
 - Worker runs `.ts` directly: needs Node 24 (`node -v`).
