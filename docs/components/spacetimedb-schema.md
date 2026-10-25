@@ -127,6 +127,7 @@ focus_ratio · indexed_at
 - `pomodoro_timer`: one-shot → `advance_pomodoro`
 - `score_tick_timer`: every 10 s per tracked member → `tick_score`
 - `call_timeout_timer`: one-shot → `call_timeout`
+- `disconnect_timer`: one-shot 60 s after a member's client disconnects → `leave_if_still_disconnected` (leaves if still `Disconnected`; cleared on reconnect or leave)
 
 ## Reducers
 
@@ -140,6 +141,8 @@ focus_ratio · indexed_at
 | check_goal(goal_id, done) | goal owner | Logs GoalChecked, recomputes final_score |
 | update_session_context(topic, allowed, blocked) | host | |
 | set_pomodoro(work_secs, break_secs) | host | Lobby only; work 60–7200 s, break 60–3600 s |
+| take_break() | host | Active (work round) only: flips to Break now; break timer then runs as normal. No pause/skip |
+| leave_if_still_disconnected | scheduler only | Disconnect grace (60 s) expired → `leave_session` semantics (host passes on, empty session ends) |
 | start_session() | host | Lobby → Active, cycle 1, schedules pomodoro + per-member ticks |
 | advance_pomodoro | scheduler only | Work ↔ Break; PomodoroPhaseChange + GoalCheckin alerts |
 | end_session() | host | Ends calls, expires takeovers, finalizes, deletes replay metadata |

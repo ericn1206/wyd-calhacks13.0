@@ -66,6 +66,7 @@ import SetSummaryTextReducer from "./set_summary_text_reducer";
 import StartPhonePairingReducer from "./start_phone_pairing_reducer";
 import StartSessionReducer from "./start_session_reducer";
 import StartStuckReducer from "./start_stuck_reducer";
+import TakeBreakReducer from "./take_break_reducer";
 import UpdateSessionContextReducer from "./update_session_context_reducer";
 import WriteJudgmentReducer from "./write_judgment_reducer";
 
@@ -341,6 +342,7 @@ const reducersSchema = __reducers(
   __reducerSchema("start_phone_pairing", StartPhonePairingReducer),
   __reducerSchema("start_session", StartSessionReducer),
   __reducerSchema("start_stuck", StartStuckReducer),
+  __reducerSchema("take_break", TakeBreakReducer),
   __reducerSchema("update_session_context", UpdateSessionContextReducer),
   __reducerSchema("write_judgment", WriteJudgmentReducer),
 );

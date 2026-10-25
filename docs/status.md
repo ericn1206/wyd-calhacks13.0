@@ -23,8 +23,9 @@ Last updated: 2026-10-24. Biggest gap: **desktop ↔ SpacetimeDB not on `main`**
 
 ## Missing
 - UI wiring: `activity:update`/`activity:alert` not consumed (UI uses Demo-menu triggers); summary stats (see `ui_integration.md` demo-only inventory).
-- Desktop → SpacetimeDB: no `ingest_signal` calls yet; no UI for `my_alerts`, group calls, takeover, phone pairing, stuck, summaries/awards; no display-name input (`set_profile` unused, users show as `guest-xxxx`).
-- Pause/stop for everyone: no reducer exists (host console Stop is a no-op in a DB session).
+- Desktop → SpacetimeDB: no `ingest_signal` calls yet; no UI for `my_alerts`, group calls, takeover, phone pairing, stuck, awards.
+- Pause: decided against. Host has `take_break` (force a break now) and `end_session`; no pause/stop. Dock Pause/Stop buttons are no-ops in a DB session (hide them).
+- Session lifecycle (branch `worktree-session-lifecycle`, not yet published to maincloud): resume after restart, ended-session → summary screen with real stats, host End session, 60 s disconnect reaper, name input (`set_profile`). Untested in the UI click-through; module verified via CLI on a scratch db.
 - Overlay window gets DB state only via `App.tsx` → `OverlayState`; it has no direct DB feed.
 - Worker ↔ SpacetimeDB: no subscription to `worker_pending_signal_events`, no `write_judgment`.
 - Vision (MediaPipe), phone sensor page (`phone/`, optional), replay clips.
