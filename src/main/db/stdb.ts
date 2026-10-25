@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
+import { dbLog, logPath } from './debugLog'
 import { DbConnection, reducers } from './module_bindings'
 
 // The SDK needs a global WebSocket; Electron 28's main process (Node 18) has none.
@@ -65,24 +66,27 @@ export class StdbClient {
   private error: string | null = null
   private listener: (snapshot: DbSnapshot) => void = () => {}
   private timer: NodeJS.Timeout | null = null
+  private lastKey = ''
 
   onChange(cb: (snapshot: DbSnapshot) => void): void { this.listener = cb }
 
   async connect(): Promise<void> {
     if (this.conn) return
     await ensureWebSocket()
+    dbLog('conn', `connecting ${uri()} db=${database()}`, { tokenSaved: !!readToken(), logFile: logPath() })
     this.conn = DbConnection.builder()
       .withUri(uri())
       .withDatabaseName(database())
       .withToken(readToken())
       .onConnect((conn, identity, token) => {
         writeToken(token)
+        dbLog('conn', 'connected', { identity: identity.toHexString() })
         this.identity = identity.toHexString()
         this.error = null
         const queries = Object.values(VIEWS).map(name => `SELECT * FROM ${toSqlName(name)}`)
         conn.subscriptionBuilder()
-          .onApplied(() => this.emit())
-          .onError(() => { this.error = 'subscription failed'; this.emit() })
+          .onApplied(() => { dbLog('sub', 'applied', this.counts()); this.emit() })
+          .onError(() => { this.error = 'subscription failed'; dbLog('sub', 'ERROR subscription failed'); this.emit() })
           .subscribe(queries)
         for (const name of Object.values(VIEWS)) {
           const table = (conn.db as unknown as Record<string, Table>)[name]
@@ -90,8 +94,8 @@ export class StdbClient {
         }
         this.emit()
       })
-      .onConnectError((_ctx, err) => { this.error = err.message; this.emit() })
-      .onDisconnect((_ctx, err) => { this.conn = null; this.identity = null; if (err) this.error = err.message; this.emit() })
+      .onConnectError((_ctx, err) => { this.error = err.message; dbLog('conn', 'ERROR connect failed', err.message); this.emit() })
+      .onDisconnect((_ctx, err) => { dbLog('conn', 'disconnected', err?.message); this.conn = null; this.identity = null; if (err) this.error = err.message; this.emit() })
       .build()
   }
 
@@ -106,17 +110,38 @@ export class StdbClient {
 
   /** Call a reducer by its generated accessor name (e.g. `createSession`). Rejects on server errors. */
   async call(name: string, args: Record<string, unknown> = {}): Promise<void> {
-    if (!this.conn) throw new Error('not connected to SpacetimeDB')
-    if (!(name in reducers)) throw new Error(`unknown reducer: ${name}`)
-    const fn = (this.conn.reducers as unknown as Record<ReducerName, (a: unknown) => Promise<unknown> | void>)[name as ReducerName]
-    await fn(args)
+    const started = Date.now()
+    dbLog('call', `→ ${name}`, args)
+    try {
+      if (!this.conn) throw new Error('not connected to SpacetimeDB')
+      if (!(name in reducers)) throw new Error(`unknown reducer: ${name}`)
+      const fn = (this.conn.reducers as unknown as Record<ReducerName, (a: unknown) => Promise<unknown> | void>)[name as ReducerName]
+      await fn(args)
+      dbLog('call', `✓ ${name} ${Date.now() - started}ms`)
+    } catch (err) {
+      dbLog('call', `✗ ${name} ${Date.now() - started}ms`, err instanceof Error ? err.message : String(err))
+      throw err
+    }
+  }
+
+  /** Row count per mirrored table. */
+  private counts(): Record<string, number> {
+    const snap = this.snapshot().tables
+    return Object.fromEntries(Object.entries(snap).map(([k, rows]) => [k, rows.length]))
   }
 
   disconnect(): void { this.conn?.disconnect(); this.conn = null }
 
   private emit(): void {
     if (this.timer) return
-    this.timer = setTimeout(() => { this.timer = null; this.listener(this.snapshot()) }, 30)
+    this.timer = setTimeout(() => {
+      this.timer = null
+      const snapshot = this.snapshot()
+      const counts = Object.fromEntries(Object.entries(snapshot.tables).map(([k, rows]) => [k, rows.length]))
+      const key = JSON.stringify(counts) + JSON.stringify(snapshot.tables.sessions.map(r => [r.state, r.currentPhase, r.cycleNumber, r.pomodoroWorkSecs, r.pomodoroBreakSecs]))
+      if (key !== this.lastKey) { this.lastKey = key; dbLog('state', 'changed', { ...counts, session: snapshot.tables.sessions.map(r => `${(r.state as { tag: string }).tag}/${(r.currentPhase as { tag: string }).tag}#${r.cycleNumber} ${r.pomodoroWorkSecs}s/${r.pomodoroBreakSecs}s`) }) }
+      this.listener(snapshot)
+    }, 30)
   }
 }
 
