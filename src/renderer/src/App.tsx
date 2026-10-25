@@ -181,6 +181,9 @@ export default function App() {
   const phaseKey = dbSession ? `${dbSession.state}:${dbSession.phase}:${dbSession.cycle}` : ''
   const serverActive = dbSession?.state === 'Active' || dbSession?.state === 'Break'
   const sessionStarted = dbSession ? serverActive : timerRunning || focusSeconds < pomodoroMinutes * 60
+  // Detector + activity polling only while a round's timer runs (see the tracking effect below); the dock
+  // shows Idle / Not tracking otherwise instead of a stale or misleading on/off-task.
+  const tracking = screen === 'focus' && (dbSession ? dbSession.state === 'Active' : sessionStarted)
   useEffect(() => {
     if (!serverActive) return
     const id = window.setInterval(() => setNow(Date.now()), 1000)
@@ -321,20 +324,20 @@ export default function App() {
       host: isHost, serverPhase: dbSession?.state ?? null, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, started: sessionStarted,
       onBreak: screen === 'break', breakSeconds, breakMinutes: upcomingBreakMinutes, checked,
       currentGoal: goals.find((g) => g.trim()) || '', isTired, tiredNotice, checkInCorner,
-      sessionCode: shareCall ? sessionCode : '', displayName: callName, members, selfStatus, currentActivity, debugEnabled: dockDebug, debug: latestDebug,
+      sessionCode: shareCall ? sessionCode : '', displayName: callName, members, selfStatus, currentActivity, debugEnabled: dockDebug, debug: latestDebug, tracking,
     }
     window.wydDesktop?.bridge.send({ type: 'state', state })
-  }, [overlayReady, isHost, dbSession?.state, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, sessionStarted, screen, breakSeconds, upcomingBreakMinutes, checked, goals, isTired, tiredNotice, checkInCorner, shareCall, sessionCode, callName, membersKey, selfStatus, currentActivity, dockDebug, latestDebug])
+  }, [overlayReady, isHost, dbSession?.state, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, sessionStarted, screen, breakSeconds, upcomingBreakMinutes, checked, goals, isTired, tiredNotice, checkInCorner, shareCall, sessionCode, callName, membersKey, selfStatus, currentActivity, dockDebug, latestDebug, tracking])
 
   const activeGoals = goals.filter((goal) => goal.trim())
 
   // The detector (webcam + screen checks) and activity polling run only while a round's timer runs on the
   // focus screen: DB session Active (not Lobby, Break or Ended); offline once the local timer has started.
   // Nothing is tracked before Start (the app may auto-resume into a lobby at launch), on breaks, or outside.
-  const tracking = screen === 'focus' && (dbSession ? dbSession.state === 'Active' : sessionStarted)
   useEffect(() => {
     if (!tracking) {
       void window.wydDesktop?.stopTracking()
+      setCurrentActivity('') // don't show the last round's site while idle
       return
     }
     void window.wydDesktop?.startTracking({ subject: sessionName, goals: activeGoals, sites, notes })

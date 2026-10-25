@@ -341,6 +341,9 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
 .self-status { width: 78px; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 6px 7px; border-radius: 12px; background: rgba(255,255,255,.08); font-size: 11px; white-space: nowrap; }
 .self-status i { width: 7px; height: 7px; border-radius: 50%; background: #61c795; box-shadow: 0 0 0 3px rgba(97,199,149,.12); }
 .self-status.off-task i { background: #ec7770; box-shadow: 0 0 0 3px rgba(236,119,112,.12); }
+.self-status.idle { color: #b8c7c3; }
+.camera-live.off { opacity: .55; }
+.self-status.idle i { background: #8a9b97; box-shadow: 0 0 0 3px rgba(138,155,151,.14); }
 .dock-people { display: flex; padding-left: 6px; }
 .dock-avatar { width: 32px; height: 32px; margin-left: -6px; border: 2px solid #263d3a; font-size: 9px; color: #46504d; }
 .dock-avatar i { position: absolute; right: -1px; bottom: -1px; width: 8px; height: 8px; border: 1.5px solid #263d3a; border-radius: 50%; background: #e0b13f; }
