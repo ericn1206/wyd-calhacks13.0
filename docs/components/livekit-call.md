@@ -9,7 +9,7 @@ Live 30 s group check-in when someone drifts: the drifter's camera, mic and scre
 | `src/main/livekitToken.ts` | `createCallToken(code, identity, name)`: HS256 JWT signed with `LIVEKIT_API_SECRET` |
 | `src/main/index.ts`, `src/preload/index.ts` | IPC `call:token`, `window:call-mode`, `wyd:window:capture-hidden`, `wyd:media:request`; `circleAPI`; `publishFacetime()` sends `facetime:start` to the overlay |
 | `src/renderer/src/useCircleCall.ts` | Room connect/retry, peers, call state (participant attributes), publish/unpublish, screen share, `autoJoin`, `callFrom`, `screenShare`, `declineCall` |
-| `src/renderer/src/overlay/LiveCheckIn.tsx` | Overlay check-in: trigger → own call (+ screen share) or duck window; teammates' calls → 3 s Join invite; share window for joiners |
+| `src/renderer/src/overlay/LiveCheckIn.tsx` | Overlay check-in: trigger → own call (+ screen share) or duck window; teammates' calls → 6 s Join invite; share window for joiners |
 | `src/renderer/src/overlay/OverlayApp.tsx`, `components/overlays/FocusDock.tsx` | Invite toast under the dock, duck window (+ Resume), mock check-ins for the Demo menu |
 
 ## Inputs / Outputs
@@ -20,7 +20,7 @@ Room name, identity, token grants, attributes (`callEndsAt`, `inCall`): `../arch
 |---|---|
 | My detector prints `face time`, teammates in the room | `startCall({ shareScreen: true })`: camera + mic + the front-most non-WYD window, i.e. the app they drifted to (no picker; `setDisplayMediaRequestHandler` skips our windows by `getMediaSourceId()`; whole screen only if no window is found) |
 | No session room, or alone in it | Duck reflection window (no camera), 30 s, **Resume** ends it early |
-| A teammate's call starts | Invite under the dock: "`<name>` drifted off task · Join", 3 s (`INVITE_SECONDS`); no click → `declineCall()` |
+| A teammate's call starts | Invite under the dock: "`<name>` drifted off task · Join", 6 s (`INVITE_SECONDS`); no click → `declineCall()` |
 | Joined a call with a screen share | Share window: screen big, sharer's webcam bottom-right, others + me bottom-left, countdown, Leave, progress bar |
 | Call length | `CALL_DURATION_MS` 30 s, same end time for everyone (copied into each joiner's `callEndsAt`) |
 | While sharing | Our windows are never the shared source, so the overlay's camera tiles can't appear (macOS 15+ ScreenCaptureKit ignores `setContentProtection`, which is still set as a fallback) |

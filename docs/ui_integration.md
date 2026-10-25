@@ -75,7 +75,7 @@ The items below exist to demonstrate intended product behavior. Future agents mu
 
 #### Check-in invitations and calls
 
-- Three-second invitations, 30-second countdowns, dragging, joining, leaving, and close-window behavior function in the renderer.
+- Six-second invitations, 30-second countdowns, dragging, joining, leaving, and close-window behavior function in the renderer.
 - Participant decisions are not networked between clients.
 - The quiet chime is locally generated with `AudioContext`.
 - The “people join” and “no one joins” outcomes are selected from the Demo menu rather than calculated from real responses.
@@ -318,7 +318,7 @@ The dock is a fixed desktop overlay representation. In the browser prototype it 
 ### Incoming self check-in
 
 - The off-task user does not receive a warning, toast, or countdown before teammates appear.
-- Teammates still receive their three-second opportunity to join.
+- Teammates still receive their six-second opportunity to join.
 - The off-task user's dock remains hidden normally during that silent join window.
 - When the join window ends, the selected self-check-in scenario opens automatically and pins the dock.
 - The off-task user cannot skip the resulting check-in.
@@ -326,7 +326,7 @@ The dock is a fixed desktop overlay representation. In the browser prototype it 
 ### Incoming teammate check-in
 
 - Appears when a teammate is detected off task.
-- Shows a three-second countdown.
+- Shows a six-second countdown.
 - Offers **Join** as the only action.
 - If the user does nothing, the invitation is automatically skipped.
 - Starting this demo first clears any previous invitation, active check-in, countdown, closed-video state, and window position.

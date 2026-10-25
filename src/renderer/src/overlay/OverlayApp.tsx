@@ -216,7 +216,7 @@ export default function OverlayApp() {
   }
 
   const onLiveActive = useCallback((active: boolean) => setLiveCall(active), [])
-  // A teammate drifted: Join prompt under the dock (LiveCheckIn owns the 3 s countdown and the call).
+  // A teammate drifted: Join prompt under the dock (LiveCheckIn owns the 6 s countdown and the call).
   const [liveInvite, setLiveInvite] = useState<{ name: string; seconds: number } | null>(null)
   const joinInviteRef = useRef<() => void>(() => {})
   const onInvite = useCallback((invite: { name: string; seconds: number } | null) => setLiveInvite(invite), [])

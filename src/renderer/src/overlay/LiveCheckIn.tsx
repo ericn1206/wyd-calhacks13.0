@@ -67,7 +67,7 @@ function CallProgress({ endsAt, totalMs }: { endsAt: number | null; totalMs: num
 }
 
 const CHECKIN_MS = 30_000 // matches CALL_DURATION_MS in useCircleCall.ts
-const INVITE_SECONDS = 3 // Join prompt for a teammate's check-in; skipped when it runs out
+const INVITE_SECONDS = 6 // Join prompt for a teammate's check-in; skipped when it runs out
 
 /**
  * Real circle check-in. Joins the LiveKit room for this session code, and turns
@@ -89,7 +89,7 @@ export function LiveCheckIn({ sessionCode, displayName, corner, onActive, onLoca
   joinInviteRef: { current: () => void }
 }) {
   const room = sessionCode.length >= 4 ? { name: displayName, sessionCode } : null
-  // Teammates' calls are invites, not auto-joins: Join under the dock, or skip after 3 s.
+  // Teammates' calls are invites, not auto-joins: Join under the dock, or skip after 6 s.
   const circle = useCircleCall(room, { autoJoin: false })
   const startRef = useRef(circle.startCall)
   startRef.current = circle.startCall
