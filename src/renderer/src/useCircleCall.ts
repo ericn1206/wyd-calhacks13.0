@@ -33,12 +33,23 @@ export interface RemoteTile {
   connection: RTCPeerConnectionState
 }
 
+/** A teammate's shared screen (the person who drifted shares it when their check-in starts). */
+export interface RemoteScreen {
+  peerId: string
+  name: string
+  stream: MediaStream
+}
+
 export interface CircleCall {
   status: 'idle' | 'connecting' | 'connected' | 'error'
   error: string
   callError: string
   peers: CirclePeer[]
   callActive: boolean
+  /** Name of the teammate whose call is active (who drifted), null if none or it's ours. */
+  callFrom: string | null
+  /** Someone's screen share in the call, if any; their camera stays in `remotes`. */
+  screenShare: RemoteScreen | null
   callEndsAt: number | null
   inCall: boolean
   joining: boolean
@@ -46,10 +57,13 @@ export interface CircleCall {
   remotes: RemoteTile[]
   muted: boolean
   cameraOn: boolean
-  startCall: () => void
+  /** shareScreen: also share this screen (the person who drifted). */
+  startCall: (options?: { shareScreen?: boolean }) => void
   joinCall: () => void
   leaveCall: () => void
   dismissCallError: () => void
+  /** Skip the active call (no auto-join for it). */
+  declineCall: () => void
   toggleMute: () => void
   toggleCamera: () => void
 }
@@ -87,7 +101,16 @@ function ipcMessage(err: unknown): string {
   return text.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
 }
 
-export function useCircleCall(room: CircleRoom | null): CircleCall {
+export function useCircleCall(room: CircleRoom | null, options: { autoJoin?: boolean } = {}): CircleCall {
+  // false: a teammate's call only becomes an invite (the UI asks to join); our own startCall still joins.
+  const autoJoinRef = useRef(options.autoJoin ?? true)
+  autoJoinRef.current = options.autoJoin ?? true
+  const [callFrom, setCallFrom] = useState<string | null>(null)
+  const [screenShare, setScreenShare] = useState<RemoteScreen | null>(null)
+  const screenStream = useRef<{ key: string; stream: MediaStream } | null>(null)
+  // Set by startCall({ shareScreen }); beginMedia then also publishes the screen.
+  const shareScreenRef = useRef(false)
+  const sharingRef = useRef(false)
   const selfId = useRef(crypto.randomUUID())
   const roomRef = useRef<Room | null>(null)
   const tracksRef = useRef<LocalTrack[]>([])
@@ -154,6 +177,11 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
     setInCall(false)
     setJoining(false)
     const lk = roomRef.current
+    if (lk && sharingRef.current) void lk.localParticipant.setScreenShareEnabled(false).catch(() => undefined)
+    sharingRef.current = false
+    shareScreenRef.current = false
+    screenStream.current = null
+    setScreenShare(null)
     const tracks = tracksRef.current
     tracksRef.current = []
     for (const track of tracks) {
@@ -212,6 +240,15 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
         for (const track of tracks) await lk.localParticipant.publishTrack(track)
         tracksRef.current = tracks
         syncLocalStream()
+        if (shareScreenRef.current) {
+          // The person who drifted shares their screen; the call still works if this is refused.
+          try {
+            await lk.localParticipant.setScreenShareEnabled(true, { audio: false })
+            sharingRef.current = true
+          } catch (err) {
+            console.warn('Screen share failed (Screen Recording permission?)', err)
+          }
+        }
         inCallRef.current = true
         setInCall(true)
         const claimed = callEndsAtRef.current
@@ -256,6 +293,7 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
     const reconnecting = lk.state === ConnectionState.Reconnecting || lk.state === ConnectionState.SignalReconnecting
     const tiles: RemoteTile[] = []
     const live = new Set<string>()
+    let sharedScreen: { participant: (typeof participants)[number]; track: MediaStreamTrack } | null = null
     if (inCallRef.current) {
       for (const participant of participants) {
         const pubs = [...participant.trackPublications.values()]
@@ -263,7 +301,11 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
           if (pub.kind !== Track.Kind.Video && pub.kind !== Track.Kind.Audio) continue
           if (!pub.isSubscribed && 'setSubscribed' in pub) pub.setSubscribed(true)
         }
+        // Screen share is shown big on its own; the camera stream keeps only camera + mic.
+        const screenTrack = pubs.find((pub) => pub.source === Track.Source.ScreenShare)?.track?.mediaStreamTrack
+        if (screenTrack && screenTrack.readyState !== 'ended') sharedScreen = { participant, track: screenTrack }
         const tracks = pubs
+          .filter((pub) => pub.source !== Track.Source.ScreenShare && pub.source !== Track.Source.ScreenShareAudio)
           .filter((pub) => pub.kind === Track.Kind.Video || pub.kind === Track.Kind.Audio)
           .map((pub) => pub.track?.mediaStreamTrack)
           .filter((track): track is MediaStreamTrack => track instanceof MediaStreamTrack && track.readyState !== 'ended')
@@ -288,10 +330,20 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
       if (!live.has(id)) streams.current.delete(id)
     }
     setRemotes(tiles)
+    if (sharedScreen) {
+      if (screenStream.current?.key !== sharedScreen.track.id) screenStream.current = { key: sharedScreen.track.id, stream: new MediaStream([sharedScreen.track]) }
+      const share = { peerId: sharedScreen.participant.identity, name: sharedScreen.participant.name || 'A teammate', stream: screenStream.current.stream }
+      setScreenShare((current) => (current?.stream === share.stream && current.name === share.name ? current : share))
+    } else {
+      screenStream.current = null
+      setScreenShare(null)
+    }
 
     const endsAt = activeEndsAt(lk)
     if (endsAt !== callEndsAtRef.current) setCallWindow(endsAt)
-    if (endsAt && !inCallRef.current && !startingRef.current && declinedEndsAt.current !== endsAt) {
+    const starter = endsAt ? participants.find((participant) => endsAtOf(participant) === endsAt) : undefined
+    setCallFrom(starter ? starter.name || 'A teammate' : null)
+    if (autoJoinRef.current && endsAt && !inCallRef.current && !startingRef.current && declinedEndsAt.current !== endsAt) {
       void beginMedia()
     }
   }, [activeEndsAt, beginMedia, setCallWindow])
@@ -398,8 +450,9 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
     }
   }, [room?.name, room?.sessionCode])
 
-  const startCall = useCallback(() => {
+  const startCall = useCallback((options?: { shareScreen?: boolean }) => {
     declinedEndsAt.current = null
+    shareScreenRef.current = Boolean(options?.shareScreen)
     if (callEndsAtRef.current && callEndsAtRef.current > Date.now()) {
       void beginMedia()
       return
@@ -427,6 +480,10 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
     leaveMedia(false)
     void window.circleAPI?.setCallMode(false)
   }, [leaveMedia])
+
+  const declineCall = useCallback(() => {
+    declinedEndsAt.current = callEndsAtRef.current
+  }, [])
 
   const dismissCallError = useCallback(() => {
     declinedEndsAt.current = callEndsAtRef.current
@@ -457,6 +514,8 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
     callError,
     peers,
     callActive,
+    callFrom,
+    screenShare,
     callEndsAt,
     inCall,
     joining,
@@ -467,6 +526,7 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
     startCall,
     joinCall,
     leaveCall,
+    declineCall,
     dismissCallError,
     toggleMute,
     toggleCamera,

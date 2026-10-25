@@ -25,25 +25,83 @@ SWIFT = os.path.join(HERE, "macos_vision_ocr.swift")
 OCR_BIN = os.path.join(tempfile.gettempdir(), "wyd_macos_vision_ocr")
 
 ui_state = {"is_off_task": False, "reason": "Initializing screen check...", "checking": False}
-model = None
 
 
-def gemini_key():
-    key = os.environ.get("GEMINI_API_KEY", "").strip()
-    if key:
-        return key
+GEMINI_MODEL = "gemini-3.5-flash-lite"
+RATE_LIMIT_COOLDOWN_SEC = 60   # a 429'd key sits out this long
+BAD_KEY_COOLDOWN_SEC = 600     # an invalid/forbidden key sits out longer
+
+_keys = []
+_next_key = 0
+_cooldown_until = {}  # key -> monotonic time it may be used again
+
+
+def _env_value(name):
+    """Environment first, then the repo's .env."""
+    value = os.environ.get(name, "").strip()
+    if value:
+        return value
     env_path = os.path.join(ROOT, ".env")
     if os.path.exists(env_path):
         for line in open(env_path):
             line = line.strip()
             if not line or line.startswith("#") or "=" not in line:
                 continue
-            name, value = line.split("=", 1)
-            if name.strip() == "GEMINI_API_KEY":
-                value = value.strip().strip('"').strip("'")
-                if value:
-                    return value
-    raise SystemExit("Set GEMINI_API_KEY in the environment or in .env.")
+            key, val = line.split("=", 1)
+            if key.strip() == name:
+                return val.strip().strip('"').strip("'")
+    return ""
+
+
+def gemini_keys():
+    """GEMINI_API_KEYS (comma-separated, used round robin), else the single GEMINI_API_KEY."""
+    many = [k.strip() for k in _env_value("GEMINI_API_KEYS").split(",") if k.strip()]
+    keys = many or [k for k in [_env_value("GEMINI_API_KEY")] if k]
+    if not keys:
+        raise SystemExit("Set GEMINI_API_KEYS (comma-separated) or GEMINI_API_KEY in the environment or .env.")
+    return list(dict.fromkeys(keys))
+
+
+def gemini_key():
+    return gemini_keys()[0]
+
+
+def setup_gemini():
+    """Load the key pool. Each call_gemini_api picks the next key that is not cooling down."""
+    global _keys, _next_key
+    _keys = gemini_keys()
+    _next_key = 0
+    print(f"gemini: {len(_keys)} key(s), round robin", file=sys.stderr)
+
+
+def _generate(prompt):
+    """Round robin over the key pool; a rate-limited or rejected key sits out and the next one is tried."""
+    global _next_key
+    from google.api_core import exceptions as gexc
+    if not _keys:
+        setup_gemini()
+    limited = 0
+    for _ in range(len(_keys)):
+        key = _keys[_next_key % len(_keys)]
+        _next_key += 1
+        if _cooldown_until.get(key, 0) > time.monotonic():
+            limited += 1
+            continue
+        genai.configure(api_key=key, transport="rest")
+        try:
+            return genai.GenerativeModel(GEMINI_MODEL).generate_content(
+                prompt,
+                generation_config={"response_mime_type": "application/json"},
+                request_options={"timeout": 20},
+            )
+        except (gexc.TooManyRequests, gexc.ResourceExhausted):
+            _cooldown_until[key] = time.monotonic() + RATE_LIMIT_COOLDOWN_SEC
+            limited += 1
+            print(f"gemini: key …{key[-4:]} rate-limited, trying the next", file=sys.stderr)
+        except (gexc.Unauthorized, gexc.PermissionDenied):
+            _cooldown_until[key] = time.monotonic() + BAD_KEY_COOLDOWN_SEC
+            print(f"gemini: key …{key[-4:]} rejected, skipping it for {BAD_KEY_COOLDOWN_SEC}s", file=sys.stderr)
+    raise RuntimeError(f"TooManyRequests: all {len(_keys)} Gemini key(s) rate-limited or rejected ({limited} limited)")
 
 
 def ensure_ocr():
@@ -93,11 +151,7 @@ Mark false for study, research, articles, terminals, or documentation.
 
 Return strict JSON: {{"is_off_task": false, "reason": "Short summary under 8 words"}}
 """
-    response = model.generate_content(
-        prompt,
-        generation_config={"response_mime_type": "application/json"},
-        request_options={"timeout": 20},
-    )
+    response = _generate(prompt)
     data = json.loads(response.text)
     if isinstance(data, list):
         data = data[0]
@@ -106,9 +160,11 @@ Return strict JSON: {{"is_off_task": false, "reason": "Short summary under 8 wor
 
 def check_once(user_goal):
     ui_state["checking"] = True
+    ui_state["ocr_chars"] = 0
     try:
         print(f"[{time.strftime('%H:%M:%S')}] Capturing screen...")
         text = capture_screen_text()
+        ui_state["ocr_chars"] = len(text)
         print(f" -> OCR got {len(text)} chars")
         if len(text) < 20:
             ui_state["reason"] = "Screen mostly desktop/blank"
@@ -119,7 +175,8 @@ def check_once(user_goal):
         print(f" -> {'OFF-TASK' if ui_state['is_off_task'] else 'ON-TASK'}: {ui_state['reason']}")
     except Exception as e:
         traceback.print_exc()
-        ui_state["reason"] = f"Error: {type(e).__name__}"
+        # RuntimeError carries a readable reason (e.g. every Gemini key rate-limited); keep it for the debug log.
+        ui_state["reason"] = f"Error: {e}" if isinstance(e, RuntimeError) else f"Error: {type(e).__name__}"
     finally:
         ui_state["checking"] = False
 
@@ -146,8 +203,7 @@ def draw_overlay_banner(user_goal):
 
 
 if __name__ == "__main__":
-    genai.configure(api_key=gemini_key(), transport="rest")
-    model = genai.GenerativeModel("gemini-3.5-flash-lite")
+    setup_gemini()
     ensure_ocr()
 
     goal = input("What are you working on right now? (e.g. 'circuits'): ").strip() or "circuits"

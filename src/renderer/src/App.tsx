@@ -6,10 +6,24 @@ import { VoiceScreen } from './components/onboarding/VoiceScreen'
 import { BreakScreen } from './components/session/BreakScreen'
 import { SessionSidebar } from './components/session/SessionSidebar'
 import { SummaryScreen } from './components/session/SummaryScreen'
+import { DetectorLog } from './components/session/DetectorLog'
+import type { DetectorDebug } from '../../main/facetimeTrigger'
 import type { OverlayState, ToMain, ToOverlay } from './overlay/bridge'
 import { Icon } from './components/ui/Icon'
-import { people } from './data/people'
 import { useDb } from './db/useDb'
+
+/** Short label for the front window: the site for browsers, else the app name. */
+function activityLabel(appName: string, url?: string): string {
+  if (url) {
+    try {
+      const host = new URL(url).hostname.replace(/^www\./, '')
+      if (host) return host
+    } catch {
+      // not a URL; fall back to the app
+    }
+  }
+  return appName && appName !== 'Unknown' ? appName : ''
+}
 
 type Screen = 'join' | 'consent' | 'voice' | 'goals' | 'focus' | 'break' | 'summary'
 type VoicePhase = 'idle' | 'speaking' | 'listening' | 'processing' | 'done'
@@ -83,8 +97,24 @@ export default function App() {
   useEffect(() => {
     window.wydDesktop?.getPreferences().then((preferences) => {
       if (preferences.checkInCorner) setCheckInCorner(preferences.checkInCorner)
+      setDockDebug(Boolean(preferences.dockDebug))
     })
   }, [])
+
+  // Detector debug (Demo menu): dock strip toggle (saved in preferences) + the in-app log window.
+  const [dockDebug, setDockDebug] = useState(false)
+  const [logOpen, setLogOpen] = useState(false)
+  const [detectorLog, setDetectorLog] = useState<DetectorDebug[]>([])
+  useEffect(() => {
+    window.wydDesktop?.getDetectorLog().then(setDetectorLog).catch(() => undefined)
+    return window.wydDesktop?.onDetectorDebug((entry) => setDetectorLog((log) => [...log, entry].slice(-300)))
+  }, [])
+  const latestDebug = detectorLog[detectorLog.length - 1] ?? null
+  const toggleDockDebug = () => {
+    const next = !dockDebug
+    setDockDebug(next)
+    void window.wydDesktop?.setPreferences({ dockDebug: next })
+  }
 
   useEffect(() => {
     window.sessionAPI?.onPhase(setVoicePhase)
@@ -198,7 +228,6 @@ export default function App() {
     if (!dbSession || screen !== 'join' || entryStarted.current) return
     if (db.myName && !displayName) setDisplayName(db.myName)
     if (!db.myGoals.length) return setScreen('goals')
-    window.wydDesktop?.startTracking({ subject: dbSession.name, goals: db.myGoals.map((g) => g.text) })
     setScreen(dbSession.state === 'Break' ? 'break' : 'focus')
   }, [dbSession?.id, db.myGoals.length])
 
@@ -260,18 +289,53 @@ export default function App() {
     name: person.name, initials: person.initials, status: person.status, hex: person.hex,
   }))
   const membersKey = members.map((person) => `${person.name}:${person.status}:${person.hex ?? ''}`).join('|')
+  // My status exactly as partners see it (status table), so my dock and their screens agree.
+  // What I'm on right now (activityMonitor polls every 2 s once tracking starts); shown on my dock.
+  const [currentActivity, setCurrentActivity] = useState('')
+  useEffect(() => {
+    window.wydDesktop?.onActivityUpdate((state) => setCurrentActivity(activityLabel(state.appName, state.url)))
+    return () => window.wydDesktop?.removeActivityListeners()
+  }, [])
+  const selfStatus = dbSession ? ((db.people.find((person) => person.me)?.status as 'focused' | 'drifting' | undefined) ?? 'focused') : null
+
+  // Report each detector verdict (vision/facetime_trigger.py, every 10 s) to SpacetimeDB: the server
+  // applies OnTask/OffTask immediately and every client's status dots read the same row.
+  useEffect(() => {
+    if (!serverActive) return
+    return window.wydDesktop?.onDetectorStatus((offTask) => {
+      void db.call('ingestSignal', { event: {
+        seq: BigInt(Date.now()), facePresent: true, eyesClosed: false, lookingAway: false, headYaw: 0, headPitch: 0,
+        postureSlouchScore: 0, phoneInHand: false, facialExpression: undefined, expressionConfidence: 0,
+        activeApp: 'screen', activeWindowTitle: undefined, activeUrlDomain: undefined,
+        appCategory: { tag: offTask ? 'OffTask' : 'OnTask' }, phoneState: { tag: 'Unknown' },
+        webcamConfidence: 0, idleSecs: 0, clientVersion: 'desktop',
+      } }).then((error) => { if (error) console.warn('[status] ingestSignal failed:', error) })
+    })
+  }, [serverActive])
 
   useEffect(() => {
     const state: OverlayState = {
       host: isHost, serverPhase: dbSession?.state ?? null, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, started: sessionStarted,
       onBreak: screen === 'break', breakSeconds, breakMinutes: upcomingBreakMinutes, checked,
       currentGoal: goals.find((g) => g.trim()) || '', isTired, tiredNotice, checkInCorner,
-      sessionCode: shareCall ? sessionCode : '', displayName: callName, members,
+      sessionCode: shareCall ? sessionCode : '', displayName: callName, members, selfStatus, currentActivity, debugEnabled: dockDebug, debug: latestDebug,
     }
     window.wydDesktop?.bridge.send({ type: 'state', state })
-  }, [overlayReady, isHost, dbSession?.state, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, sessionStarted, screen, breakSeconds, upcomingBreakMinutes, checked, goals, isTired, tiredNotice, checkInCorner, shareCall, sessionCode, callName, membersKey])
+  }, [overlayReady, isHost, dbSession?.state, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, sessionStarted, screen, breakSeconds, upcomingBreakMinutes, checked, goals, isTired, tiredNotice, checkInCorner, shareCall, sessionCode, callName, membersKey, selfStatus, currentActivity, dockDebug, latestDebug])
 
   const activeGoals = goals.filter((goal) => goal.trim())
+
+  // The detector (webcam + screen checks) and activity polling run only while the timer runs on the
+  // focus screen: DB session Active (not Lobby, Break or Ended); offline demo once the local timer started.
+  // Everything else (entry, lobby, break, summary) stops them, so the camera is off outside a round.
+  const tracking = screen === 'focus' && (dbSession ? dbSession.state === 'Active' : sessionStarted)
+  useEffect(() => {
+    if (!tracking) {
+      void window.wydDesktop?.stopTracking()
+      return
+    }
+    void window.wydDesktop?.startTracking({ subject: sessionName, goals: activeGoals })
+  }, [tracking])
   const finishPomodoro = () => {
     setTimerRunning(false)
     const completed = pomodorosDone + 1
@@ -412,7 +476,6 @@ export default function App() {
       }
     }
     if (!dbSession && cleanCode(code).length < 4) setCode(makeSessionCode())
-    window.wydDesktop?.startTracking({ subject: subject.trim() || sessionName, goals: active, sites, notes })
     if (!dbSession && entryMode === 'join') setTimerRunning(true)
     voiceStream?.getTracks().forEach((track) => track.stop())
     setScreen('focus')
@@ -429,7 +492,7 @@ export default function App() {
 
   if (screen === 'consent') return <IntroductionScreen onComplete={finishTutorial} />
 
-  if (screen === 'goals') return <GoalsScreen goals={goals} setGoals={setGoals} onStart={async () => { if (dbSession) { const error = await db.call('setGoals', { goals: activeGoals }); if (error) return window.alert(error) }; window.wydDesktop?.startTracking({ subject: sessionName, goals: activeGoals }); if (!dbSession && entryMode === 'join') setTimerRunning(true); setScreen(dbSession?.state === 'Break' ? 'break' : 'focus') }} />
+  if (screen === 'goals') return <GoalsScreen goals={goals} setGoals={setGoals} onStart={async () => { if (dbSession) { const error = await db.call('setGoals', { goals: activeGoals }); if (error) return window.alert(error) }; if (!dbSession && entryMode === 'join') setTimerRunning(true); setScreen(dbSession?.state === 'Break' ? 'break' : 'focus') }} />
 
   if (screen === 'break') return <BreakScreen minutes={upcomingBreakMinutes} seconds={breakSeconds} goals={activeGoals} checked={checked} setChecked={updateChecked} onReturn={dbSession ? undefined : returnFromBreak} onEnd={dbSession?.isHost ? endSession : undefined} />
 
@@ -438,13 +501,14 @@ export default function App() {
   return <main className="focus-page">
     <div className="demo-menu">
       <button className="demo-trigger" onClick={() => setDemoOpen(!demoOpen)}>Demo <Icon name="arrow" /></button>
-      {demoOpen && <div className="demo-popover"><span>Prototype controls</span><button onClick={() => { triggerCheckIn('me', 'none'); setDemoOpen(false) }}>I go off task · no one joins</button><button onClick={() => { triggerCheckIn('me', 'people'); setDemoOpen(false) }}>I go off task · people join</button><button onClick={() => { triggerCheckIn('teammate'); setDemoOpen(false) }}>Teammate goes off task</button><div className="corner-setting"><small>Check-in corner</small><div>{(['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const).map((corner) => <button className={checkInCorner === corner ? 'active' : ''} key={corner} onClick={() => { setCheckInCorner(corner); window.wydDesktop?.setPreferences({ checkInCorner: corner }) }} aria-label={corner}>{corner.split('-').map((part) => part[0].toUpperCase()).join('')}</button>)}</div></div>{isHost && !dbSession && <button onClick={() => { finishPomodoro(); setDemoOpen(false) }}>Finish Pomodoro</button>}<button onClick={endSession}>{dbSession && !isHost ? 'Leave session' : 'End session'}</button></div>}
+      {demoOpen && <div className="demo-popover"><span>Prototype controls</span><button onClick={() => { triggerCheckIn('me', 'none'); setDemoOpen(false) }}>I go off task · no one joins</button><button onClick={() => { triggerCheckIn('me', 'people'); setDemoOpen(false) }}>I go off task · people join</button><button onClick={() => { triggerCheckIn('teammate'); setDemoOpen(false) }}>Teammate goes off task</button><div className="corner-setting"><small>Check-in corner</small><div>{(['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const).map((corner) => <button className={checkInCorner === corner ? 'active' : ''} key={corner} onClick={() => { setCheckInCorner(corner); window.wydDesktop?.setPreferences({ checkInCorner: corner }) }} aria-label={corner}>{corner.split('-').map((part) => part[0].toUpperCase()).join('')}</button>)}</div></div>{isHost && !dbSession && <button onClick={() => { finishPomodoro(); setDemoOpen(false) }}>Finish Pomodoro</button>}<button onClick={toggleDockDebug}>Dock debug: {dockDebug ? 'On' : 'Off'}</button><button onClick={() => { setLogOpen(true); setDemoOpen(false) }}>Detector log ({detectorLog.length})</button><button onClick={endSession}>{dbSession && !isHost ? 'Leave session' : 'End session'}</button></div>}
     </div>
     <section className="focus-grid">
       <div className="timer-panel"><div className="eyebrow">Focus session · Round {(pomodorosDone % 4) + 1} of 4</div><div className="pomodoro-rounds">{[0, 1, 2, 3].map((round) => <span className={round < pomodorosDone % 4 ? 'done' : round === pomodorosDone % 4 ? 'current' : ''} key={round}><Icon name="check" /></span>)}</div><div className="timer-ring"><svg viewBox="0 0 180 180"><circle cx="90" cy="90" r="80" /><circle className="timer-progress" cx="90" cy="90" r="80" style={{ strokeDashoffset: 502 * (1 - focusSeconds / (pomodoroMinutes * 60)) }} /></svg><div><strong>{String(Math.floor(focusSeconds / 60)).padStart(2, '0')}:{String(focusSeconds % 60).padStart(2, '0')}</strong><span>{timerRunning ? 'focus time' : focusSeconds === pomodoroMinutes * 60 ? isHost ? 'ready when you are' : 'waiting for host' : 'paused by host'}</span></div></div><h2>{timerRunning ? 'Stay with it.' : isHost ? 'Choose one task.' : 'Your host sets the pace.'}</h2>{dbSession?.state === 'Lobby' && <p className="lobby-line">Invite code <strong>{dbSession.code}</strong> · {db.people.length} in the room</p>}<p>{activeGoals[0] || 'Pick something that deserves your full attention.'}</p>{isHost ? <div className="pomodoro-console host-console"><div className="console-role"><span className="host-control-badge"><Icon name="users" />Host controls</span><small>Everyone’s timer stays in sync with yours.</small></div><div className="time-select"><span>Focus length</span>{[15, 25, 45].map((minutes) => <button className={pomodoroMinutes === minutes ? 'active' : ''} onClick={() => selectPomodoroLength(minutes)} key={minutes}>{minutes} min</button>)}</div><div className="timer-controls">{sessionStarted && <button className="timer-stop" disabled={!!dbSession && dbSession.state !== 'Active'} onClick={() => dbSession ? takeBreak() : resetPomodoro()}><Icon name={dbSession ? 'clock' : 'x'} />{dbSession ? 'Take a break' : 'Stop'}</button>}<button className="timer-start" disabled={!!dbSession && (dbSession.state !== 'Lobby' || timerRunning)} onClick={() => dbSession ? setRunning(true) : setTimerRunning(!timerRunning)}><Icon name={timerRunning ? 'clock' : 'arrow'} />{dbSession ? (dbSession.state === 'Lobby' && !timerRunning ? 'Start session' : 'Session running') : timerRunning ? 'Pause for everyone' : focusSeconds < pomodoroMinutes * 60 ? 'Resume session' : 'Start session'}</button></div>{dbSession && dbSession.state !== 'Lobby' && <button className="end-session-button" onClick={endSession}><Icon name="x" />End session for everyone</button>}<div className="focus-oath"><Icon name="target" /><span><strong>My focus promise</strong>I’ll give this task my full attention until the timer rings.</span></div><div className="distraction-capture"><input value={distraction} onChange={(event) => setDistraction(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && saveDistraction()} placeholder="Something else came to mind? Park it here." /><button onClick={saveDistraction}>Save</button>{savedDistractions.length > 0 && <small>{savedDistractions.length} item{savedDistractions.length === 1 ? '' : 's'} saved for later</small>}</div></div> : <div className="pomodoro-console participant-console"><div className="participant-host"><span className="avatar bg-[#dbe9ff]">MK<i /></span><div><small>Session host</small><strong>{hostName} controls this Pomodoro</strong><p>You’ll start, pause, and take breaks together.</p></div><span className="sync-status"><i />Synced</span></div><div className="participant-schedule"><span><small>Focus</small><strong>{pomodoroMinutes} min</strong></span><Icon name="arrow" /><span><small>Short break</small><strong>5 min</strong></span><Icon name="arrow" /><span><small>After 4 rounds</small><strong>20 min</strong></span></div><div className="focus-oath"><Icon name="lock" /><span><strong>Timer controls are host-only</strong>Your timer updates automatically when {hostName} starts the session.</span></div><div className="distraction-capture"><input value={distraction} onChange={(event) => setDistraction(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && saveDistraction()} placeholder="Something else came to mind? Park it here." /><button onClick={saveDistraction}>Save</button>{savedDistractions.length > 0 && <small>{savedDistractions.length} item{savedDistractions.length === 1 ? '' : 's'} saved for later</small>}</div></div>}</div>
-      <SessionSidebar sessionName={sessionName} role={isHost ? 'Host' : 'Participant'} goals={activeGoals} checked={checked} setChecked={updateChecked} people={dbSession ? db.people.filter((p) => !p.me) : people} />
+      <SessionSidebar sessionName={sessionName} role={isHost ? 'Host' : 'Participant'} goals={activeGoals} checked={checked} setChecked={updateChecked} people={db.people.filter((p) => !p.me)} />
     </section>
     {complete && <div className="overlay"><div className="complete-modal"><div className="icon-bubble mint"><Icon name="check" /></div><div className="eyebrow">{pomodoroMinutes} minutes complete</div><h2>Pomodoro complete.</h2><p>{upcomingBreakMinutes >= 20 ? 'That’s four rounds. Take a longer 20-minute break so your brain can recharge.' : 'Mark it complete and take a five-minute break before the next round.'}</p><div className="button-row"><button className="secondary" onClick={() => { setComplete(false); endSession() }}>{dbSession && !isHost ? 'Leave session' : 'End session'}</button><button className="primary" onClick={() => { setComplete(false); setScreen('break') }}>Take {upcomingBreakMinutes} min break <Icon name="arrow" /></button></div></div></div>}
+    {logOpen && <DetectorLog entries={detectorLog} onClose={() => setLogOpen(false)} />}
     {confirmLength !== null && <div className="overlay"><div className="complete-modal"><div className="icon-bubble mint"><Icon name="clock" /></div><div className="eyebrow">Switch to {confirmLength} minutes</div><h2>End the current session?</h2><p>Are you sure you want to end the current session? Switching to {confirmLength} minutes stops the timer{dbSession ? ' for everyone' : ''} and starts the round over.</p><div className="button-row"><button className="secondary" onClick={() => setConfirmLength(null)}>Keep going</button><button className="primary" onClick={() => { applyPomodoroLength(confirmLength); setConfirmLength(null) }}>End and switch <Icon name="arrow" /></button></div></div></div>}
   </main>
 }

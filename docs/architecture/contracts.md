@@ -89,13 +89,14 @@ Other reducers: `../components/spacetimedb-schema.md#reducers`.
 | `setAlwaysOnTop` / `setIgnoreMouseEvents` / `moveToCorner` / `getDisplays` | `wyd:window:*`, `wyd:displays:get` | invoke | window/display control |
 | `setOverlayVisible` | `wyd:overlay:set-visible` | invoke | `boolean`; creates/shows/hides the overlay window (shown on focus screen) |
 | `bridge.send` / `bridge.onMessage` | `wyd:bridge:send` → `wyd:bridge:message` | window ↔ window via main | `BridgeMessage` (`src/renderer/src/overlay/bridge.ts`): main→overlay `state`/`checkIn`/`reveal`/`reset`; overlay→main `ready`/`action` |
-| `startTracking` | `wyd:tracking:start` | invoke | `{subject, goals[]}` → `monitor.setSessionContext` + `start()`; called on Goals submit |
-| `onActivityUpdate` | `activity:update` | main → renderer | `ActivityState` (every 2 s); no UI consumer yet |
+| `startTracking` | `wyd:tracking:start` | invoke | `{subject, goals[]}` → `monitor.setSessionContext` + `start()`; called when the round starts (focus screen + DB `Active`, or offline once the local timer started) |
+| `stopTracking` | `wyd:tracking:stop` | invoke | stops `facetime_trigger.py` (webcam + screen checks) and activity polling; called whenever that stops (entry, lobby, break, summary). `face time` only pops a check-in while the overlay is wanted (focus/break). |
+| `onActivityUpdate` | `activity:update` | main → renderer | `ActivityState` (every 2 s); `App.tsx` turns `appName`/`url` into `OverlayState.currentActivity` (dock \"Currently on\": site hostname, else app name) |
 | `onActivityAlert` | `activity:alert` | main → renderer | `ActivityState` when `alertLevel` is `warning`/`alert`; no UI consumer yet |
 
 `window.circleAPI` (LiveKit, unwired; room/identity/attributes below; typings `src/renderer/src/circle.d.ts`): `requestMediaAccess`, `getCallToken` (`call:token`), `setCallMode` (`window:call-mode`).
 
-`circleAPI.onFacetime` ← `facetime:start` (main → overlay window, when the trigger prints `face time`). `sessionAPI` (`session:start` / `session:user-response` / `session:phase` / `session:context-ready`) is exposed for the voice intro but unused while voice is off. Removed: `activityAPI`. Type: `ActivityState` in `src/main/activityMonitor.ts`.
+`wydDesktop.onDetectorDebug` ← `wyd:detector-debug` (main → main window, `DetectorDebug` from `src/main/facetimeTrigger.ts`, one per interval) and `getDetectorLog()` → `wyd:detector-log:get` (last 300, kept in main). Preference `dockDebug: boolean` (userData `preferences.json`) toggles the dock strip. `wydDesktop.onDetectorStatus` ← `wyd:detector-status` (main → main window, `boolean` offTask, each trigger interval with a verdict; `App.tsx` sends `ingestSignal` with `appCategory` OnTask/OffTask, `seq` = ms timestamp, other fields neutral). `circleAPI.onFacetime` ← `facetime:start` (main → overlay window, when the trigger prints `face time`). `sessionAPI` (`session:start` / `session:user-response` / `session:phase` / `session:context-ready`) is exposed for the voice intro but unused while voice is off. Removed: `activityAPI`. Type: `ActivityState` in `src/main/activityMonitor.ts`.
 
 ## LiveKit room
 Owner: `src/renderer/src/useCircleCall.ts`; token: `src/main/livekitToken.ts`.

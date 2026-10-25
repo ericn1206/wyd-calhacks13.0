@@ -209,6 +209,22 @@ export default function OverlayApp() {
   }
 
   const onLiveActive = useCallback((active: boolean) => setLiveCall(active), [])
+  // A teammate drifted: Join prompt under the dock (LiveCheckIn owns the 3 s countdown and the call).
+  const [liveInvite, setLiveInvite] = useState<{ name: string; seconds: number } | null>(null)
+  const joinInviteRef = useRef<() => void>(() => {})
+  const onInvite = useCallback((invite: { name: string; seconds: number } | null) => setLiveInvite(invite), [])
+  const inviting = liveInvite !== null
+  useEffect(() => {
+    if (!inviting) return
+    dockPinned.current = true
+    if (hideTimer.current) window.clearTimeout(hideTimer.current)
+    hideTimer.current = null
+    setDockHidden(false)
+    return () => { dockPinned.current = false }
+  }, [inviting])
+
+  // Nobody else can join (no session room, or alone in it): the duck window, not fake teammates.
+  const onAlone = useCallback(() => triggerCheckInRef.current('me', 'none'), [])
   const onLocalStart = useCallback(() => {
     setSelfOffTask(true)
     setCallOpen(false)
@@ -254,7 +270,9 @@ export default function OverlayApp() {
 
   if (!s) return null
 
-  const dockPeople: Person[] = roomRoster ?? (s.members ?? []).map((member) => ({
+  // LiveKit only knows who is in the room; status comes from the session (SpacetimeDB) by name.
+  const statusByName = new Map((s.members ?? []).map((member) => [member.name, member.status]))
+  const dockPeople: Person[] = roomRoster?.map((person) => ({ ...person, status: statusByName.get(person.name) ?? person.status })) ?? (s.members ?? []).map((member) => ({
     name: member.name,
     initials: member.initials,
     color: '',
@@ -263,8 +281,8 @@ export default function OverlayApp() {
   }))
 
   return <>
-    <FocusDock hidden={dockHidden} host={s.host} serverPhase={s.serverPhase} focusSeconds={s.focusSeconds} pomodoroMinutes={s.pomodoroMinutes} pomodorosDone={s.pomodorosDone} timerRunning={s.timerRunning} setTimerRunning={(running) => act({ type: 'setTimerRunning', running })} resetPomodoro={() => act({ type: 'resetPomodoro' })} selfOffTask={selfOffTask} people={dockPeople} checked={s.checked} setChecked={(checked) => act({ type: 'setChecked', checked })} currentGoal={s.currentGoal} isTired={s.isTired} signalTired={() => act({ type: 'signalTired' })} takeBreak={() => act({ type: 'takeBreak' })} leaveSession={() => act({ type: 'leave' })} started={s.started} onBreak={s.onBreak} breakSeconds={s.breakSeconds} breakMinutes={s.breakMinutes} endBreak={() => act({ type: 'endBreak' })} nudge={false} dismissNudge={() => {}} tiredNotice={s.tiredNotice} dismissTiredNotice={() => act({ type: 'dismissTired' })} incoming={incoming} checkInTarget={checkInTarget} joinCheckIn={joinCheckIn} onMouseEnter={() => { dockHovered.current = true; if (hideTimer.current) window.clearTimeout(hideTimer.current); hideTimer.current = null }} onMouseLeave={() => { dockHovered.current = false; if (dockPinned.current) return; if (hideTimer.current) window.clearTimeout(hideTimer.current); hideTimer.current = window.setTimeout(() => { setDockHidden(true); hideTimer.current = null }, 600) }} />
-    <LiveCheckIn sessionCode={s.sessionCode} displayName={s.displayName} corner={checkInCorner} onActive={onLiveActive} onLocalStart={onLocalStart} onEnded={onLiveEnded} onRoster={onRoster} />
+    <FocusDock hidden={dockHidden} host={s.host} serverPhase={s.serverPhase} focusSeconds={s.focusSeconds} pomodoroMinutes={s.pomodoroMinutes} pomodorosDone={s.pomodorosDone} timerRunning={s.timerRunning} setTimerRunning={(running) => act({ type: 'setTimerRunning', running })} resetPomodoro={() => act({ type: 'resetPomodoro' })} selfOffTask={s.selfStatus ? s.selfStatus === 'drifting' : selfOffTask} people={dockPeople} checked={s.checked} setChecked={(checked) => act({ type: 'setChecked', checked })} currentGoal={s.currentGoal} isTired={s.isTired} signalTired={() => act({ type: 'signalTired' })} takeBreak={() => act({ type: 'takeBreak' })} leaveSession={() => act({ type: 'leave' })} started={s.started} currentActivity={s.currentActivity} debugEnabled={s.debugEnabled} debug={s.debug} liveInvite={liveInvite} joinLiveInvite={() => joinInviteRef.current()} onBreak={s.onBreak} breakSeconds={s.breakSeconds} breakMinutes={s.breakMinutes} endBreak={() => act({ type: 'endBreak' })} nudge={false} dismissNudge={() => {}} tiredNotice={s.tiredNotice} dismissTiredNotice={() => act({ type: 'dismissTired' })} incoming={incoming} checkInTarget={checkInTarget} joinCheckIn={joinCheckIn} onMouseEnter={() => { dockHovered.current = true; if (hideTimer.current) window.clearTimeout(hideTimer.current); hideTimer.current = null }} onMouseLeave={() => { dockHovered.current = false; if (dockPinned.current) return; if (hideTimer.current) window.clearTimeout(hideTimer.current); hideTimer.current = window.setTimeout(() => { setDockHidden(true); hideTimer.current = null }, 600) }} />
+    <LiveCheckIn sessionCode={s.sessionCode} displayName={s.displayName} corner={checkInCorner} onActive={onLiveActive} onLocalStart={onLocalStart} onEnded={onLiveEnded} onRoster={onRoster} onAlone={onAlone} onInvite={onInvite} joinInviteRef={joinInviteRef} />
     {!liveCall && callOpen && checkInTarget === 'teammate' && <section className="teammate-share-window" style={{ transform: `translate(calc(-50% + ${teammateWindowOffset.x}px), calc(-50% + ${teammateWindowOffset.y}px))` }}>
       <header onPointerDown={(event) => { if ((event.target as HTMLElement).closest('button')) return; event.currentTarget.setPointerCapture(event.pointerId); teammateWindowDrag.current = { x: teammateWindowOffset.x, y: teammateWindowOffset.y, startX: event.clientX, startY: event.clientY } }} onPointerMove={(event) => { if (!teammateWindowDrag.current) return; setTeammateWindowOffset({ x: teammateWindowDrag.current.x + event.clientX - teammateWindowDrag.current.startX, y: teammateWindowDrag.current.y + event.clientY - teammateWindowDrag.current.startY }) }} onPointerUp={() => { teammateWindowDrag.current = null }}><div><i /><span>Jake’s screen · group check-in</span></div><em>{callSeconds}s</em><button onClick={closeCall} aria-label="Leave Jake's check-in"><Icon name="x" />Leave</button></header>
       <div className="shared-screen"><div className="shared-browser-bar"><span /><span /><span /><strong>Problem Set 4 — Calculus</strong></div><div className="shared-work"><aside><span>1</span><span>2</span><span>3</span><span>4</span></aside><main><small>QUESTION 4 OF 12</small><h3>Find the derivative of the function</h3><div className="equation">f(x) = 3x³ − 4x² + 7</div><div className="screen-answer">Type your answer…</div></main></div></div>

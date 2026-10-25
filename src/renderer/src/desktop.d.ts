@@ -1,4 +1,5 @@
 import type { ActivityState } from '../../main/activityMonitor'
+import type { DetectorDebug } from '../../main/facetimeTrigger'
 
 type CheckInCorner = 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left'
 
@@ -7,8 +8,8 @@ declare global {
   interface Window {
     wydDesktop?: {
       platform: string
-      getPreferences(): Promise<{ checkInCorner?: CheckInCorner }>
-      setPreferences(update: { checkInCorner?: CheckInCorner }): Promise<{ checkInCorner: CheckInCorner }>
+      getPreferences(): Promise<{ checkInCorner?: CheckInCorner; dockDebug?: boolean }>
+      setPreferences(update: { checkInCorner?: CheckInCorner; dockDebug?: boolean }): Promise<{ checkInCorner: CheckInCorner; dockDebug?: boolean }>
       requestMediaPermissions(): Promise<{ camera: boolean; microphone: boolean }>
       setAlwaysOnTop(enabled: boolean): Promise<void>
       setIgnoreMouseEvents(enabled: boolean): Promise<void>
@@ -26,6 +27,10 @@ declare global {
         onState(cb: (snapshot: unknown) => void): () => void
       }
       startTracking(context: { subject: string; goals: string[]; sites?: string; notes?: string }): Promise<void>
+      stopTracking(): Promise<void>
+      onDetectorStatus(cb: (offTask: boolean) => void): () => void
+      getDetectorLog(): Promise<DetectorDebug[]>
+      onDetectorDebug(cb: (entry: DetectorDebug) => void): () => void
       onActivityUpdate(cb: (state: ActivityState) => void): void
       onActivityAlert(cb: (state: ActivityState) => void): void
       removeActivityListeners(): void

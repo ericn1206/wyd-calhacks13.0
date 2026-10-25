@@ -32,7 +32,7 @@ Desktop build: `electron.vite.config.ts` (main/preload externalize deps; rendere
 | `SPACETIME_URI` (default `wss://maincloud.spacetimedb.com`), `SPACETIME_DB` (default `calhacks-13-wyd`) | desktop main, `src/main/db/stdb.ts` (optional overrides) |
 | `WYD_DEBUG` (`1`/`0`; default on unless packaged) | desktop main, `src/main/db/debugLog.ts`: logs DB connect/subscribe/reducer calls/state changes to the terminal and `~/Library/Application Support/attentionmaxx/logs/stdb.log` |
 | `CARTESIA_API_KEY`, `CARTESIA_AGENT_ID` | `cartesiaAgent.ts` (voice intro; unrouted for now) · `CARTESIA_VOICE_ID` unused |
-| `GEMINI_API_KEY` | `vision/04_screen_monitor.py` (screen text → Gemini; env first, then `.env`). Planned: desktop main off-task pipeline (`overview.md#off-task-pipeline`). Not read by the renderer. |
+| `GEMINI_API_KEYS` (comma-separated) or `GEMINI_API_KEY` | `vision/04_screen_monitor.py` (screen text → Gemini; env first, then `.env`). Several keys are used round robin; a 429'd key sits out 60 s, a rejected key 600 s; all unavailable → screen vote `unknown`. Planned: desktop main off-task pipeline (`overview.md#off-task-pipeline`). Not read by the renderer. |
 
 ## Commands
 | Do | Run |

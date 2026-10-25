@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { ActivityState } from '../main/activityMonitor'
+import type { DetectorDebug } from '../main/facetimeTrigger'
 import type { SessionContext } from '../main/claudeJudge'
 import type { OnboardingPhase } from '../main/sessionManager'
 
@@ -8,7 +9,7 @@ type CheckInCorner = 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left'
 contextBridge.exposeInMainWorld('wydDesktop', {
   platform: process.platform,
   getPreferences: () => ipcRenderer.invoke('wyd:preferences:get'),
-  setPreferences: (update: { checkInCorner?: CheckInCorner }) => ipcRenderer.invoke('wyd:preferences:set', update),
+  setPreferences: (update: { checkInCorner?: CheckInCorner; dockDebug?: boolean }) => ipcRenderer.invoke('wyd:preferences:set', update),
   requestMediaPermissions: () => ipcRenderer.invoke('wyd:media:request'),
   setAlwaysOnTop: (enabled: boolean) => ipcRenderer.invoke('wyd:window:always-on-top', enabled),
   setIgnoreMouseEvents: (enabled: boolean) => ipcRenderer.invoke('wyd:window:ignore-mouse', enabled),
@@ -36,6 +37,20 @@ contextBridge.exposeInMainWorld('wydDesktop', {
   },
   // Activity tracking (src/main/activityMonitor.ts); UI does not consume these yet.
   startTracking: (context: { subject: string; goals: string[]; sites?: string; notes?: string }) => ipcRenderer.invoke('wyd:tracking:start', context),
+  stopTracking: () => ipcRenderer.invoke('wyd:tracking:stop'),
+  // Detector debug: one entry per interval (screen OCR vote, webcam, verdict); log kept in main.
+  getDetectorLog: () => ipcRenderer.invoke('wyd:detector-log:get') as Promise<DetectorDebug[]>,
+  onDetectorDebug: (cb: (entry: DetectorDebug) => void) => {
+    const handler = (_e: unknown, entry: DetectorDebug) => cb(entry)
+    ipcRenderer.on('wyd:detector-debug', handler)
+    return () => { ipcRenderer.removeListener('wyd:detector-debug', handler) }
+  },
+  // Webcam + screen detector verdict each interval (src/main/facetimeTrigger.ts); true = off task.
+  onDetectorStatus: (cb: (offTask: boolean) => void) => {
+    const handler = (_e: unknown, offTask: boolean) => cb(offTask)
+    ipcRenderer.on('wyd:detector-status', handler)
+    return () => { ipcRenderer.removeListener('wyd:detector-status', handler) }
+  },
   onActivityUpdate: (cb: (state: ActivityState) => void) => {
     ipcRenderer.on('activity:update', (_e, state) => cb(state))
   },
