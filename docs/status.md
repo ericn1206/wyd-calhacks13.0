@@ -75,6 +75,7 @@ Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` â†
 
 ## Gotchas
 - 2026-10-25: module published to maincloud (additive, data kept): `session_clip`, `session_clip_chunk`, `session_compilation`, clip reducers, `set_session_compilation`, `my_session_clips`, `my_session_compilations`, `worker_*` clip views. The compiler's identity must be an authorized worker (`components/clip-compiler.md#run`). Compilation URLs default to `localhost`: set `COMPILE_PUBLIC_URL` to the LAN IP for other laptops.
+- macOS overlay: `type: 'panel'` (clicks don't activate the app / raise the main window) and `setVisibleOnAllWorkspaces(..., { skipTransformProcessType: true })` (without it Electron makes the app a UI-element process and its Dock icon disappears).
 - 2026-10-24: module published to maincloud with `--delete-data=on-conflict` (data wiped; `init` re-seeded 12 settings): removed `member.joined_at`, `session.host_identity`; added `active_connection`, `CallEndedReason.Superseded`. Client bindings regenerated.
 - 2026-10-24: db wiped + republished (`--delete-data=on-conflict`) for the binary `AppCategory`; `seed_defaults` re-run. Any old session/token state is gone (identities persist per client token).
 - `set_pomodoro` published to maincloud 2026-10-24 (additive publish, data kept).

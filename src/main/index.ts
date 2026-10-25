@@ -95,6 +95,9 @@ function createOverlayWindow(): BrowserWindow {
     skipTaskbar: true,
     alwaysOnTop: true,
     show: false,
+    // macOS: a non-activating panel, so clicking the dock/check-in doesn't activate the app and pull the
+    // main window in front.
+    ...(process.platform === 'darwin' ? { type: 'panel' as const } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -102,7 +105,9 @@ function createOverlayWindow(): BrowserWindow {
     }
   })
   win.setAlwaysOnTop(true, 'screen-saver')
-  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  // skipTransformProcessType: otherwise Electron turns the app into a UI-element process on macOS,
+  // which removes its icon from the Dock.
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true })
   win.setIgnoreMouseEvents(true, { forward: true })
   if (process.env['ELECTRON_RENDERER_URL']) {
     win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}?overlay=1`)
@@ -172,7 +177,7 @@ function registerDesktopApi(): void {
   ipcMain.handle('wyd:window:always-on-top', (event, enabled: boolean) => {
     const window = BrowserWindow.fromWebContents(event.sender)
     window?.setAlwaysOnTop(Boolean(enabled), 'floating')
-    window?.setVisibleOnAllWorkspaces(Boolean(enabled), { visibleOnFullScreen: true })
+    window?.setVisibleOnAllWorkspaces(Boolean(enabled), { visibleOnFullScreen: true, skipTransformProcessType: true })
   })
   // While this laptop shares its screen, hide the calling window (overlay with everyone's camera tiles)
   // from screen capture (macOS: excluded from the capture stream, still visible to the user).
