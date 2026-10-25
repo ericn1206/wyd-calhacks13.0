@@ -798,3 +798,54 @@ export function finalizeSession(ctx: Ctx, s: Session) {
   award('BestRecovery', sc => sc.recoveryBonusTotal, () => 'Fastest bounce-back');
   award('LongestStreak', sc => sc.bestStreakSecs, v => `${Math.floor(v / 60)} min streak`);
 }
+
+// ── Pomodoro phase flip ──
+
+/** Work ↔ Break. Shared by the phase timer and the host's `take_break`. Reschedules the next flip. */
+export function flipPhase(ctx: Ctx, s: Session) {
+  const toBreak = s.currentPhase.tag === 'Work';
+  const updated = ctx.db.session.id.update({
+    ...s,
+    state: tag(toBreak ? 'Break' : 'Active'),
+    currentPhase: tag(toBreak ? 'Break' : 'Work'),
+    phaseStartedAt: ctx.timestamp,
+    cycleNumber: toBreak ? s.cycleNumber : s.cycleNumber + 1,
+  });
+  const secs = toBreak ? s.pomodoroBreakSecs : s.pomodoroWorkSecs;
+  schedulePomodoro(ctx, s.id, secs);
+
+  for (const m of activeMembersOf(ctx.db, s.id)) {
+    insertAlert(ctx, s.id, m.id, 'PomodoroPhaseChange', { phase: updated.currentPhase.tag, cycle: updated.cycleNumber, secs });
+    if (toBreak) insertAlert(ctx, s.id, m.id, 'GoalCheckin', { cycle: updated.cycleNumber });
+    // Back from break: start fresh; the 60 s hold re-establishes the label.
+    if (!toBreak) {
+      const st = ctx.db.status.memberId.find(m.id);
+      if (st) {
+        stopTracking(ctx, m.id);
+        ctx.db.status.memberId.update({ ...st, label: tag('Unknown'), reasonCode: tag('Unknown'), since: ctx.timestamp, smoothedOffTaskSecs: 0, updatedAt: ctx.timestamp });
+        ensureTracking(ctx, m, updated);
+      }
+    } else {
+      applySmoothing(ctx, m.id);
+    }
+  }
+}
+
+// ── Disconnect grace ──
+
+export const DISCONNECT_GRACE_SECS = 60;
+
+export function clearDisconnectTimers(ctx: Ctx, memberId: bigint) {
+  for (const timer of [...ctx.db.disconnectTimer.memberId.filter(memberId)]) {
+    ctx.db.disconnectTimer.scheduledId.delete(timer.scheduledId);
+  }
+}
+
+export function scheduleDisconnectLeave(ctx: Ctx, memberId: bigint) {
+  clearDisconnectTimers(ctx, memberId);
+  ctx.db.disconnectTimer.insert({
+    scheduledId: 0n,
+    scheduledAt: ScheduleAt.time(addSecs(ctx.timestamp, DISCONNECT_GRACE_SECS).microsSinceUnixEpoch),
+    memberId,
+  });
+}

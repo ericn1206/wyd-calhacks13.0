@@ -23,8 +23,10 @@ Last updated: 2026-10-24. Biggest gap: **activity signals do not reach Spacetime
 - Call room: `call_room_base_url` setting is `""`; no provider chosen.
 
 ## Missing
-- UI wiring still open: see table below (activity → DB, check-in from alerts, LiveKit video, summary). `activity:update`/`activity:alert` not consumed (UI uses Demo-menu triggers).
+- UI wiring still open: see table below (activity → DB, check-in from alerts, LiveKit video). `activity:update`/`activity:alert` not consumed (UI uses Demo-menu triggers).
 - Off-task pipeline: local OCR + Gemini classification → `ingest_signal` (`architecture/overview.md#off-task-pipeline`). Replaces desktop `categorize.ts`/`appClassifier.ts`/`claudeJudge.ts` as the verdict source.
+- Pause: decided against. Host has `take_break` (force a break now, work round only) and `end_session`; the DB-session dock shows Start (lobby) + Take a break only.
+- Session lifecycle (module not yet published to maincloud: needs additive `spacetime publish`): resume after restart, ended session → summary with real stats, host End session, 60 s disconnect reaper (`disconnect_timer`), name input (`set_profile`). Module verified via CLI on a scratch db; UI click-through untested.
 - Worker ↔ SpacetimeDB: no subscription to `worker_pending_signal_events`, no `write_judgment`.
 - Vision (MediaPipe), phone sensor page (`phone/`, optional), replay clips.
 - Screens: replay (no consent screen by decision; see `product/privacy.md`).
@@ -41,11 +43,10 @@ Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` �
 | Check-in video | Wire LiveKit (`useCircleCall.ts`, `circleAPI`) into placeholder tiles; room from `group_call.room_url`. **Important.** |
 | Screen share in check-in | Hardcoded calculus mock; use `desktopCapturer` source |
 | "I'm tired" signal | Local only; no matching reducer (new contract item) |
-| Display name / avatar | Input on entry screen → `set_profile` |
+| Avatar | Name input done (`set_profile`); avatar color fixed `#7C8CF8` |
 | Break / goal check-in | Show `GoalCheckin` alerts + `mark_alert_delivered`; long (20 min) break not supported by module (one `pomodoro_break_secs`) |
-| End session / summary | Call `end_session` (host), read `my_session_summaries`, `my_session_awards`, `my_session_scores`; Claude recap via worker `set_summary_text` |
-| Pause/stop for everyone | Needs new reducer; host Stop is a no-op in a DB session |
-| Host leave | Module auto-transfers host to earliest member; UI shows nothing |
+| Summary extras | Summary shows real stats from `my_session_summaries`; awards, scores, Claude recap (worker `set_summary_text`) not shown |
+| Host leave | Module auto-transfers host to earliest member; UI shows no notice |
 | Overlay direct DB feed | Currently relayed through `App.tsx` |
 | Worker | Subscribe `worker_pending_signal_events`, `write_judgment`; hosting undecided (see `product/decisions.md`) |
 | Camera-on disclosure / vision | MediaPipe not built |

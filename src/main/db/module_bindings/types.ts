@@ -145,6 +145,13 @@ export const DeviceStatus = __t.enum("DeviceStatus", {
 });
 export type DeviceStatus = __Infer<typeof DeviceStatus>;
 
+export const DisconnectTimer = __t.object("DisconnectTimer", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  memberId: __t.u64(),
+});
+export type DisconnectTimer = __Infer<typeof DisconnectTimer>;
+
 export const FocusBlock = __t.object("FocusBlock", {
   id: __t.u64(),
   sessionId: __t.u64(),

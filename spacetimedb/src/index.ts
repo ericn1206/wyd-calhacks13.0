@@ -22,6 +22,7 @@ import spacetimedb, {
   score,
   scoreTickTimer,
   callTimeoutTimer,
+  disconnectTimer,
   session,
   sessionAward,
   sessionContext,
@@ -39,10 +40,12 @@ import {
   activeMembersOf,
   applySmoothing,
   classify,
+  clearDisconnectTimers,
   deleteReplayMeta,
   endCall,
   ensureTracking,
   finalizeSession,
+  flipPhase,
   insertAlert,
   insertFallbackJudgment,
   isServer,
@@ -58,6 +61,7 @@ import {
   secsBetween,
   seedDefaults,
   settingNum,
+  scheduleDisconnectLeave,
   schedulePomodoro,
   stopSessionTimers,
   stopTracking,
@@ -92,7 +96,9 @@ export const onConnect = spacetimedb.clientConnected(ctx => {
     });
   }
   for (const m of ctx.db.member.identity.filter(ctx.sender)) {
-    if (m.leftAt === undefined) ctx.db.member.id.update({ ...m, deviceStatus: tag('Connected') });
+    if (m.leftAt !== undefined) continue;
+    clearDisconnectTimers(ctx, m.id);
+    ctx.db.member.id.update({ ...m, deviceStatus: tag('Connected') });
   }
 });
 
@@ -100,9 +106,22 @@ export const onDisconnect = spacetimedb.clientDisconnected(ctx => {
   const u = ctx.db.user.identity.find(ctx.sender);
   if (u) ctx.db.user.identity.update({ ...u, online: false });
   for (const m of ctx.db.member.identity.filter(ctx.sender)) {
-    if (m.leftAt === undefined) ctx.db.member.id.update({ ...m, deviceStatus: tag('Disconnected') });
+    if (m.leftAt !== undefined) continue;
+    ctx.db.member.id.update({ ...m, deviceStatus: tag('Disconnected') });
+    scheduleDisconnectLeave(ctx, m.id);
   }
 });
+
+/** Grace period over: if the member is still disconnected, they leave (host passes on, empty session ends). */
+export const leaveIfStillDisconnected = spacetimedb.reducer(
+  { onSchedule: disconnectTimer },
+  { timer: disconnectTimer.rowType },
+  (ctx, { timer }) => {
+    requireServer(ctx);
+    const m = ctx.db.member.id.find(timer.memberId);
+    if (m && m.leftAt === undefined && m.deviceStatus.tag === 'Disconnected') leaveMember(ctx, m.id);
+  }
+);
 
 // ── Profile ──
 
@@ -191,6 +210,7 @@ function leaveMember(ctx: Ctx, memberId: bigint) {
   if (!m || m.leftAt !== undefined) return;
   ctx.db.member.id.update({ ...m, leftAt: ctx.timestamp, isHost: false });
   stopTracking(ctx, m.id);
+  clearDisconnectTimers(ctx, m.id);
 
   const s = ctx.db.session.id.find(m.sessionId);
   if (!s || s.state.tag === 'Ended') return;
@@ -316,34 +336,16 @@ export const advancePomodoro = spacetimedb.reducer(
     const s = ctx.db.session.id.find(timer.sessionId);
     if (!s || (s.state.tag !== 'Active' && s.state.tag !== 'Break')) return;
 
-    const toBreak = s.currentPhase.tag === 'Work';
-    const updated = ctx.db.session.id.update({
-      ...s,
-      state: tag(toBreak ? 'Break' : 'Active'),
-      currentPhase: tag(toBreak ? 'Break' : 'Work'),
-      phaseStartedAt: ctx.timestamp,
-      cycleNumber: toBreak ? s.cycleNumber : s.cycleNumber + 1,
-    });
-    const secs = toBreak ? s.pomodoroBreakSecs : s.pomodoroWorkSecs;
-    schedulePomodoro(ctx, s.id, secs);
-
-    for (const m of activeMembersOf(ctx.db, s.id)) {
-      insertAlert(ctx, s.id, m.id, 'PomodoroPhaseChange', { phase: updated.currentPhase.tag, cycle: updated.cycleNumber, secs });
-      if (toBreak) insertAlert(ctx, s.id, m.id, 'GoalCheckin', { cycle: updated.cycleNumber });
-      // Back from break: start fresh; the 60 s hold re-establishes the label.
-      if (!toBreak) {
-        const st = ctx.db.status.memberId.find(m.id);
-        if (st) {
-          stopTracking(ctx, m.id);
-          ctx.db.status.memberId.update({ ...st, label: tag('Unknown'), reasonCode: tag('Unknown'), since: ctx.timestamp, smoothedOffTaskSecs: 0, updatedAt: ctx.timestamp });
-          ensureTracking(ctx, m, updated);
-        }
-      } else {
-        applySmoothing(ctx, m.id);
-      }
-    }
+    flipPhase(ctx, s);
   }
 );
+
+/** Host forces the break now (no pause, no skip). The break timer then runs as normal. */
+export const takeBreak = spacetimedb.reducer(ctx => {
+  const { session: s } = requireHost(ctx);
+  if (s.state.tag !== 'Active') throw new SenderError('a break can only start during a work round');
+  flipPhase(ctx, s);
+});
 
 function endSessionNow(ctx: Ctx, sessionId: bigint) {
   const s = ctx.db.session.id.find(sessionId);
@@ -796,8 +798,12 @@ export const seedDefaultsReducer = spacetimedb.reducer({ name: 'seed_defaults' }
 type ViewDb = RDb;
 type Sender = Identity;
 
+/** Sessions the sender may read: ones they are still in, plus ended ones (summary, awards, scores). */
 function mySessionIds(db: ViewDb, sender: Sender): bigint[] {
-  return [...new Set([...db.member.identity.filter(sender)].map(m => m.sessionId))];
+  const ids = [...db.member.identity.filter(sender)]
+    .filter(m => m.leftAt === undefined || db.session.id.find(m.sessionId)?.state.tag === 'Ended')
+    .map(m => m.sessionId);
+  return [...new Set(ids)];
 }
 
 function myMemberIds(db: ViewDb, sender: Sender): Set<bigint> {

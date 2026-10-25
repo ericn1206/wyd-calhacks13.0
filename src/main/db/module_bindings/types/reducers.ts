@@ -38,6 +38,7 @@ import SetSummaryTextReducer from "../set_summary_text_reducer";
 import StartPhonePairingReducer from "../start_phone_pairing_reducer";
 import StartSessionReducer from "../start_session_reducer";
 import StartStuckReducer from "../start_stuck_reducer";
+import TakeBreakReducer from "../take_break_reducer";
 import UpdateSessionContextReducer from "../update_session_context_reducer";
 import WriteJudgmentReducer from "../write_judgment_reducer";
 
@@ -73,6 +74,7 @@ export type SetSummaryTextParams = __Infer<typeof SetSummaryTextReducer>;
 export type StartPhonePairingParams = __Infer<typeof StartPhonePairingReducer>;
 export type StartSessionParams = __Infer<typeof StartSessionReducer>;
 export type StartStuckParams = __Infer<typeof StartStuckReducer>;
+export type TakeBreakParams = __Infer<typeof TakeBreakReducer>;
 export type UpdateSessionContextParams = __Infer<typeof UpdateSessionContextReducer>;
 export type WriteJudgmentParams = __Infer<typeof WriteJudgmentReducer>;
 
