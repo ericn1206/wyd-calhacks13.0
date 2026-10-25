@@ -17,6 +17,8 @@ export type OverlayState = {
   breakMinutes: number
   checked: boolean[]
   currentGoal: string
+  judgeOffTask: boolean
+  judgeReason: string
   isTired: boolean
   tiredNotice: boolean
   checkInCorner: CheckInCorner

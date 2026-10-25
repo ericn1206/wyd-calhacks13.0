@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { EntryScreen } from './components/onboarding/EntryScreen'
 import { GoalsScreen } from './components/onboarding/GoalsScreen'
 import { IntroductionScreen } from './components/onboarding/IntroductionScreen'
-import { VoiceScreen } from './components/onboarding/VoiceScreen'
 import { BreakScreen } from './components/session/BreakScreen'
 import { SessionSidebar } from './components/session/SessionSidebar'
 import { SummaryScreen } from './components/session/SummaryScreen'
@@ -10,9 +9,7 @@ import type { OverlayState, ToMain, ToOverlay } from './overlay/bridge'
 import { Icon } from './components/ui/Icon'
 import { useDb } from './db/useDb'
 
-type Screen = 'join' | 'consent' | 'voice' | 'goals' | 'focus' | 'break' | 'summary'
-type VoicePhase = 'idle' | 'speaking' | 'listening' | 'processing' | 'done'
-type VoiceContext = { subject: string; goals: string[]; sites: string; notes: string }
+type Screen = 'join' | 'consent' | 'goals' | 'focus' | 'break' | 'summary'
 
 function cleanCode(value: string): string {
   return value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)
@@ -40,6 +37,7 @@ export default function App() {
   const [inviteCode] = useState(makeInviteCode)
   const [sessionName, setSessionName] = useState('Chapter Six Study Crew')
   const [codeCopied, setCodeCopied] = useState(false)
+  const [task, setTask] = useState('')
   const [goals, setGoals] = useState(['Finish chapter 6 notes', 'Draft chemistry lab intro', ''])
   const [complete, setComplete] = useState(false)
   const [pomodoroMinutes, setPomodoroMinutes] = useState(25)
@@ -53,15 +51,11 @@ export default function App() {
   const [breakSeconds, setBreakSeconds] = useState(300)
   const [isTired, setIsTired] = useState(false)
   const [tiredNotice, setTiredNotice] = useState(false)
+  const [judgeOffTask, setJudgeOffTask] = useState(false)
+  const [judgeReason, setJudgeReason] = useState('')
   const [demoOpen, setDemoOpen] = useState(false)
   const [entryBusy, setEntryBusy] = useState(false)
   const [entryError, setEntryError] = useState('')
-  const [voicePhase, setVoicePhase] = useState<VoicePhase>('idle')
-  const [voiceCreds, setVoiceCreds] = useState<{ token: string; agentId: string } | null>(null)
-  const [voiceStream, setVoiceStream] = useState<MediaStream | null>(null)
-  const [voiceError, setVoiceError] = useState('')
-  const [voiceContext, setVoiceContext] = useState<VoiceContext | null>(null)
-  const [voiceSettled, setVoiceSettled] = useState(false)
   const focusStarted = useRef(false)
   const beginFocusRef = useRef<(subject: string, nextGoals: string[], sites?: string, notes?: string) => Promise<void>>(async () => {})
   const [now, setNow] = useState(Date.now())
@@ -86,42 +80,12 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    window.sessionAPI?.onPhase(setVoicePhase)
-    window.sessionAPI?.onContextReady(setVoiceContext)
-    return () => window.sessionAPI?.removeAllListeners()
+    window.wydDesktop?.onActivityUpdate((state) => {
+      setJudgeOffTask(state.category === 'distracted')
+      setJudgeReason(state.reason ?? '')
+    })
+    return () => window.wydDesktop?.removeActivityListeners()
   }, [])
-
-  useEffect(() => {
-    if (screen !== 'voice') return
-    let cancelled = false
-    void (async () => {
-      try {
-        if (!window.sessionAPI) throw new Error('The voice interview runs in the desktop app. Type your goals instead.')
-        const creds = await window.sessionAPI.start()
-        if (cancelled) return
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-        })
-        if (cancelled) {
-          stream.getTracks().forEach((track) => track.stop())
-          return
-        }
-        setVoiceCreds(creds)
-        setVoiceStream(stream)
-      } catch (err) {
-        if (!cancelled) setVoiceError(err instanceof Error ? err.message : 'Could not start the voice interview.')
-      }
-    })()
-    return () => { cancelled = true }
-  }, [screen])
-
-  useEffect(() => {
-    if (screen !== 'voice' || !voiceContext || !voiceSettled) return
-    const nextGoals = voiceContext.goals.map((goal) => goal.trim()).filter(Boolean).slice(0, 3)
-    const subject = voiceContext.subject.trim() || sessionName
-    void beginFocusRef.current(subject, nextGoals.length ? nextGoals : [subject || 'Study'], voiceContext.sites, voiceContext.notes)
-  }, [screen, voiceContext, voiceSettled, sessionName])
-
 
   useEffect(() => {
     if (screen !== 'break' || dbSession) return
@@ -196,7 +160,13 @@ export default function App() {
   useEffect(() => {
     if (!dbSession || screen !== 'join' || entryStarted.current) return
     if (db.myName && !displayName) setDisplayName(db.myName)
-    if (!db.myGoals.length) return setScreen('goals')
+    if (!db.myGoals.length) {
+      try {
+        return setScreen(localStorage.getItem('wyd:tutorial-complete') === 'true' ? 'goals' : 'consent')
+      } catch {
+        return setScreen('goals')
+      }
+    }
     window.wydDesktop?.startTracking({ subject: dbSession.name, goals: db.myGoals.map((g) => g.text) })
     setScreen(dbSession.state === 'Break' ? 'break' : 'focus')
   }, [dbSession?.id, db.myGoals.length])
@@ -263,11 +233,11 @@ export default function App() {
     const state: OverlayState = {
       host: isHost, serverPhase: dbSession?.state ?? null, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning,
       started: sessionStarted, onBreak: screen === 'break', breakSeconds, breakMinutes: upcomingBreakMinutes,
-      checked, currentGoal: goals.find((g) => g.trim()) || '', isTired, tiredNotice, checkInCorner,
+      checked, currentGoal: goals.find((g) => g.trim()) || '', judgeOffTask, judgeReason, isTired, tiredNotice, checkInCorner,
       sessionCode: shareCall ? sessionCode : '', displayName, members,
     }
     window.wydDesktop?.bridge.send({ type: 'state', state })
-  }, [overlayReady, isHost, dbSession?.state, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, sessionStarted, screen, breakSeconds, upcomingBreakMinutes, checked, goals, isTired, tiredNotice, checkInCorner, shareCall, sessionCode, displayName, membersKey])
+  }, [overlayReady, isHost, dbSession?.state, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, sessionStarted, screen, breakSeconds, upcomingBreakMinutes, checked, goals, judgeOffTask, judgeReason, isTired, tiredNotice, checkInCorner, shareCall, sessionCode, displayName, membersKey])
 
   const activeGoals = goals.filter((goal) => goal.trim())
   const finishPomodoro = () => {
@@ -411,15 +381,9 @@ export default function App() {
     if (!dbSession && cleanCode(code).length < 4) setCode(makeSessionCode())
     window.wydDesktop?.startTracking({ subject: subject.trim() || sessionName, goals: active, sites, notes })
     if (!dbSession && entryMode === 'join') setTimerRunning(true)
-    voiceStream?.getTracks().forEach((track) => track.stop())
-    setScreen('focus')
+    setScreen(dbSession?.state === 'Break' ? 'break' : 'focus')
   }
   beginFocusRef.current = beginFocus
-  const skipVoice = () => {
-    voiceStream?.getTracks().forEach((track) => track.stop())
-    setVoiceStream(null)
-    setScreen('goals')
-  }
   handlers.current = { signalTired, takeBreak, endBreak: returnFromBreak, leaveSession, resetPomodoro, setRunning, setChecked: updateChecked }
 
   if (screen === 'join') return <EntryScreen error={entryError} busy={entryBusy} mode={entryMode} setMode={setEntryMode} code={entryMode === 'create' && !dbSession ? '······' : code} setCode={setCode} sessionName={sessionName} setSessionName={setSessionName} codeCopied={codeCopied} copyCode={() => { navigator.clipboard?.writeText(code); setCodeCopied(true); window.setTimeout(() => setCodeCopied(false), 1600) }} continueSetup={beginSessionSetup} displayName={displayName} setDisplayName={setDisplayName} />

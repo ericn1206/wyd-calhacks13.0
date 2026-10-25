@@ -207,8 +207,9 @@ function registerDesktopApi(): void {
     }
     monitor?.setSessionContext(context)
     monitor?.start()
-    const goal = [context.subject, ...context.goals, context.sites, context.notes].filter((part) => part && part.trim()).join('. ') || 'study'
-    startFacetimeTrigger(goal, publishFacetime)
+    const goal = [context.subject, ...context.goals, context.notes].filter((part) => part && part.trim()).join('. ') || 'study'
+    const mentioned = [context.subject, ...context.goals, context.sites, context.notes].filter((part) => part && part.trim()).join('. ')
+    startFacetimeTrigger(goal, publishFacetime, mentioned)
   })
 
   ipcMain.handle('session:start', async () => {

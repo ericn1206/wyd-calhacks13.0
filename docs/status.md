@@ -7,19 +7,20 @@ Last updated: 2026-10-24. Biggest gap: **activity signals do not reach Spacetime
 |---|---|---|
 | SpacetimeDB module | `spacetimedb/` | Full schema + 37 reducers: sessions, goals, Pomodoro timers, `ingest_signal`, smoothing, fallback judge, scoring, call/nudge trigger, phone pairing, finalize + awards. Configured for maincloud db `calhacks-13-wyd`. See `components/spacetimedb.md`. |
 | Desktop activity tracking | `src/main/activityMonitor.ts` | Polls front app + window title + browser URL (Chrome/Safari/Arc/Brave) every 2 s via `osascript`. macOS only. |
-| Distraction trigger | `vision/facetime_trigger.py`, `vision/detector.py`, `vision/04_screen_monitor.py`, `src/main/facetimeTrigger.ts` | Goals submit starts both detectors. Screen off-task twice in a row, or screen on-task twice with webcam distracted both times, prints `face time`. See `components/vision.md`. |
+| Distraction trigger | `vision/facetime_trigger.py`, `vision/detector.py`, `vision/04_screen_monitor.py`, `src/main/facetimeTrigger.ts` | Tracking start runs both detectors. A named app that is not in front, or Gemini saying the OCR text is off the study goal, twice in a row — or webcam distracted twice while the screen looks on-task — prints `face time`. See `components/vision.md`. |
 | Desktop `.env` loader | `src/main/env.ts` | Loads root `.env` into `process.env` at startup (no override of shell vars). |
 | Desktop categorization | `src/main/categorize.ts` | Rules + cache → contract categories (`coding`…`unknown`). Fills `activity.category`. |
-| Desktop judge | `src/main/claudeJudge.ts` | Claude call every 8 s once session context exists; output drives local alerts (30 s warning, 60 s alert). |
+| Desktop judge | `src/main/claudeJudge.ts` | Gemini `gemini-3.5-flash-lite` every 8 s once session context exists; output drives local alerts (30 s warning, 60 s alert). |
 | Check-in calls (LiveKit) | `src/main/livekitToken.ts`, `src/renderer/src/useCircleCall.ts` (old UI in `outdated/`: `VideoCall.tsx`) | One LiveKit room per session code: presence, 30 s video call, late joiners auto-join. Worked in the old UI; **unwired** in the new UI. See `components/livekit-call.md`. |
-| Desktop UI | `src/renderer/src/` (+ `docs/ui_integration.md`) · dock + check-ins in full-screen overlay window (`overlay/OverlayApp.tsx`) | New Figma-Make UI: entry, intro, goals, focus workspace, dock, check-in windows, break, summary. All data hardcoded/local; Demo menu simulates events. Goals submit calls `wyd:tracking:start`. |
+| Desktop UI | `src/renderer/src/` (+ `docs/ui_integration.md`) · dock + check-ins in full-screen overlay window (`overlay/OverlayApp.tsx`) | New Figma-Make UI: entry, intro, goals, focus workspace, dock, check-in windows, break, summary. Demo menu simulates events. |
+| Voice onboarding | `VoiceScreen.tsx`, `cartesiaCall.ts`, `src/main/cartesiaAgent.ts`, `sessionManager.ts` | After join and the first-run tutorial, the Cartesia interview is summarized by Gemini (`claudeJudge.ts`) into `subject` / `goals` / `sites` / `notes`. A local condenser is the fallback. "Type goals instead" opens the Goals screen. |
 | Desktop DB client | `src/main/db/stdb.ts`, `src/renderer/src/db/useDb.ts` | Single main-process connection; token persisted; create/join session, `set_pomodoro`, `start_session`, shared timer + phase flip to break, goals + `check_goal`, roster, `leave_session`. Verified headless with 2 clients 2026-10-24; UI click-through untested. Debug log: see `architecture/stack.md` (`WYD_DEBUG`). |
 | Worker judge | `worker/judge.ts` | Text-only judge over 2-min window → `{status, confidence, reason}`; failure → confidence 0 (neutral). |
 | Worker categorizer | `worker/categorizeUnknown.ts` | Model categorization for `unknown` titles, cached. |
 | Worker fixtures | `worker/runFixtures.ts` | 15 scenarios, `npm run fixtures`. |
 
 ## Stubbed
-- Voice AI onboarding: archived in `outdated/` (see `outdated/README.md`); goals now come from the Goals screen.
+- Voice AI onboarding: Cartesia voice interview (`VoiceScreen`) before the Goals screen; "Type goals instead" skips voice.
 - LiveKit calls: `circleAPI` preload + `useCircleCall.ts` exist but nothing in the new UI uses them. **Important next step:** replace the UI's placeholder check-in tiles with real LiveKit video (see `components/livekit-call.md`).
 - Call room: `call_room_base_url` setting is `""`; no provider chosen.
 
@@ -36,7 +37,7 @@ Last updated: 2026-10-24. Biggest gap: **activity signals do not reach Spacetime
 - Check-in call UI.
 - Screens: replay (no consent screen by decision; see `product/privacy.md`).
 - Worker: summary + replay captions.
-- Inferentia small model (Claude Haiku is the only judge).
+- Inferentia small model. Desktop judge is Gemini; worker judge is still Claude Haiku.
 - Integrations: Creao/Slack, Notability export.
 
 ## UI features still to integrate (spec: `ui_integration.md`)
@@ -60,7 +61,7 @@ Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` �
 ## Mismatches (unresolved; decisions tracked in `product/decisions.md`)
 | Area | Variants in code |
 |---|---|
-| Judge | `src/main/claudeJudge.ts`: `claude-haiku-4-5-20251001`, labels `productive`/`distracted`/`neutral` · `worker/judge.ts`: `claude-haiku-5-5`, `on_task`/`off_task`/`break` · DB `StatusLabel`: `Focused`/`OffTask`/`Away`/`Break`/`Unknown` |
+| Judge | `src/main/claudeJudge.ts`: `gemini-3.5-flash-lite`, labels `productive`/`distracted`/`neutral` · `worker/judge.ts`: `claude-haiku-5-5`, `on_task`/`off_task`/`break` · DB `StatusLabel`: `Focused`/`OffTask`/`Away`/`Break`/`Unknown` |
 | Categories | `categorize.ts`: contract lowercase 9 · `appClassifier.ts`: `productive`/`distracted`/`neutral`/`unknown` (drives alerts) · DB `AppCategory`: `OnTask`/`OffTask` (published 2026-10-24). Desktop sets still to be replaced by the OCR + Gemini verdict (`architecture/overview.md#off-task-pipeline`). |
 | Event format | Contract JSON (`worker/types.ts`) vs DB `SignalInput`. See `architecture/contracts.md`. |
 | Timing | Spec: drift 2 min, call cooldown 30 min, call ~60 s · DB: call immediately on OffTask (`off_task_threshold_secs` 0), cooldown 600 s, max call 90 s · Desktop: alerts at 30/60 s, auto-call cooldown 5 min, LiveKit call 30 s |
@@ -89,8 +90,10 @@ Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` �
 - Every laptop needs `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` in `.env`; each signs its own call token.
 - LiveKit tokens are signed by hand in `livekitToken.ts`: `livekit-server-sdk` needs Node 19+, Electron 28 ships Node 18.
 - Worker runs `.ts` directly: needs Node 24 (`node -v`).
-- `osascript` needs Accessibility/Automation permission for System Events; window titles need Screen Recording. Screen monitor OCR also needs Screen Recording. `GEMINI_API_KEY` for `vision/04_screen_monitor.py`.
-- Facetime trigger: `npm run setup:vision` once so `vision/.venv` exists. Prints `face time` when the screen is off-task twice in a row, or when the screen is on-task both times and the webcam is distracted both times. Video check-in popups stay on the Demo menu (`OverlayApp.tsx`: `.glass-video`, `.checkin-timer-pop`, `.teammate-share-window`).
+- `osascript` needs Accessibility/Automation permission for System Events; window titles need Screen Recording. Screen monitor OCR also needs Screen Recording. `GEMINI_API_KEY` for `vision/04_screen_monitor.py` and the desktop judge/summary.
+- 2026-10-24: `ANTHROPIC_API_KEY` has no credits (API 400). Desktop judge and the voice summary use Gemini instead. The worker still calls Claude.
+- A Gemini key was hardcoded on `origin/prod` and `origin/webcam-activity-detection`; removed (prod `eebfad3`), replaced in `.env`, but still in git history. Never commit keys.
+- Facetime trigger: `npm run setup:vision` once so `vision/.venv` exists. Prints `face time` after two intervals of a different app than they named, or of OCR text Gemini calls irrelevant to the study goal, or of the webcam looking distracted while the screen looks on-task. That opens the live check-in. The Demo menu still opens the mock one.
 - SpacetimeDB `init` seeds only on first publish; after a schema publish run `seed_defaults`.
 
 Kevin-specific (his machine/setup only):

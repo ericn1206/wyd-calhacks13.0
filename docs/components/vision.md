@@ -15,7 +15,8 @@ On Goals submit, run the webcam detector and the screen monitor. Print `face tim
 | Key | Value |
 |---|---|
 | Interval | 10 s |
-| Screen path | `is_off_task` two intervals in a row. Webcam is ignored. |
+| Wrong app | If the voice interview named a desktop app (`sites`, argv 2), a different frontmost app is off-task. Electron and macOS UI (System Settings, Control Center, etc.) are ignored. No named app → this check is skipped. |
+| Screen path | Otherwise Gemini reads local OCR text and marks off-task when it is not relevant to the study goal (subject + goals + notes). Two off intervals in a row. Webcam is ignored on this path. |
 | Webcam path | Screen on-task both intervals, and webcam `distracted` both intervals. |
 | Fire | Either path prints `face time` once. Any other interval resets both streaks. |
 | Not done | Does not open `.glass-video` / check-in popups. Those stay on the Demo menu. |
@@ -23,7 +24,7 @@ On Goals submit, run the webcam detector and the screen monitor. Print `face tim
 ## Run
 1. `npm run setup:vision`
 2. `GEMINI_API_KEY` in `.env` or the environment. Without it the screen vote is unknown, so neither path can fire.
-3. `npm run dev`, submit Goals. Or alone: `vision/.venv/bin/python vision/facetime_trigger.py "circuits"`.
+3. `npm run dev`, finish the voice interview or submit Goals. Or alone: `vision/.venv/bin/python vision/facetime_trigger.py "aviation" "google chrome"`.
 
 ## Gotchas
 - Camera permission for the Python process. Screen Recording for OCR.

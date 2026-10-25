@@ -3,7 +3,7 @@
 ## Packages
 | Part | Path | Runtime | Key deps |
 |---|---|---|---|
-| Desktop | `/` (`src/`) | Electron ^28, electron-vite ^2 | react ^18.2, react-dom, @vitejs/plugin-react ^4, tailwindcss ^4 + @tailwindcss/vite ^4 (renderer), vite ^5.4 (explicit; `npm install` without it breaks), typescript ^5, @anthropic-ai/sdk ^0.27, livekit-client 2.23.0 (exact), spacetimedb 2.13.* (client), undici ^6 (WebSocket for the SDK on Node 18) |
+| Desktop | `/` (`src/`) | Electron ^28, electron-vite ^2 | react ^18.2, react-dom, @vitejs/plugin-react ^4, tailwindcss ^4 + @tailwindcss/vite ^4 (renderer), vite ^5.4 (explicit; `npm install` without it breaks), typescript ^5, livekit-client 2.23.0 (exact), spacetimedb 2.13.* (client), undici ^6 (WebSocket for the SDK on Node 18). Judge/summary call Gemini over REST (no SDK). `@anthropic-ai/sdk ^0.27` is still installed and unused. |
 | Worker | `worker/` | Node 24, ESM, runs `.ts` directly (no build) | @anthropic-ai/sdk ^0.27 |
 | SpacetimeDB module | `spacetimedb/` | SpacetimeDB TS module (V8) | spacetimedb 2.13.*, typescript ~5.6 |
 | Distraction trigger | `vision/` | Python 3.12 venv `vision/.venv`, spawned by desktop main on Goals submit | `requirements.txt`: mediapipe 0.10.21, opencv-contrib-python 4.11.0.86, numpy 1.26.4, pillow 11.1.0, google-generativeai 0.8.5. OCR is macOS Vision (`macos_vision_ocr.swift`), not a pip package. |
@@ -13,7 +13,7 @@ Desktop build: `electron.vite.config.ts` (main/preload externalize deps; rendere
 ## Models
 | Use | Model | Where |
 |---|---|---|
-| Desktop judge + onboarding context | `claude-haiku-4-5-20251001` | `src/main/claudeJudge.ts` |
+| Desktop judge + voice-interview summary | `gemini-3.5-flash-lite` | `src/main/claudeJudge.ts` (same model as `vision/04_screen_monitor.py`) |
 | Worker judge + categorizer | `claude-haiku-5-5`, `effort: low` | `worker/claude.ts` |
 | Planned primary judge | small model on AWS Inferentia | not built |
 
@@ -27,13 +27,12 @@ Desktop build: `electron.vite.config.ts` (main/preload externalize deps; rendere
 ## Env vars (`.env`, gitignored)
 | Var | Used by |
 |---|---|
-| `ANTHROPIC_API_KEY` | desktop (`src/main/env.ts` loads `.env`; shell vars win), worker (`--env-file-if-exists=../.env`) |
+| `ANTHROPIC_API_KEY` | worker (`worker/claude.ts`, `--env-file-if-exists=../.env`) |
 | `LIVEKIT_URL` (`wss://…`), `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | desktop main, `livekitToken.ts`; secret never reaches the renderer |
 | `SPACETIME_URI` (default `wss://maincloud.spacetimedb.com`), `SPACETIME_DB` (default `calhacks-13-wyd`) | desktop main, `src/main/db/stdb.ts` (optional overrides) |
 | `WYD_DEBUG` (`1`/`0`; default on unless packaged) | desktop main, `src/main/db/debugLog.ts`: logs DB connect/subscribe/reducer calls/state changes to the terminal and `~/Library/Application Support/attentionmaxx/logs/stdb.log` |
-| `GEMINI_API_KEY` (planned, not read by any code yet) | desktop main, off-task classification (see `overview.md#off-task-pipeline`) |
-| `CARTESIA_API_KEY`, `CARTESIA_AGENT_ID`, `CARTESIA_VOICE_ID` | used only by archived `outdated/` voice code |
-| `GEMINI_API_KEY` | `vision/04_screen_monitor.py` (screen text → Gemini). Not read by the renderer. |
+| `CARTESIA_API_KEY`, `CARTESIA_AGENT_ID` | `cartesiaAgent.ts` (voice intro; unrouted for now) · `CARTESIA_VOICE_ID` unused |
+| `GEMINI_API_KEY` | `vision/04_screen_monitor.py` (screen text) and desktop `src/main/claudeJudge.ts` (activity judge + voice-interview summary). Env first, then `.env` via `src/main/env.ts`. Not read by the renderer. |
 
 ## Commands
 | Do | Run |

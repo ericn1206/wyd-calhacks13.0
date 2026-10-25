@@ -18,7 +18,6 @@ export default __t.row({
   id: __t.u64().primaryKey(),
   sessionId: __t.u64().name("session_id"),
   identity: __t.identity(),
-  joinedAt: __t.timestamp().name("joined_at"),
   leftAt: __t.option(__t.timestamp()).name("left_at"),
   get deviceStatus() {
     return DeviceStatus.name("device_status");

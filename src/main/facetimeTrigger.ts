@@ -14,7 +14,7 @@ function projectRoot(): string {
 }
 
 /** Run vision/facetime_trigger.py. A stdout line `face time` starts a circle check-in. */
-export function startFacetimeTrigger(goal: string, onTrigger: () => void): void {
+export function startFacetimeTrigger(goal: string, onTrigger: () => void, sites = ''): void {
   stopFacetimeTrigger()
   const root = projectRoot()
   const python = join(root, 'vision/.venv/bin/python')
@@ -23,7 +23,9 @@ export function startFacetimeTrigger(goal: string, onTrigger: () => void): void 
     console.error('[facetime] no vision/.venv. Run npm run setup:vision')
     return
   }
-  const proc = spawn(python, [script, goal], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] })
+  const args = [script, goal]
+  if (sites.trim()) args.push(sites)
+  const proc = spawn(python, args, { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] })
   child = proc
   let pending = ''
   proc.stdout?.on('data', (buf: Buffer) => {

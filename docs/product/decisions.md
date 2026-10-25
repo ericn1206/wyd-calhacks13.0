@@ -11,7 +11,7 @@
 | 2026-10-24 | Check-in calls: LiveKit (LiveKit Cloud). See `../components/livekit-call.md`. |
 | 2026-10-24 | No roasts, spoken or written. |
 | 2026-10-24 | Phone sensor is optional; the app works fully without it. |
-| 2026-10-24 | Onboarding: typed questionnaire (subject + goals). No AI voice. |
+| 2026-10-24 | Onboarding: Cartesia voice interview first (`VoiceScreen`), then focus. "Type goals instead" still opens the typed goals screen. |
 | 2026-10-24 | Off-task is announced immediately: no hold, `off_task_threshold_secs` default 0; others learn at once. Privacy updated to allow OCR text → Gemini (`privacy.md`). |
 | 2026-10-24 | DB categories are binary: `AppCategory` = `OnTask`/`OffTask`. |
 | 2026-10-24 | Off-task detection: local OCR of screenshots every few seconds → Gemini API → OnTask/OffTask → `ingest_signal` → off-task event → other clients get a call alert. See `../architecture/overview.md#off-task-pipeline`. |

@@ -146,7 +146,7 @@ The opening card has two modes.
 
 - Accepts an existing session code.
 - Requires a non-empty code before continuing.
-- Shows a group preview without online/offline or social-presence claims.
+- Does not preview a group. Session name and members come from SpacetimeDB after join.
 - Assigns the current user the **participant** role.
 - Passes through the first-run introduction gate before goal setup.
 

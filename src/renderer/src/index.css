@@ -44,7 +44,7 @@ footer { height: 56px; color: #97a19d; font-size: 12px; text-align: center; }
 .entry-panel[aria-hidden="true"] { visibility: hidden; }
 /* `.primary` transitions `all`, which includes visibility: hide the inactive tab instantly. */
 .entry-panel[aria-hidden="true"] * { transition: none; }
-/* Join is shorter than Create: spread heading / code / preview over the shared height. */
+/* Join is shorter than Create: spread the heading and code field over the shared height. */
 .join-panel { display: flex; flex-direction: column; justify-content: space-evenly; }
 .join-panel h1 { margin: 22px 0 18px; }
 .entry-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: -18px -18px 30px; padding: 4px; border-radius: 13px; background: #eef2ef; }
@@ -75,11 +75,6 @@ input:focus { border-color: var(--purple); }
 .square { width: 52px; padding: 0; }
 .full { width: 100%; }
 .hint { color: #96a09c; font-size: 12px; text-align: left; margin-top: 7px; }
-.group-preview { border-top: 1px solid var(--line); margin-top: 32px; padding-top: 25px; display: flex; align-items: center; text-align: left; gap: 15px; }
-.group-preview div:last-child { display: grid; gap: 3px; }
-.group-preview strong { font-size: 13px; }
-.group-preview span:not(.avatar) { color: var(--muted); font-size: 12px; }
-.avatar-stack { display: flex; padding-left: 8px; }
 .avatar { width: 45px; height: 45px; flex: 0 0 auto; border-radius: 50%; display: grid; place-items: center; position: relative; font-weight: 700; font-size: 12px; color: #46504d; }
 .avatar.mini { width: 34px; height: 34px; margin-left: -8px; border: 3px solid white; font-size: 9px; }
 .icon-bubble { width: 48px; height: 48px; border-radius: 15px; display: grid; place-items: center; color: var(--blue-ink); background: var(--purple-soft); margin-bottom: 20px; }
@@ -319,7 +314,7 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
 .focus-dock-wrap.dock-hidden { transform: translate(-50%, calc(-100% - 8px)); }
 .focus-dock-wrap.dock-hidden:after { content: ''; position: absolute; width: 84px; height: 5px; border-radius: 0 0 6px 6px; background: rgba(49,75,73,.48); left: 50%; bottom: -13px; transform: translateX(-50%); }
 .focus-dock { width: 100%; min-height: 58px; color: #f7fbfa; border: 1px solid rgba(255,255,255,.18); border-radius: 20px; padding: 8px 12px; background: rgba(29,47,45,.88); box-shadow: 0 10px 35px rgba(22,34,32,.22); backdrop-filter: blur(18px) saturate(130%); display: flex; align-items: center; gap: 13px; overflow: hidden; }
-.dock-main { display: flex; align-items: center; gap: 11px; flex: none; }
+.dock-main { display: flex; align-items: center; gap: 11px; flex: 1; min-width: 0; }
 .dock-time { display: flex; align-items: center; gap: 7px; }
 .dock-time strong { font: 700 18px 'Manrope'; letter-spacing: -.03em; }
 .dock-time small { color: #9fb5b1; font-size: 8px; white-space: nowrap; }
@@ -334,7 +329,8 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
 .dock-timer-toggle { width: 65px; }
 .dock-timer-stop { width: 31px; }
 .dock-timer-stop span { display: none; }
-.self-status { width: 78px; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 6px 7px; border-radius: 12px; background: rgba(255,255,255,.08); font-size: 11px; white-space: nowrap; }
+.self-status { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; padding: 6px 10px; border-radius: 12px; background: rgba(255,255,255,.08); font-size: 11px; overflow: hidden; }
+.self-status-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .self-status i { width: 7px; height: 7px; border-radius: 50%; background: #61c795; box-shadow: 0 0 0 3px rgba(97,199,149,.12); }
 .self-status.off-task i { background: #ec7770; box-shadow: 0 0 0 3px rgba(236,119,112,.12); }
 .dock-people { display: flex; padding-left: 6px; }
@@ -344,7 +340,7 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
 .dock-divider { width: 1px; height: 20px; background: rgba(255,255,255,.14); }
 .camera-live { display: flex; align-items: center; gap: 6px; color: #bfe3dc; font-size: 10px; white-space: nowrap; }
 .camera-live svg { width: 17px; }
-.dock-detail { display: flex; align-items: center; gap: 9px; min-width: 0; flex: 1; }
+.dock-detail { display: flex; align-items: center; gap: 9px; flex: none; }
 .dock-goal { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; font-size: 11px; cursor: pointer; }
 .dock-goal input { display: none; }
 .dock-goal .fake-check { border-color: rgba(255,255,255,.4); flex: none; }
