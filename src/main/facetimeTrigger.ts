@@ -40,7 +40,7 @@ export function startFacetimeTrigger(goal: string, onTrigger: () => void, onStat
     console.error('[facetime] no vision/.venv. Run npm run setup:vision')
     return
   }
-  // Second argument: everything the user mentioned (sites/apps); the trigger allows only apps named there.
+  // Second argument: sites/apps they mentioned. Passed to Gemini as context, not a hard allowlist.
   const args = [script, goal]
   if (sites.trim()) args.push(sites)
   const proc = spawn(python, args, { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] })

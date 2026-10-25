@@ -16,7 +16,7 @@ On Goals submit, run the webcam detector and the screen monitor. Print `face tim
 | Key | Value |
 |---|---|
 | Interval | 5 s (`INTERVAL_SEC` in `facetime_trigger.py`; standalone screen loop `CHECK_INTERVAL` matches) |
-| Screen vote | 1) Front-app allowlist (`frontmost_app()` via `osascript`): if the user named desktop apps (`APP_ALIASES`, e.g. VS Code, Notion) and the front app is neither one of them nor neutral (`NEUTRAL_APPS`: WYD/Electron, macOS UI) → off, reason "`<app>` is not an app you named". No named app → this check is skipped. 2) Else Gemini on the OCR text: off when not directly related to the goal (different subject, messaging, social, entertainment); ambiguous → on. Two off votes in a row fire; webcam is ignored on this path. Args: `facetime_trigger.py <goal> [mentioned sites/apps]`. |
+| Screen vote | Gemini on the OCR text, with context: the front app (`frontmost_app()` via `osascript`) and the sites/apps the user mentioned — a guide, not a whitelist. Off when not related to the goal or to organizing it (different subject, messaging, social, entertainment, shopping); planning tools (calendar, to-do, notes, course pages, email about the task) are on; ambiguous → on. Two off votes in a row fire; webcam is ignored on this path. Args: `facetime_trigger.py <goal> [mentioned sites/apps]`. |
 | Webcam path | Screen on-task both intervals, and webcam `distracted` both intervals. |
 | Fire | Either path prints `face time` once. Any other interval resets both streaks. |
 | Debug | Every interval prints `debug {status, screen, reason, ocrChars, webcam, face, prob, screenStreak, camStreak}` → main keeps the last 300 → Demo menu "Detector log" window; "Dock debug" toggle shows the latest as chips on the dock (verdict · OCR · webcam · streaks · current app). |
@@ -26,7 +26,7 @@ On Goals submit, run the webcam detector and the screen monitor. Print `face tim
 
 ## Run
 1. `npm run setup:vision`
-2. `GEMINI_API_KEY` in `.env` or the environment. Without it the screen vote is unknown, so the OCR path cannot fire. A named-app miss still can.
+2. `GEMINI_API_KEY` in `.env` or the environment. Without it the screen vote is unknown, so the OCR path cannot fire.
 3. `npm run dev`, submit Goals. Or alone: `vision/.venv/bin/python vision/facetime_trigger.py "circuits" "Google Chrome"`. Second arg is the sites/apps phrase.
 
 ## Gotchas

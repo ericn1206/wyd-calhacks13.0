@@ -7,7 +7,7 @@ Last updated: 2026-10-24. Biggest gap: only the detector's OnTask/OffTask verdic
 |---|---|---|
 | SpacetimeDB module | `spacetimedb/` | Full schema + 37 reducers: sessions, goals, Pomodoro timers, `ingest_signal`, smoothing, fallback judge, scoring, call/nudge trigger, phone pairing, finalize + awards. Configured for maincloud db `calhacks-13-wyd`. See `components/spacetimedb.md`. |
 | Desktop activity tracking | `src/main/activityMonitor.ts` | Polls front app + window title + browser URL (Chrome/Safari/Arc/Brave) every 2 s via `osascript`. macOS only. |
-| Distraction trigger | `vision/facetime_trigger.py`, `vision/detector.py`, `vision/04_screen_monitor.py`, `src/main/facetimeTrigger.ts` | Runs only while a round timer is going. A named app that is not in front, or Gemini saying the OCR text is off the study goal, twice in a row (5 s) — or webcam distracted twice while the screen looks on-task — prints `face time`. See `components/vision.md`. |
+| Distraction trigger | `vision/facetime_trigger.py`, `vision/detector.py`, `vision/04_screen_monitor.py`, `src/main/facetimeTrigger.ts` | Runs only while a round timer is going. Every 5 s Gemini judges the OCR text (front app and named sites are context, not a block; planning tools count as on task). Off twice in a row, or webcam distracted twice while the screen looks on-task, prints `face time`. See `components/vision.md`. |
 | Desktop `.env` loader | `src/main/env.ts` | Loads root `.env` into `process.env` at startup (no override of shell vars). |
 | Desktop categorization | `src/main/categorize.ts` | Rules + cache → contract categories (`coding`…`unknown`). Fills `activity.category`. |
 | Desktop judge | `src/main/claudeJudge.ts` | Gemini `gemini-3.5-flash-lite` every 8 s once session context exists. Strict: a different subject is distracted. Spoken goals are condensed to short titles. Output drives local alerts (30 s warning, 60 s alert). The dock pill uses the vision detector reason, not this judge. |
@@ -86,7 +86,7 @@ Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` �
 - Worker runs `.ts` directly: needs Node 24 (`node -v`).
 - `osascript` needs Accessibility/Automation permission for System Events; window titles need Screen Recording. Screen monitor OCR also needs Screen Recording. `GEMINI_API_KEY` for `vision/04_screen_monitor.py`, `src/main/claudeJudge.ts`, and `worker/claude.ts`.
 - A Gemini key was hardcoded on `origin/prod` and `origin/webcam-activity-detection`; removed (prod `eebfad3`), replaced in `.env`, but still in git history. Never commit keys.
-- Facetime trigger: `npm run setup:vision` once so `vision/.venv` exists. Every 5 s: a named app that is not in front, or OCR text Gemini calls irrelevant to the study goal, counts as a screen hit. Two hits, or two on-task intervals with the webcam distracted, print `face time` and open the live check-in. The Demo menu still opens the mock one.
+- Facetime trigger: `npm run setup:vision` once so `vision/.venv` exists. Every 5 s Gemini judges the OCR text (front app and named sites are context). Two off-task hits, or two on-task intervals with the webcam distracted, print `face time` and open the live check-in. The Demo menu still opens the mock one.
 - SpacetimeDB `init` seeds only on first publish; after a schema publish run `seed_defaults`.
 
 Kevin-specific (his machine/setup only):

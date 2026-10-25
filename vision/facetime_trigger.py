@@ -1,14 +1,13 @@
 """Start the webcam detector and the screen monitor, then print face time.
 
 An interval is 5 seconds. Print face time when either streak hits 2:
-1. A named app is not in front, or Gemini says the OCR text is off the study goal, twice in a row (webcam is ignored).
+1. Gemini says the OCR text is off the study goal, twice in a row (webcam is ignored). The front app and named sites are context, not a hard block.
 2. Screen looks on-task both intervals, and the webcam distracted both times.
 """
 
 import importlib.util
 import json
 import os
-import re
 import signal
 import subprocess
 import sys
@@ -24,152 +23,6 @@ lock = threading.Lock()
 webcam_distracted = False
 saw_webcam = False
 webcam_last = {}  # latest detector.py JSON line, for the debug output
-
-# Frontmost-app names that are the focus app itself or macOS chrome, not a drift.
-NEUTRAL_APPS = (
-    "electron",
-    "wyd",
-    "system settings",
-    "system preferences",
-    "control center",
-    "notification center",
-    "spotlight",
-    "dock",
-    "loginwindow",
-    "usernotificationcenter",
-    "coreauth",
-    "securityagent",
-    "universalaccess",
-)
-
-# Phrase from the voice interview → macOS process names that count as that app.
-APP_ALIASES = (
-    ("google chrome", ("google chrome",)),
-    ("visual studio code", ("code", "visual studio code")),
-    ("vs code", ("code", "visual studio code")),
-    ("chrome", ("google chrome",)),
-    ("safari", ("safari",)),
-    ("firefox", ("firefox",)),
-    ("brave", ("brave browser", "brave")),
-    ("microsoft edge", ("microsoft edge",)),
-    ("messages", ("messages",)),
-    ("apple notes", ("notes",)),
-    ("notes app", ("notes",)),
-    ("notion", ("notion",)),
-    ("slack", ("slack",)),
-    ("discord", ("discord",)),
-    ("spotify", ("spotify",)),
-    ("iterm", ("iterm2", "iterm")),
-    ("zoom", ("zoom.us", "zoom")),
-    ("figma", ("figma",)),
-    ("cursor", ("cursor",)),
-    ("xcode", ("xcode",)),
-    ("arc", ("arc",)),
-)
-
-
-def named_apps(sites):
-    """Desktop apps the user said they would use. Empty when they only named websites."""
-    phrase = (sites or "").lower()
-    if not phrase.strip():
-        return ()
-    found = []
-    for alias, fronts in APP_ALIASES:
-        if re.search(r"\b" + re.escape(alias) + r"\b", phrase):
-            found.extend(fronts)
-    return tuple(dict.fromkeys(found))
-
-
-def app_allowed(front, sites):
-    """True when no app was named, the front app is neutral, or it is one they named."""
-    allowed = named_apps(sites)
-    if not allowed:
-        return True
-    front_l = (front or "").lower().strip()
-    if not front_l:
-        return True
-    if any(name in front_l for name in NEUTRAL_APPS):
-        return True
-    return any(name in front_l or front_l in name for name in allowed)
-
-
-def frontmost_app():
-    proc = subprocess.run(
-        ["osascript", "-e", 'tell application "System Events" to get name of first application process whose frontmost is true'],
-        capture_output=True,
-        text=True,
-        timeout=3,
-    )
-    if proc.returncode != 0:
-        return ""
-    return proc.stdout.strip()
-
-# Frontmost-app names that are the focus app itself or macOS chrome, not a drift.
-NEUTRAL_APPS = (
-    "electron",
-    "wyd",
-    "system settings",
-    "system preferences",
-    "control center",
-    "notification center",
-    "spotlight",
-    "dock",
-    "loginwindow",
-    "usernotificationcenter",
-    "coreauth",
-    "securityagent",
-    "universalaccess",
-)
-
-# Phrase from the voice interview → macOS process names that count as that app.
-APP_ALIASES = (
-    ("google chrome", ("google chrome",)),
-    ("visual studio code", ("code", "visual studio code")),
-    ("vs code", ("code", "visual studio code")),
-    ("chrome", ("google chrome",)),
-    ("safari", ("safari",)),
-    ("firefox", ("firefox",)),
-    ("brave", ("brave browser", "brave")),
-    ("microsoft edge", ("microsoft edge",)),
-    ("messages", ("messages",)),
-    ("apple notes", ("notes",)),
-    ("notes app", ("notes",)),
-    ("notion", ("notion",)),
-    ("slack", ("slack",)),
-    ("discord", ("discord",)),
-    ("spotify", ("spotify",)),
-    ("iterm", ("iterm2", "iterm")),
-    ("zoom", ("zoom.us", "zoom")),
-    ("figma", ("figma",)),
-    ("cursor", ("cursor",)),
-    ("xcode", ("xcode",)),
-    ("arc", ("arc",)),
-)
-
-
-def named_apps(sites):
-    """Desktop apps the user said they would use. Empty when they only named websites."""
-    phrase = (sites or "").lower()
-    if not phrase.strip():
-        return ()
-    found = []
-    for alias, fronts in APP_ALIASES:
-        if re.search(r"\b" + re.escape(alias) + r"\b", phrase):
-            found.extend(fronts)
-    return tuple(dict.fromkeys(found))
-
-
-def app_allowed(front, sites):
-    """True when no app was named, the front app is neutral, or it is one they named."""
-    allowed = named_apps(sites)
-    if not allowed:
-        return True
-    front_l = (front or "").lower().strip()
-    if not front_l:
-        return True
-    if any(name in front_l for name in NEUTRAL_APPS):
-        return True
-    return any(name in front_l or front_l in name for name in allowed)
 
 
 def frontmost_app():
@@ -217,24 +70,20 @@ def read_webcam(proc):
 def screen_vote(screen, goal, sites):
     """'off' is a screen hit. 'ok' is on-task. 'unknown' is blank or an error.
 
-    A named app that is not in front is off-task before OCR. Otherwise Gemini
-    decides whether the OCR text is relevant to the study goal.
+    Gemini decides from the OCR text. The front app and the sites/apps the user mentioned are
+    passed as context only (not a strict allowlist), so e.g. Google Calendar can still be on task.
     """
+    if screen is None:
+        return "unknown"
     try:
         front = frontmost_app()
     except (OSError, subprocess.TimeoutExpired):
         front = ""
-    if front and not app_allowed(front, sites):
-        print(f" -> OFF-TASK: {front} is not an app they named", file=sys.stderr)
-        if screen is not None:
-            # Keep the debug strip / detector log honest: this check's reason is the app, not the last OCR.
-            screen.ui_state["is_off_task"] = True
-            screen.ui_state["reason"] = f"{front} is not an app you named"
-            screen.ui_state["ocr_chars"] = 0
-        return "off"
-    if screen is None:
-        return "unknown"
-    screen.check_once(goal)
+    context = "; ".join(part for part in (
+        f"front app is {front}" if front else "",
+        f"they said they would use: {sites}" if sites.strip() else "",
+    ) if part)
+    screen.check_once(goal, context)
     reason = str(screen.ui_state.get("reason", ""))
     if reason == "Screen mostly desktop/blank" or reason.startswith("Error:"):
         return "unknown"
