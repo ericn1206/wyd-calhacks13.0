@@ -15,8 +15,9 @@ On Goals submit, run the webcam detector and the screen monitor. Print `face tim
 ## Rule
 | Key | Value |
 |---|---|
-| Interval | 10 s |
-| Screen path | `is_off_task` two intervals in a row. Webcam is ignored. |
+| Interval | 5 s (`INTERVAL_SEC` in `facetime_trigger.py`; standalone screen loop `CHECK_INTERVAL` matches) |
+| Named app | If the goals/sites/notes name a desktop app (`APP_ALIASES` in `facetime_trigger.py`) and a different app is frontmost, that interval is off-task before OCR. Neutral macOS chrome and the focus app itself do not count. No named app → this check is skipped. |
+| Screen path | `is_off_task` two intervals in a row (named-app miss, or Gemini: screen text is a different subject). Webcam is ignored. |
 | Webcam path | Screen on-task both intervals, and webcam `distracted` both intervals. |
 | Fire | Either path prints `face time` once. Any other interval resets both streaks. |
 | Debug | Every interval prints `debug {status, screen, reason, ocrChars, webcam, face, prob, screenStreak, camStreak}` → main keeps the last 300 → Demo menu "Detector log" window; "Dock debug" toggle shows the latest as chips on the dock (verdict · OCR · webcam · streaks). |
@@ -25,8 +26,8 @@ On Goals submit, run the webcam detector and the screen monitor. Print `face tim
 
 ## Run
 1. `npm run setup:vision`
-2. `GEMINI_API_KEY` in `.env` or the environment. Without it the screen vote is unknown, so neither path can fire.
-3. `npm run dev`, submit Goals. Or alone: `vision/.venv/bin/python vision/facetime_trigger.py "circuits"`.
+2. `GEMINI_API_KEY` in `.env` or the environment. Without it the screen vote is unknown, so the OCR path cannot fire. A named-app miss still can.
+3. `npm run dev`, submit Goals. Or alone: `vision/.venv/bin/python vision/facetime_trigger.py "circuits" "Google Chrome"`. Second arg is the sites/apps phrase.
 
 ## Gotchas
 - Camera permission for the Python process. Screen Recording for OCR.

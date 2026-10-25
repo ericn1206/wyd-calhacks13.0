@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk'
+const GEMINI_MODEL = 'gemini-3.5-flash-lite'
 
 export interface SessionContext {
   subject: string
@@ -12,10 +12,29 @@ export interface JudgmentResult {
   reason: string
 }
 
-let _client: Anthropic | null = null
-function getClient(): Anthropic {
-  if (!_client) _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-  return _client
+async function askGemini(prompt: string, maxTokens: number): Promise<string> {
+  const key = process.env.GEMINI_API_KEY?.trim()
+  if (!key) throw new Error('GEMINI_API_KEY is not set')
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: maxTokens, temperature: 0, responseMimeType: 'application/json' },
+      }),
+      signal: AbortSignal.timeout(20000),
+    }
+  )
+  const body = await response.json().catch(() => null) as {
+    error?: { message?: string }
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+  } | null
+  if (!response.ok) throw new Error(body?.error?.message || `Gemini request failed (${response.status})`)
+  const text = body?.candidates?.[0]?.content?.parts?.map(part => part.text ?? '').join('').trim() ?? ''
+  if (!text) throw new Error('Gemini returned no text')
+  return text
 }
 
 export async function judgeActivity(
@@ -46,22 +65,16 @@ Recent app switches:
 ${historyText}
 
 Classify the CURRENT activity as one of:
-- "productive": directly helps their stated subject/goals (even loosely — a search engine could be productive if they're researching)
-- "distracted": clearly off-task (social media, entertainment, gaming, unrelated browsing)
-- "neutral": system tasks, ambiguous, or unclear
+- "productive": directly related to their stated subject/goals, or a tool/site they said they will use
+- "distracted": clearly off-task — different subject, social media, entertainment, gaming, news, travel, shopping, nature/recreation sites, or any browsing unrelated to their goal
+- "neutral": OS/system tasks (Finder, Settings, Terminal with no context), or genuinely ambiguous
 
-Be lenient about "productive" — if it plausibly relates to their subject, call it productive. A site or app they said they will use is productive.
+Do NOT be lenient. If the content is about a topic other than their stated subject, it is "distracted". A search engine is productive only if the query is about their subject. A government or travel site is distracted if their goal is studying a different subject.
 
 Reply ONLY with valid JSON (no other text): {"category":"productive"|"distracted"|"neutral","reason":"<8 words max>"}`
 
   try {
-    const response = await getClient().messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 80,
-      messages: [{ role: 'user', content: prompt }]
-    })
-
-    const text = response.content[0].type === 'text' ? response.content[0].text.trim() : ''
+    const text = await askGemini(prompt, 80)
     const match = text.match(/\{[\s\S]*\}/)
     const parsed = JSON.parse(match?.[0] ?? '{}')
     const category = ['productive', 'distracted', 'neutral'].includes(parsed.category)
@@ -94,6 +107,70 @@ function isFiller(text: string): boolean {
   return /^(yeah|yep|yes|no|nah|wait|uh|um|okay|ok|totally|right|sure|hello|hey|hi)[.!]?$/i.test(text.trim())
 }
 
+function stripFillers(value: string): string {
+  return value
+    .replace(/\b(?:um+|uh+|er+|ah+|hmm+|mm+)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([,.])/g, '$1')
+    .replace(/^[,.\s]+|[,.\s]+$/g, '')
+    .trim()
+}
+
+/** "Um, I'm going to uh, I'm going to study some chemistry" → "Study chemistry". */
+export function condenseUtterance(raw: string): string {
+  const words = stripFillers(raw)
+    .replace(/[,.!?;:]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(' ')
+    .filter(Boolean)
+  let changed = true
+  while (changed) {
+    changed = false
+    for (let len = Math.min(8, Math.floor(words.length / 2)); len >= 2; len--) {
+      for (let i = 0; i + len * 2 <= words.length; i++) {
+        const a = words.slice(i, i + len).join(' ').toLowerCase()
+        const b = words.slice(i + len, i + len * 2).join(' ').toLowerCase()
+        if (a !== b) continue
+        words.splice(i, len)
+        changed = true
+        break
+      }
+      if (changed) break
+    }
+  }
+  let text = words.join(' ')
+  for (let i = 0; i < 4; i++) {
+    const next = text
+      .replace(/^(?:so|well|okay|ok|yeah|yep|yes)\s+/i, '')
+      .replace(/^i(?:'m|m| am)\s+(?:going to|gonna|trying to|planning to|about to)\s+/i, '')
+      .replace(/^i(?:'m|m| am)\s+studying\s+/i, 'study ')
+      .replace(/^i(?:'m|m| am)\s+working on\s+/i, 'work on ')
+      .replace(/^i(?:'m|m| am)\s+reading\s+/i, 'read ')
+      .replace(/^i(?:'m|m| am)\s+writing\s+/i, 'write ')
+      .replace(/^i(?:'m|m| am)\s+reviewing\s+/i, 'review ')
+      .replace(/^i(?:'m|m| am)\s+finishing\s+/i, 'finish ')
+      .replace(/^i(?:'m|m| am)\s+practicing\s+/i, 'practice ')
+      .replace(/^i(?:'m|m| am)\s+doing\s+/i, 'do ')
+      .replace(/^i\s+(?:want|need|have|plan|hope)\s+to\s+/i, '')
+      .replace(/^i\s+(?:wanna|gotta)\s+/i, '')
+      .replace(/^(?:i(?:'ll| will)|gonna|let me)\s+/i, '')
+      .replace(/^[,.\s]+/, '')
+      .trim()
+    if (next === text) break
+    text = next
+  }
+  text = text.replace(/\bsome\s+(?!of\b)/i, '').replace(/\s+/g, ' ').trim()
+  if (!text || isFiller(text)) return ''
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
+function taskPhrase(value: unknown, fallback: string, max: number): string {
+  const condensed = typeof value === 'string' ? condenseUtterance(value) : ''
+  if (condensed && !looksLikeDialogue(condensed) && condensed.length <= max) return condensed
+  return fallback
+}
+
 /** Used when the model summary is missing. Pulls the user's own answers, never the agent lines. */
 export function summarizeTranscript(transcript: string): SessionContext {
   const turns = dialogueTurns(transcript)
@@ -109,11 +186,15 @@ export function summarizeTranscript(transcript: string): SessionContext {
     }
     if (turn.role === 'user' && !isFiller(turn.text)) study.push(turn.text)
   }
-  const studyLines = study.filter(line => line !== sites)
+  const goals: string[] = []
+  for (const line of study.filter(line => line !== sites)) {
+    const phrase = condenseUtterance(line)
+    if (phrase && !goals.some(goal => goal.toLowerCase() === phrase.toLowerCase())) goals.push(phrase)
+  }
   return {
-    subject: studyLines[0] || 'General study',
-    goals: [],
-    sites,
+    subject: goals[0] || 'General study',
+    goals: goals.slice(0, 3),
+    sites: stripFillers(sites),
     notes: ''
   }
 }
@@ -129,35 +210,27 @@ export async function extractSessionContext(transcript: string): Promise<Session
   const local = summarizeTranscript(transcript)
   let text = ''
   try {
-    const response = await getClient().messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 300,
-      messages: [{
-        role: 'user',
-        content: `Summarize this focus-session interview. Lines starting with "User:" are the person. Lines starting with "Agent:" are the assistant. Use only what the user said.
+    text = await askGemini(`Summarize this focus-session interview. Lines starting with "User:" are the person. Lines starting with "Agent:" are the assistant. Use only what the user said.
 
 ${transcript}
 
-Reply with ONLY this JSON object. Short plain text. Do not copy the dialogue and do not include the words User or Agent:
-{"subject":"<a few words naming what the user is studying>","goals":["<what they want to finish>"],"sites":"<the user's own words for the websites, apps, or tools they plan to use>","notes":"<a deadline or other constraint, or empty>"}
-If they never named a site, app, or tool, set sites to "".`
-      }]
-    })
-    text = response.content[0].type === 'text' ? response.content[0].text.trim() : ''
+Reply with ONLY this JSON object. Each subject and goal is a short task title (2–6 words), like "Study chemistry". Never copy filler (um, uh) or "I'm going to". Do not include the words User or Agent:
+{"subject":"<short task title>","goals":["<short task title>"],"sites":"<the user's own words for the websites, apps, or tools they plan to use>","notes":"<a deadline or other constraint, or empty>"}
+If they never named a site, app, or tool, set sites to "".`, 300)
     const match = text.match(/\{[\s\S]*\}/)
     const parsed = JSON.parse(match?.[0] ?? '{}')
     const goals = Array.isArray(parsed.goals)
       ? parsed.goals
-        .filter((goal: unknown): goal is string => typeof goal === 'string')
-        .map((goal: string) => goal.replace(/\s+/g, ' ').trim())
-        .filter((goal: string) => goal && !looksLikeDialogue(goal) && !isFiller(goal))
+        .map((goal: unknown) => taskPhrase(goal, '', 80))
+        .filter((goal: string) => goal && !isFiller(goal))
+        .filter((goal: string, index: number, all: string[]) => all.findIndex(item => item.toLowerCase() === goal.toLowerCase()) === index)
         .slice(0, 3)
       : []
     return {
-      subject: cleanText(parsed.subject, local.subject, 80),
-      goals,
-      sites: cleanText(parsed.sites, local.sites, 200),
-      notes: cleanText(parsed.notes, '', 200)
+      subject: taskPhrase(parsed.subject, local.subject, 80),
+      goals: goals.length ? goals : local.goals,
+      sites: cleanText(typeof parsed.sites === 'string' ? stripFillers(parsed.sites) : parsed.sites, local.sites, 200),
+      notes: cleanText(typeof parsed.notes === 'string' ? stripFillers(parsed.notes) : parsed.notes, '', 200)
     }
   } catch (err) {
     console.error('Session summary failed', err)

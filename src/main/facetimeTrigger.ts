@@ -5,7 +5,7 @@ import { app } from 'electron'
 
 let child: ChildProcess | null = null
 
-/** One `debug {...}` line from vision/facetime_trigger.py (one per 10 s interval), plus arrival time. */
+/** One `debug {...}` line from vision/facetime_trigger.py (one per 5 s interval), plus arrival time. */
 export interface DetectorDebug {
   t: number
   status: 'on' | 'off' | 'none'
@@ -31,7 +31,7 @@ function projectRoot(): string {
  * Run vision/facetime_trigger.py. A stdout line `face time` starts a circle check-in;
  * `status on` / `status off` (every interval with a verdict) drive the status dots.
  */
-export function startFacetimeTrigger(goal: string, onTrigger: () => void, onStatus: (offTask: boolean) => void, onDebug: (entry: DetectorDebug) => void): void {
+export function startFacetimeTrigger(goal: string, onTrigger: () => void, onStatus: (offTask: boolean) => void, onDebug: (entry: DetectorDebug) => void, sites = ''): void {
   stopFacetimeTrigger()
   const root = projectRoot()
   const python = join(root, 'vision/.venv/bin/python')
@@ -40,7 +40,9 @@ export function startFacetimeTrigger(goal: string, onTrigger: () => void, onStat
     console.error('[facetime] no vision/.venv. Run npm run setup:vision')
     return
   }
-  const proc = spawn(python, [script, goal], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] })
+  const args = [script, goal]
+  if (sites.trim()) args.push(sites)
+  const proc = spawn(python, args, { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] })
   child = proc
   let pending = ''
   proc.stdout?.on('data', (buf: Buffer) => {

@@ -297,14 +297,21 @@ export default function App() {
   const membersKey = members.map((person) => `${person.name}:${person.status}:${person.hex ?? ''}`).join('|')
   // My status exactly as partners see it (status table), so my dock and their screens agree.
   // What I'm on right now (activityMonitor polls every 2 s once tracking starts); shown on my dock.
+  // The same update carries the activity judge's verdict, shown as the dock status line.
   const [currentActivity, setCurrentActivity] = useState('')
+  const [judgeOffTask, setJudgeOffTask] = useState(false)
+  const [judgeReason, setJudgeReason] = useState('')
   useEffect(() => {
-    window.wydDesktop?.onActivityUpdate((state) => setCurrentActivity(activityLabel(state.appName, state.url)))
+    window.wydDesktop?.onActivityUpdate((state) => {
+      setCurrentActivity(activityLabel(state.appName, state.url))
+      setJudgeOffTask(state.category === 'distracted')
+      setJudgeReason(state.reason ?? '')
+    })
     return () => window.wydDesktop?.removeActivityListeners()
   }, [])
   const selfStatus = dbSession ? ((db.people.find((person) => person.me)?.status as 'focused' | 'drifting' | undefined) ?? 'focused') : null
 
-  // Report each detector verdict (vision/facetime_trigger.py, every 10 s) to SpacetimeDB: the server
+  // Report each detector verdict (vision/facetime_trigger.py, every 5 s) to SpacetimeDB: the server
   // applies OnTask/OffTask immediately and every client's status dots read the same row.
   useEffect(() => {
     if (!serverActive) return
@@ -324,10 +331,10 @@ export default function App() {
       host: isHost, serverPhase: dbSession?.state ?? null, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, started: sessionStarted,
       onBreak: screen === 'break', breakSeconds, breakMinutes: upcomingBreakMinutes, checked,
       currentGoal: goals.find((g) => g.trim()) || '', isTired, tiredNotice, checkInCorner,
-      sessionCode: shareCall ? sessionCode : '', displayName: callName, members, selfStatus, currentActivity, debugEnabled: dockDebug, debug: latestDebug, tracking,
+      sessionCode: shareCall ? sessionCode : '', displayName: callName, members, selfStatus, currentActivity, judgeOffTask, judgeReason, debugEnabled: dockDebug, debug: latestDebug, tracking,
     }
     window.wydDesktop?.bridge.send({ type: 'state', state })
-  }, [overlayReady, isHost, dbSession?.state, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, sessionStarted, screen, breakSeconds, upcomingBreakMinutes, checked, goals, isTired, tiredNotice, checkInCorner, shareCall, sessionCode, callName, membersKey, selfStatus, currentActivity, dockDebug, latestDebug, tracking])
+  }, [overlayReady, isHost, dbSession?.state, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, sessionStarted, screen, breakSeconds, upcomingBreakMinutes, checked, goals, isTired, tiredNotice, checkInCorner, shareCall, sessionCode, callName, membersKey, selfStatus, currentActivity, judgeOffTask, judgeReason, dockDebug, latestDebug, tracking])
 
   const activeGoals = goals.filter((goal) => goal.trim())
 

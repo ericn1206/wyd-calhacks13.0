@@ -35,7 +35,7 @@ SpacetimeDB (same transaction as `ingest_signal`): judgment → status flips to 
 ## Who writes what
 | Data | Writer |
 |---|---|
-| Vision + screen signals | `vision/facetime_trigger.py` (spawned by `src/main/facetimeTrigger.ts` on `wyd:tracking:start`) runs `vision/detector.py` (webcam) + `vision/04_screen_monitor.py` (macOS Vision OCR → Gemini) every 10 s. Screen off-task x2, or screen on-task x2 plus webcam distracted x2, prints `face time` → `wyd:facetime` → local check-in. |
+| Vision + screen signals | `vision/facetime_trigger.py` (spawned by `src/main/facetimeTrigger.ts` on `wyd:tracking:start`) runs `vision/detector.py` (webcam) + `vision/04_screen_monitor.py` (macOS Vision OCR → Gemini) every 5 s. A named app not in front, or OCR text off the study goal, x2 — or screen on-task x2 plus webcam distracted x2 — prints `face time` → local check-in. Study goal is argv 1 (sites excluded); named apps are matched in argv 2. |
 | Activity (app/title/url/category) | desktop main (`activityMonitor.ts`) |
 | Phone state (optional) | phone page (`phone_heartbeat`), overrides desktop value when fresh |
 | Judgment (status/confidence/reason) | AI worker; DB fallback rules when worker is stale |
@@ -43,7 +43,7 @@ SpacetimeDB (same transaction as `ingest_signal`): judgment → status flips to 
 | Summary text, captions | AI worker (Claude) |
 
 ## Current reality
-- Desktop: Goals submit → `wyd:tracking:start` → `osascript` polling → `categorize.ts` + `claudeJudge.ts` in main → `activity:*` IPC (UI does not consume yet). Same submit starts `vision/facetime_trigger.py`: screen off-task twice in a row, or screen on-task both times with the webcam distracted both times, prints `face time`. It does not open the overlay video popups. Renderer is the new Figma-Make UI (main window + a transparent full-screen overlay window for the dock/check-ins, relayed through main via `wyd:bridge:*`) with hardcoded demo data; spec in `../ui_integration.md`. Local `alert` starts the call. Video popups already in the overlay: `.glass-video`, `.checkin-timer-pop`, `.teammate-share-window`, `.duck-reflection-window` (`OverlayApp.tsx`), opened from the Demo menu.
+- Desktop: a running round → `wyd:tracking:start` → `osascript` polling → `categorize.ts` + `claudeJudge.ts` (Gemini) → `activity:update` (dock: current site + `OFF-TASK`/`ON-TASK` reason). Same start runs `vision/facetime_trigger.py` every 5 s (named-app check, then OCR → Gemini). Two off-task intervals, or two on-task intervals with the webcam distracted, print `face time` and open the live check-in. See `../components/vision.md`.
 - Calls + presence: desktop ↔ LiveKit Cloud directly (`../components/livekit-call.md`); not linked to DB `group_call`.
 - SpacetimeDB client: `src/main/db/stdb.ts` holds the one connection (main process), mirrors `my_*` views to the main window as plain-JSON snapshots (`wyd:db:state`), and executes reducers via `wyd:db:call`. Renderer hook: `src/renderer/src/db/useDb.ts`. The overlay window gets DB-derived state only through `App.tsx` → `OverlayState`. Debug log: `src/main/db/debugLog.ts`. Worker runs only as a fixtures CLI.
 

@@ -1,16 +1,16 @@
 # Status
 
-Last updated: 2026-10-24. Biggest gap: only the detector's OnTask/OffTask verdict reaches SpacetimeDB (`ingest_signal` from `App.tsx`, every 10 s while Active/Break); webcam/activity fields are sent neutral. Session create/join, goals, lobby roster, shared Pomodoro timer work against maincloud. Worker runs without the DB.
+Last updated: 2026-10-24. Biggest gap: only the detector's OnTask/OffTask verdict reaches SpacetimeDB (`ingest_signal` from `App.tsx`, every 5 s while Active/Break); webcam/activity fields are sent neutral. Session create/join, goals, lobby roster, shared Pomodoro timer work against maincloud. Worker runs without the DB.
 
 ## Built
 | Part | Path | What works |
 |---|---|---|
 | SpacetimeDB module | `spacetimedb/` | Full schema + 37 reducers: sessions, goals, Pomodoro timers, `ingest_signal`, smoothing, fallback judge, scoring, call/nudge trigger, phone pairing, finalize + awards. Configured for maincloud db `calhacks-13-wyd`. See `components/spacetimedb.md`. |
 | Desktop activity tracking | `src/main/activityMonitor.ts` | Polls front app + window title + browser URL (Chrome/Safari/Arc/Brave) every 2 s via `osascript`. macOS only. |
-| Distraction trigger | `vision/facetime_trigger.py`, `vision/detector.py`, `vision/04_screen_monitor.py`, `src/main/facetimeTrigger.ts` | Goals submit starts both detectors. Screen off-task twice in a row, or screen on-task twice with webcam distracted both times, prints `face time`. See `components/vision.md`. |
+| Distraction trigger | `vision/facetime_trigger.py`, `vision/detector.py`, `vision/04_screen_monitor.py`, `src/main/facetimeTrigger.ts` | Runs only while a round timer is going. A named app that is not in front, or Gemini saying the OCR text is off the study goal, twice in a row (5 s) — or webcam distracted twice while the screen looks on-task — prints `face time`. See `components/vision.md`. |
 | Desktop `.env` loader | `src/main/env.ts` | Loads root `.env` into `process.env` at startup (no override of shell vars). |
 | Desktop categorization | `src/main/categorize.ts` | Rules + cache → contract categories (`coding`…`unknown`). Fills `activity.category`. |
-| Desktop judge | `src/main/claudeJudge.ts` | Claude call every 8 s once session context exists; output drives local alerts (30 s warning, 60 s alert). |
+| Desktop judge | `src/main/claudeJudge.ts` | Gemini `gemini-3.5-flash-lite` every 8 s once session context exists. Strict: a different subject is distracted. Spoken goals are condensed to short titles. Output drives local alerts (30 s warning, 60 s alert) and the dock status line. |
 | Check-in calls (LiveKit) | `src/main/livekitToken.ts`, `src/renderer/src/useCircleCall.ts` (old UI in `outdated/`: `VideoCall.tsx`) | Detector `face time` → own 30 s call with camera + screen share (overlay hidden from the capture); teammates get a 3 s Join invite and see the share window; alone → duck window with Resume. See `components/livekit-call.md`. |
 | Detector debug + status sync | `vision/facetime_trigger.py` (`status`/`debug` lines), `src/main/facetimeTrigger.ts`, `components/session/DetectorLog.tsx` | Verdict → `ingest_signal` → status dots on every screen; Demo menu: dock debug strip toggle + detector log (last 300). Dock shows Idle / Not tracking / Camera off outside a running round. See `components/vision.md`. |
 | Desktop UI | `src/renderer/src/` (+ `docs/ui_integration.md`) · dock + check-ins in full-screen overlay window (`overlay/OverlayApp.tsx`) | New Figma-Make UI: entry, intro, goals, focus workspace, dock, check-in windows, break, summary. All data hardcoded/local; Demo menu simulates events. Goals submit calls `wyd:tracking:start`. |
@@ -24,7 +24,7 @@ Last updated: 2026-10-24. Biggest gap: only the detector's OnTask/OffTask verdic
 - Call room: `call_room_base_url` setting is `""`; no provider chosen.
 
 ## Missing
-- UI wiring still open: see table below (activity → DB, check-in from alerts, LiveKit video). `activity:update`/`activity:alert` not consumed (UI uses Demo-menu triggers).
+- UI wiring still open: see table below (activity fields → DB, check-in from alerts). `activity:update` feeds the dock (current site + judge line). `activity:alert` is not consumed.
 - Off-task pipeline: local OCR + Gemini classification → `ingest_signal` (`architecture/overview.md#off-task-pipeline`). Replaces desktop `categorize.ts`/`appClassifier.ts`/`claudeJudge.ts` as the verdict source.
 - Pomodoro: in a DB session all clocks/screens derive from the server (`components/spacetimedb.md#behavior`, skew-corrected); the local timer, `finishPomodoro`, break countdown and "Back to focus" exist only in the offline demo flow. Long (20 min) break / "of 4" rounds: demo flow only.
 - Pause: decided against. Host has `take_break` (force a break now, work round only) and `end_session`; the DB-session dock shows Start (lobby) + Take a break only.
@@ -33,7 +33,7 @@ Last updated: 2026-10-24. Biggest gap: only the detector's OnTask/OffTask verdic
 - Phone sensor page (`phone/`, optional), replay clips.
 - Screens: replay (no consent screen by decision; see `product/privacy.md`).
 - Worker: summary + replay captions.
-- Inferentia small model (Claude Haiku is the only judge).
+- Inferentia small model. Desktop and worker judges are Gemini `gemini-3.5-flash-lite`.
 - Integrations: Creao/Slack, Notability export.
 
 ## UI features still to integrate (spec: `ui_integration.md`)
@@ -54,14 +54,14 @@ Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` �
 ## Mismatches (unresolved; decisions tracked in `product/decisions.md`)
 | Area | Variants in code |
 |---|---|
-| Judge | `src/main/claudeJudge.ts`: `claude-haiku-4-5-20251001`, labels `productive`/`distracted`/`neutral` · `worker/judge.ts`: `claude-haiku-5-5`, `on_task`/`off_task`/`break` · DB `StatusLabel`: `Focused`/`OffTask`/`Away`/`Break`/`Unknown` |
+| Judge | `src/main/claudeJudge.ts`: `gemini-3.5-flash-lite`, labels `productive`/`distracted`/`neutral` · `worker/judge.ts`: same model via `worker/claude.ts`, labels `on_task`/`off_task`/`break` · DB `StatusLabel`: `Focused`/`OffTask`/`Away`/`Break`/`Unknown` |
 | Categories | `categorize.ts`: contract lowercase 9 · `appClassifier.ts`: `productive`/`distracted`/`neutral`/`unknown` (drives alerts) · DB `AppCategory`: `OnTask`/`OffTask` (published 2026-10-24). Desktop sets still to be replaced by the OCR + Gemini verdict (`architecture/overview.md#off-task-pipeline`). |
 | Event format | Contract JSON (`worker/types.ts`) vs DB `SignalInput`. See `architecture/contracts.md`. |
 | Timing | Spec: drift 2 min, call cooldown 30 min, call ~60 s · DB: call immediately on OffTask (`off_task_threshold_secs` 0), cooldown 600 s, max call 90 s · Desktop: alerts at 30/60 s, auto-call cooldown 5 min, LiveKit call 30 s |
 | Calls | LiveKit: call state in participant attributes, triggered by the local detector (`face time`) · DB: `group_call` + `CallIncoming` alert (also created by `ingest_signal`), `call_room_base_url` `""`. Not linked; the UI ignores DB calls. |
 | Active window | Old docs said `get-windows`; code uses `osascript`. |
 | Scope | DB has scores, awards, takeover, stuck-helper, DeepFace expression fields, `factory_run_id`; decisions lean against several. |
-| SDK | `@anthropic-ai/sdk ^0.27` (old); worker casts around missing `output_config` type. |
+| SDK | `@anthropic-ai/sdk ^0.27` is still a dependency; desktop and worker judges call Gemini over `fetch` and do not import it. |
 
 ## Next up (demo critical path, suggested)
 1. Click-through test of the DB-backed UI (two instances, separate `--user-data-dir`); then `ingest_signal` from `activityMonitor` every 10 s. Feed the `face time` trigger into it (today it only opens the local LiveKit check-in).
@@ -84,9 +84,9 @@ Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` �
 - Every laptop needs `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` in `.env`; each signs its own call token.
 - LiveKit tokens are signed by hand in `livekitToken.ts`: `livekit-server-sdk` needs Node 19+, Electron 28 ships Node 18.
 - Worker runs `.ts` directly: needs Node 24 (`node -v`).
-- `osascript` needs Accessibility/Automation permission for System Events; window titles need Screen Recording. Screen monitor OCR also needs Screen Recording. `GEMINI_API_KEY` for `vision/04_screen_monitor.py`.
+- `osascript` needs Accessibility/Automation permission for System Events; window titles need Screen Recording. Screen monitor OCR also needs Screen Recording. `GEMINI_API_KEY` for `vision/04_screen_monitor.py`, `src/main/claudeJudge.ts`, and `worker/claude.ts`.
 - A Gemini key was hardcoded on `origin/prod` and `origin/webcam-activity-detection`; removed (prod `eebfad3`), replaced in `.env`, but still in git history. Never commit keys.
-- Facetime trigger: `npm run setup:vision` once so `vision/.venv` exists. Prints `face time` when the screen is off-task twice in a row, or when the screen is on-task both times and the webcam is distracted both times. Video check-in popups stay on the Demo menu (`OverlayApp.tsx`: `.glass-video`, `.checkin-timer-pop`, `.teammate-share-window`).
+- Facetime trigger: `npm run setup:vision` once so `vision/.venv` exists. Every 5 s: a named app that is not in front, or OCR text Gemini calls irrelevant to the study goal, counts as a screen hit. Two hits, or two on-task intervals with the webcam distracted, print `face time` and open the live check-in. The Demo menu still opens the mock one.
 - SpacetimeDB `init` seeds only on first publish; after a schema publish run `seed_defaults`.
 
 Kevin-specific (his machine/setup only):
