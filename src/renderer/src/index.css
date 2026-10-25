@@ -39,7 +39,7 @@ footer { height: 56px; color: #97a19d; font-size: 12px; text-align: center; }
 .card { background: rgba(255,255,255,.92); border: 1px solid rgba(222,226,223,.9); border-radius: 24px; box-shadow: 0 16px 50px rgba(43,55,50,.07); }
 .intro-card, .consent-card, .goals-card { width: min(100%, 560px); padding: clamp(26px, 5vw, 46px); }
 .intro-card { text-align: center; }
-.entry-panels { display: grid; }
+.entry-panels { display: grid; margin-top: 34px; } /* gap under the Your name field, same rhythm as .field-label */
 .entry-panel { grid-area: 1 / 1; }
 .entry-panel[aria-hidden="true"] { visibility: hidden; }
 /* `.primary` transitions `all`, which includes visibility: hide the inactive tab instantly. */
