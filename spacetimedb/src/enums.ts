@@ -13,14 +13,8 @@ export const DeviceStatus = ['Connected', 'Disconnected'] as const;
 export type DeviceStatus = (typeof DeviceStatus)[number];
 
 export const AppCategory = [
-  'Work',
-  'Study',
-  'Communication',
-  'Social',
-  'Entertainment',
-  'Games',
-  'News',
-  'Other',
+  'OnTask',
+  'OffTask',
 ] as const;
 export type AppCategory = (typeof AppCategory)[number];
 
