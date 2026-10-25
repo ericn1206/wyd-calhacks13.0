@@ -1,0 +1,167 @@
+import { useEffect, useRef, useState } from 'react'
+import { Icon } from '../components/ui/Icon'
+import type { Person } from '../data/people'
+import { useCircleCall } from '../useCircleCall'
+
+const PALETTE = ['bg-[#dbe9ff]', 'bg-[#f4ddff]', 'bg-[#ffdfd5]', 'bg-[#d9f2e5]']
+
+function StreamVideo({ stream, muted }: { stream: MediaStream; muted?: boolean }) {
+  const ref = useRef<HTMLVideoElement>(null)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.srcObject = stream
+    void el.play().catch(() => undefined)
+    return () => { el.srcObject = null }
+  }, [stream])
+
+  return <video ref={ref} autoPlay playsInline muted={muted} />
+}
+
+function initials(name: string): string {
+  const letters = name.replace(/[^A-Za-z0-9 ]/g, '').split(/\s+/).filter(Boolean).slice(0, 2).map((word) => word[0])
+  return (letters.join('') || name.slice(0, 1) || '?').toUpperCase()
+}
+
+function CameraTile({ name, stream, mirror, cameraOff }: {
+  name: string
+  stream: MediaStream | null
+  mirror?: boolean
+  cameraOff?: boolean
+}) {
+  const hasLiveVideo = Boolean(stream?.getVideoTracks().some((track) => track.readyState === 'live' && track.enabled))
+  const showVideo = hasLiveVideo && !cameraOff
+  return (
+    <div className={`glass-video member-video${mirror ? ' mirror' : ''}`}>
+      {showVideo && stream ? <StreamVideo stream={stream} muted={mirror} /> : (
+        <div className="avatar bg-[#dbe9ff]">{initials(name)}</div>
+      )}
+      {!showVideo && <em>Connecting</em>}
+      <span>{name}</span>
+    </div>
+  )
+}
+
+function Countdown({ endsAt }: { endsAt: number | null }) {
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 250)
+    return () => window.clearInterval(timer)
+  }, [])
+  if (!endsAt) return <strong>··</strong>
+  const seconds = Math.max(0, Math.ceil((endsAt - now) / 1000))
+  const mins = Math.floor(seconds / 60)
+  const rest = seconds % 60
+  return <strong>{mins}:{rest.toString().padStart(2, '0')}</strong>
+}
+
+/**
+ * Real circle check-in. Joins the LiveKit room for this session code, and turns
+ * cameras on when the distraction detector fires — or when someone else in the room does.
+ */
+export function LiveCheckIn({ sessionCode, displayName, corner, onActive, onLocalStart, onEnded, onRoster }: {
+  sessionCode: string
+  displayName: string
+  corner: string
+  onActive: (active: boolean) => void
+  onLocalStart: () => void
+  onEnded: () => void
+  onRoster: (ready: boolean, people: Person[]) => void
+}) {
+  const room = sessionCode.length >= 4 ? { name: displayName, sessionCode } : null
+  const circle = useCircleCall(room)
+  const startRef = useRef(circle.startCall)
+  startRef.current = circle.startCall
+  const pending = useRef(false)
+  const [pulse, setPulse] = useState(0)
+  const [notice, setNotice] = useState('')
+  const wasLive = useRef(false)
+
+  const live = circle.inCall || circle.joining
+  const rosterKey = circle.peers.map((peer) => `${peer.peerId}:${peer.name}`).join('|')
+
+  useEffect(() => {
+    onRoster(circle.status !== 'idle', circle.peers.map((peer, index) => ({
+      name: peer.name,
+      initials: initials(peer.name),
+      color: PALETTE[index % PALETTE.length],
+      status: 'focused',
+    })))
+  }, [circle.status, rosterKey, onRoster])
+
+  useEffect(() => {
+    if (!window.circleAPI?.onFacetime) return
+    return window.circleAPI.onFacetime(() => {
+      pending.current = true
+      setNotice('')
+      setPulse((n) => n + 1)
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!pending.current) return
+    if (circle.inCall || circle.joining || circle.callActive) {
+      pending.current = false
+      return
+    }
+    if (!room) return
+    if (circle.status === 'error') {
+      pending.current = false
+      setNotice(circle.error || 'Could not start the check-in.')
+      return
+    }
+    if (circle.status !== 'connected') return
+    pending.current = false
+    onLocalStart()
+    startRef.current()
+  }, [pulse, sessionCode, displayName, circle.status, circle.error, circle.inCall, circle.joining, circle.callActive, onLocalStart])
+
+  useEffect(() => {
+    onActive(live)
+    if (live) {
+      wasLive.current = true
+      return
+    }
+    if (!wasLive.current) return
+    wasLive.current = false
+    if (circle.callError) return
+    onEnded()
+  }, [live, circle.callError, onActive, onEnded])
+
+  const tiles: Array<{ key: string; name: string; stream: MediaStream | null; mirror?: boolean; cameraOff?: boolean }> = []
+  if (live) {
+    const streams = new Map(circle.remotes.map((remote) => [remote.peerId, remote.stream]))
+    tiles.push({ key: 'me', name: 'You', stream: circle.localStream, mirror: true, cameraOff: !circle.cameraOn && Boolean(circle.localStream) })
+    for (const peer of circle.peers) {
+      tiles.push({ key: peer.peerId, name: peer.name, stream: streams.get(peer.peerId) ?? null })
+    }
+  }
+
+  if (!live && !notice && !circle.callError) return null
+
+  return <>
+    {live && (
+      <div className="checkin-timer-pop">
+        <Icon name="clock" />
+        <Countdown endsAt={circle.callEndsAt} />
+        <button type="button" onClick={() => circle.leaveCall()}>Leave</button>
+      </div>
+    )}
+    <section className={`glass-checkin corner-${corner} self-glass`}>
+      {tiles.map((tile) => <CameraTile key={tile.key} name={tile.name} stream={tile.stream} mirror={tile.mirror} cameraOff={tile.cameraOff} />)}
+      {notice && (
+        <div className="glass-video call-error">
+          <span className="call-message">{notice}</span>
+          <button className="close-video" style={{ opacity: 1, transform: 'none' }} onClick={() => setNotice('')} aria-label="Dismiss check-in error"><Icon name="x" /></button>
+        </div>
+      )}
+    </section>
+    {live && circle.callError && (
+      <div className="return-prompt">
+        <div><strong>Camera did not start</strong><p>{circle.callError}</p></div>
+        <button className="primary" onClick={() => circle.dismissCallError()}>Close</button>
+      </div>
+    )}
+  </>
+}

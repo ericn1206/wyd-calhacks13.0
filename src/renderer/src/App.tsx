@@ -2,15 +2,28 @@ import { useEffect, useRef, useState } from 'react'
 import { EntryScreen } from './components/onboarding/EntryScreen'
 import { GoalsScreen } from './components/onboarding/GoalsScreen'
 import { IntroductionScreen } from './components/onboarding/IntroductionScreen'
+import { VoiceScreen } from './components/onboarding/VoiceScreen'
 import { BreakScreen } from './components/session/BreakScreen'
 import { SessionSidebar } from './components/session/SessionSidebar'
 import { SummaryScreen } from './components/session/SummaryScreen'
 import type { OverlayState, ToMain, ToOverlay } from './overlay/bridge'
 import { Icon } from './components/ui/Icon'
-import { people } from './data/people'
 import { useDb } from './db/useDb'
 
-type Screen = 'join' | 'consent' | 'goals' | 'focus' | 'break' | 'summary'
+type Screen = 'join' | 'consent' | 'voice' | 'goals' | 'focus' | 'break' | 'summary'
+type VoicePhase = 'idle' | 'speaking' | 'listening' | 'processing' | 'done'
+type VoiceContext = { subject: string; goals: string[]; sites: string; notes: string }
+
+function cleanCode(value: string): string {
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)
+}
+
+function makeSessionCode(): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  const bytes = new Uint8Array(4)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join('')
+}
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('join')
@@ -34,6 +47,14 @@ export default function App() {
   const [demoOpen, setDemoOpen] = useState(false)
   const [entryBusy, setEntryBusy] = useState(false)
   const [entryError, setEntryError] = useState('')
+  const [voicePhase, setVoicePhase] = useState<VoicePhase>('idle')
+  const [voiceCreds, setVoiceCreds] = useState<{ token: string; agentId: string } | null>(null)
+  const [voiceStream, setVoiceStream] = useState<MediaStream | null>(null)
+  const [voiceError, setVoiceError] = useState('')
+  const [voiceContext, setVoiceContext] = useState<VoiceContext | null>(null)
+  const [voiceSettled, setVoiceSettled] = useState(false)
+  const focusStarted = useRef(false)
+  const beginFocusRef = useRef<(subject: string, nextGoals: string[], sites?: string, notes?: string) => Promise<void>>(async () => {})
   const [now, setNow] = useState(Date.now())
   const db = useDb()
   const dbSession = db.session
@@ -46,6 +67,43 @@ export default function App() {
       if (preferences.checkInCorner) setCheckInCorner(preferences.checkInCorner)
     })
   }, [])
+
+  useEffect(() => {
+    window.sessionAPI?.onPhase(setVoicePhase)
+    window.sessionAPI?.onContextReady(setVoiceContext)
+    return () => window.sessionAPI?.removeAllListeners()
+  }, [])
+
+  useEffect(() => {
+    if (screen !== 'voice') return
+    let cancelled = false
+    void (async () => {
+      try {
+        if (!window.sessionAPI) throw new Error('The voice interview runs in the desktop app. Type your goals instead.')
+        const creds = await window.sessionAPI.start()
+        if (cancelled) return
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        })
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop())
+          return
+        }
+        setVoiceCreds(creds)
+        setVoiceStream(stream)
+      } catch (err) {
+        if (!cancelled) setVoiceError(err instanceof Error ? err.message : 'Could not start the voice interview.')
+      }
+    })()
+    return () => { cancelled = true }
+  }, [screen])
+
+  useEffect(() => {
+    if (screen !== 'voice' || !voiceContext || !voiceSettled) return
+    const nextGoals = voiceContext.goals.map((goal) => goal.trim()).filter(Boolean).slice(0, 3)
+    const subject = voiceContext.subject.trim() || sessionName
+    void beginFocusRef.current(subject, nextGoals.length ? nextGoals : [subject || 'Study'], voiceContext.sites, voiceContext.notes)
+  }, [screen, voiceContext, voiceSettled, sessionName])
 
 
   useEffect(() => {
@@ -138,10 +196,23 @@ export default function App() {
     window.wydDesktop?.setOverlayVisible(visible).then(() => { if (visible) window.wydDesktop?.bridge.send({ type: 'reset' }) })
   }, [screen])
 
+  const meName = db.people.find((person) => person.me)?.name
+  const displayName = meName && meName !== 'guest' ? meName : 'Friend'
+  const sessionCode = cleanCode(dbSession?.code || code)
+  const shareCall = screen === 'focus' || screen === 'break'
+  const members = db.people.filter((person) => !person.me).map((person) => ({
+    name: person.name, initials: person.initials, status: person.status, hex: person.hex,
+  }))
+  const membersKey = members.map((person) => `${person.name}:${person.status}:${person.hex ?? ''}`).join('|')
+
   useEffect(() => {
-    const state: OverlayState = { host: isHost, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, checked, currentGoal: goals.find((g) => g.trim()) || '', isTired, tiredNotice, checkInCorner }
+    const state: OverlayState = {
+      host: isHost, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, checked,
+      currentGoal: goals.find((g) => g.trim()) || '', isTired, tiredNotice, checkInCorner,
+      sessionCode: shareCall ? sessionCode : '', displayName, members,
+    }
     window.wydDesktop?.bridge.send({ type: 'state', state })
-  }, [overlayReady, isHost, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, checked, goals, isTired, tiredNotice, checkInCorner])
+  }, [overlayReady, isHost, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, checked, goals, isTired, tiredNotice, checkInCorner, shareCall, sessionCode, displayName, membersKey])
 
   const activeGoals = goals.filter((goal) => goal.trim())
   const finishPomodoro = () => {
@@ -200,17 +271,30 @@ export default function App() {
       if (goal && !!goal.completed !== done) db.call('checkGoal', { goalId: BigInt(goal.id), done })
     })
   }
+  const chooseMode = (mode: 'join' | 'create') => {
+    setEntryMode(mode)
+    setEntryError('')
+    if (mode === 'create' && cleanCode(code).length < 4) setCode(makeSessionCode())
+  }
   const beginSessionSetup = async () => {
     if (db.snapshot.connected) {
       setEntryError('')
       setEntryBusy(true)
-      const unset = { pomodoroWorkSecs: undefined, pomodoroBreakSecs: undefined, offTaskThresholdSecs: undefined, callCooldownSecs: undefined, maxCallSecs: undefined, scoreboardEnabled: undefined, groupCallEnabled: undefined, topicDescription: undefined, allowedDomains: undefined, blockedDomains: undefined }
-      const error = entryMode === 'create' ? await db.call('createSession', { name: sessionName.trim(), settings: unset }) : await db.call('joinSession', { code: code.trim() })
+      const settings = {
+        pomodoroWorkSecs: null, pomodoroBreakSecs: null, offTaskThresholdSecs: null,
+        callCooldownSecs: null, maxCallSecs: null, scoreboardEnabled: null, groupCallEnabled: null,
+        topicDescription: null, allowedDomains: null, blockedDomains: null,
+      }
+      const invite = cleanCode(code).length >= 4 ? cleanCode(code) : makeSessionCode()
+      if (entryMode === 'create' && invite !== code) setCode(invite)
+      const error = entryMode === 'create'
+        ? await db.call('createSession', { name: sessionName.trim(), settings, code: invite })
+        : await db.call('joinSession', { code: code.trim() })
       setEntryBusy(false)
       if (error) return setEntryError(error)
     }
     try {
-      setScreen(localStorage.getItem('wyd:tutorial-complete') === 'true' ? 'goals' : 'consent')
+      setScreen(localStorage.getItem('wyd:tutorial-complete') === 'true' ? 'voice' : 'consent')
     } catch {
       setScreen('consent')
     }
@@ -221,15 +305,44 @@ export default function App() {
     } catch {
       // The tutorial still works when storage is unavailable.
     }
+    setScreen('voice')
+  }
+  const beginFocus = async (subject: string, nextGoals: string[], sites = '', notes = '') => {
+    if (focusStarted.current) return
+    focusStarted.current = true
+    const active = nextGoals.map((goal) => goal.trim()).filter(Boolean)
+    setGoals([...active, '', '', ''].slice(0, 3))
+    setChecked([false, false, false])
+    if (subject.trim()) setSessionName(subject.trim())
+    if (dbSession && active.length) {
+      const error = await db.call('setGoals', { goals: active })
+      if (error) {
+        focusStarted.current = false
+        window.alert(error)
+        return
+      }
+    }
+    if (!dbSession && cleanCode(code).length < 4) setCode(makeSessionCode())
+    window.wydDesktop?.startTracking({ subject: subject.trim() || sessionName, goals: active, sites, notes })
+    if (!dbSession && entryMode === 'join') setTimerRunning(true)
+    voiceStream?.getTracks().forEach((track) => track.stop())
+    setScreen('focus')
+  }
+  beginFocusRef.current = beginFocus
+  const skipVoice = () => {
+    voiceStream?.getTracks().forEach((track) => track.stop())
+    setVoiceStream(null)
     setScreen('goals')
   }
   handlers.current = { signalTired, takeBreak: () => { setTimerRunning(false); setScreen('break') }, leaveSession, resetPomodoro, setRunning, setChecked: updateChecked }
 
-  if (screen === 'join') return <EntryScreen error={entryError} busy={entryBusy} mode={entryMode} setMode={setEntryMode} code={entryMode === 'create' && !dbSession ? '······' : code} setCode={setCode} sessionName={sessionName} setSessionName={setSessionName} codeCopied={codeCopied} copyCode={() => { navigator.clipboard?.writeText(code); setCodeCopied(true); window.setTimeout(() => setCodeCopied(false), 1600) }} continueSetup={beginSessionSetup} />
+  if (screen === 'join') return <EntryScreen error={entryError} busy={entryBusy} mode={entryMode} setMode={chooseMode} code={code} setCode={setCode} sessionName={sessionName} setSessionName={setSessionName} codeCopied={codeCopied} copyCode={() => { navigator.clipboard?.writeText(cleanCode(code) || code); setCodeCopied(true); window.setTimeout(() => setCodeCopied(false), 1600) }} continueSetup={beginSessionSetup} />
 
   if (screen === 'consent') return <IntroductionScreen onComplete={finishTutorial} />
 
-  if (screen === 'goals') return <GoalsScreen goals={goals} setGoals={setGoals} onStart={async () => { if (dbSession) { const error = await db.call('setGoals', { goals: activeGoals }); if (error) return window.alert(error) }; window.wydDesktop?.startTracking({ subject: sessionName, goals: activeGoals }); if (!dbSession && entryMode === 'join') setTimerRunning(true); setScreen('focus') }} />
+  if (screen === 'voice') return <VoiceScreen phase={voicePhase} creds={voiceCreds} stream={voiceStream} error={voiceError} onTranscript={(transcript) => { void window.sessionAPI.submitResponse(transcript).catch((err) => setVoiceError(err instanceof Error ? err.message : 'Could not save the interview.')) }} onSettled={() => setVoiceSettled(true)} onTypeInstead={skipVoice} />
+
+  if (screen === 'goals') return <GoalsScreen goals={goals} setGoals={setGoals} onStart={() => { void beginFocus(sessionName, activeGoals) }} />
 
   if (screen === 'break') return <BreakScreen minutes={upcomingBreakMinutes} seconds={breakSeconds} goals={activeGoals} checked={checked} setChecked={updateChecked} onReturn={() => { setBreakSeconds(upcomingBreakMinutes * 60); setFocusSeconds(pomodoroMinutes * 60); setIsTired(false); setScreen('focus') }} />
 
@@ -242,7 +355,7 @@ export default function App() {
     </div>
     <section className="focus-grid">
       <div className="timer-panel"><div className="eyebrow">Focus session · Round {(pomodorosDone % 4) + 1} of 4</div><div className="pomodoro-rounds">{[0, 1, 2, 3].map((round) => <span className={round < pomodorosDone % 4 ? 'done' : round === pomodorosDone % 4 ? 'current' : ''} key={round}><Icon name="check" /></span>)}</div><div className="timer-ring"><svg viewBox="0 0 180 180"><circle cx="90" cy="90" r="80" /><circle className="timer-progress" cx="90" cy="90" r="80" style={{ strokeDashoffset: 502 * (1 - focusSeconds / (pomodoroMinutes * 60)) }} /></svg><div><strong>{String(Math.floor(focusSeconds / 60)).padStart(2, '0')}:{String(focusSeconds % 60).padStart(2, '0')}</strong><span>{timerRunning ? 'focus time' : focusSeconds === pomodoroMinutes * 60 ? isHost ? 'ready when you are' : 'waiting for host' : 'paused by host'}</span></div></div><h2>{timerRunning ? 'Stay with it.' : isHost ? 'Choose one task.' : 'Your host sets the pace.'}</h2>{dbSession?.state === 'Lobby' && <p className="lobby-line">Invite code <strong>{dbSession.code}</strong> · {db.people.length} in the room</p>}<p>{activeGoals[0] || 'Pick something that deserves your full attention.'}</p>{isHost ? <div className="pomodoro-console host-console"><div className="console-role"><span className="host-control-badge"><Icon name="users" />Host controls</span><small>Everyone’s timer stays in sync with yours.</small></div><div className="time-select"><span>Focus length</span>{[15, 25, 45].map((minutes) => <button className={pomodoroMinutes === minutes ? 'active' : ''} onClick={() => selectPomodoroLength(minutes)} key={minutes}>{minutes} min</button>)}</div><div className="timer-controls"><button className="timer-stop" onClick={resetPomodoro}><Icon name="x" />Stop</button><button className="timer-start" disabled={!!dbSession && dbSession.state !== 'Lobby'} onClick={() => dbSession ? setRunning(true) : setTimerRunning(!timerRunning)}><Icon name={timerRunning ? 'clock' : 'arrow'} />{dbSession ? (dbSession.state === 'Lobby' ? 'Start session' : 'Session running') : timerRunning ? 'Pause for everyone' : focusSeconds < pomodoroMinutes * 60 ? 'Resume session' : 'Start session'}</button></div><div className="focus-oath"><Icon name="target" /><span><strong>My focus promise</strong>I’ll give this task my full attention until the timer rings.</span></div><div className="distraction-capture"><input value={distraction} onChange={(event) => setDistraction(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && saveDistraction()} placeholder="Something else came to mind? Park it here." /><button onClick={saveDistraction}>Save</button>{savedDistractions.length > 0 && <small>{savedDistractions.length} item{savedDistractions.length === 1 ? '' : 's'} saved for later</small>}</div></div> : <div className="pomodoro-console participant-console"><div className="participant-host"><span className="avatar bg-[#dbe9ff]">MK<i /></span><div><small>Session host</small><strong>{hostName} controls this Pomodoro</strong><p>You’ll start, pause, and take breaks together.</p></div><span className="sync-status"><i />Synced</span></div><div className="participant-schedule"><span><small>Focus</small><strong>{pomodoroMinutes} min</strong></span><Icon name="arrow" /><span><small>Short break</small><strong>5 min</strong></span><Icon name="arrow" /><span><small>After 4 rounds</small><strong>20 min</strong></span></div><div className="focus-oath"><Icon name="lock" /><span><strong>Timer controls are host-only</strong>Your timer updates automatically when {hostName} starts the session.</span></div><div className="distraction-capture"><input value={distraction} onChange={(event) => setDistraction(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && saveDistraction()} placeholder="Something else came to mind? Park it here." /><button onClick={saveDistraction}>Save</button>{savedDistractions.length > 0 && <small>{savedDistractions.length} item{savedDistractions.length === 1 ? '' : 's'} saved for later</small>}</div></div>}</div>
-      <SessionSidebar sessionName={sessionName} role={isHost ? 'Host' : 'Participant'} goals={activeGoals} checked={checked} setChecked={updateChecked} people={dbSession ? db.people.filter((p) => !p.me) : people} />
+      <SessionSidebar sessionName={sessionName} role={isHost ? 'Host' : 'Participant'} goals={activeGoals} checked={checked} setChecked={updateChecked} people={db.people.filter((p) => !p.me)} />
     </section>
     {complete && <div className="overlay"><div className="complete-modal"><div className="icon-bubble mint"><Icon name="check" /></div><div className="eyebrow">{pomodoroMinutes} minutes complete</div><h2>Pomodoro complete.</h2><p>{upcomingBreakMinutes >= 20 ? 'That’s four rounds. Take a longer 20-minute break so your brain can recharge.' : 'Mark it complete and take a five-minute break before the next round.'}</p><div className="button-row"><button className="secondary" onClick={() => { setComplete(false); setScreen('summary') }}>End session</button><button className="primary" onClick={() => { setComplete(false); setScreen('break') }}>Take {upcomingBreakMinutes} min break <Icon name="arrow" /></button></div></div></div>}
   </main>

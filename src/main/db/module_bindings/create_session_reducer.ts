@@ -19,4 +19,6 @@ export default {
   get settings() {
     return SessionSettings;
   },
+  // Deployed module takes an optional invite code after settings.
+  code: __t.option(__t.string()),
 };
