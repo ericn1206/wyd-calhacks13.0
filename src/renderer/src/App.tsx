@@ -159,9 +159,9 @@ export default function App() {
   }, [screen])
 
   useEffect(() => {
-    const state: OverlayState = { host: isHost, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, checked, currentGoal: goals.find((g) => g.trim()) || '', isTired, tiredNotice, checkInCorner }
+    const state: OverlayState = { host: isHost, serverPhase: dbSession?.state ?? null, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, checked, currentGoal: goals.find((g) => g.trim()) || '', isTired, tiredNotice, checkInCorner }
     window.wydDesktop?.bridge.send({ type: 'state', state })
-  }, [overlayReady, isHost, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, checked, goals, isTired, tiredNotice, checkInCorner])
+  }, [overlayReady, isHost, dbSession?.state, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, checked, goals, isTired, tiredNotice, checkInCorner])
 
   const activeGoals = goals.filter((goal) => goal.trim())
   const finishPomodoro = () => {
