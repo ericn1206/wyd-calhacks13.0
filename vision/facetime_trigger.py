@@ -82,9 +82,7 @@ def main():
     screen = None
     try:
         screen = load_screen()
-        import google.generativeai as genai
-        genai.configure(api_key=screen.gemini_key(), transport="rest")
-        screen.model = genai.GenerativeModel("gemini-3.5-flash-lite")
+        screen.setup_gemini()  # GEMINI_API_KEYS round robin (or the single GEMINI_API_KEY)
         screen.ensure_ocr()
     except SystemExit as err:
         print(f"screen monitor off: {err}", file=sys.stderr)
