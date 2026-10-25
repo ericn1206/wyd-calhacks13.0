@@ -249,6 +249,9 @@ function registerDesktopApi(): void {
 const stdb = new StdbClient()
 
 app.whenReady().then(() => {
+  // Chromium's built-in DNS client fails on LiveKit's TURN/media hosts (ERR_NAME_NOT_RESOLVED) when a
+  // VPN tunnel is up, while macOS resolves them fine. Use the system resolver instead.
+  app.configureHostResolver({ enableBuiltInResolver: false })
   configurePermissions()
   registerDesktopApi()
   createWindow()
