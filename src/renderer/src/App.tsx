@@ -227,12 +227,12 @@ export default function App() {
 
   useEffect(() => {
     const state: OverlayState = {
-      host: isHost, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, checked,
+      host: isHost, serverPhase: dbSession?.state ?? null, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, checked,
       currentGoal: goals.find((g) => g.trim()) || '', isTired, tiredNotice, checkInCorner,
       sessionCode: shareCall ? sessionCode : '', displayName, members,
     }
     window.wydDesktop?.bridge.send({ type: 'state', state })
-  }, [overlayReady, isHost, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, checked, goals, isTired, tiredNotice, checkInCorner, shareCall, sessionCode, displayName, membersKey])
+  }, [overlayReady, isHost, dbSession?.state, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, checked, goals, isTired, tiredNotice, checkInCorner, shareCall, sessionCode, displayName, membersKey])
 
   const activeGoals = goals.filter((goal) => goal.trim())
   const finishPomodoro = () => {

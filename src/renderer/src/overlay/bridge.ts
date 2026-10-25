@@ -3,6 +3,8 @@ export type CheckInCorner = 'top-right' | 'top-left' | 'bottom-right' | 'bottom-
 /** Main-window state the overlay window needs to draw the dock. Sent on every change. */
 export type OverlayState = {
   host: boolean
+  /** Database session phase (`Lobby`/`Active`/`Break`); null in the local demo flow. */
+  serverPhase: string | null
   focusSeconds: number
   pomodoroMinutes: number
   pomodorosDone: number
