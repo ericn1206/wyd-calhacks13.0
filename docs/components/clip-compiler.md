@@ -35,6 +35,7 @@ Summary screen: the desktop builds `<base>/session/<session.id>` itself. `<base>
 ## Run
 1. `brew install ffmpeg` (needs `ffmpeg` on PATH or `FFMPEG_BIN`).
 2. Worker identity: the identity that published the db is already a worker. Either put its token in `WYD_WORKER_TOKEN` (`spacetimedb_token` in `~/.config/spacetime/cli.toml`), or start once, then run the `spacetime call … authorize_worker '"0x<identity>"'` line it prints. The token is saved in `worker/.state/compile-token`.
+   Start failures print the fix: `only the AI worker may call this` = identity not authorized (message includes the `authorize_worker` command, run it as the publisher); `no such reducer` = published module older than the code (republish `spacetimedb/`).
 3. Start it (one compiler per database, see **One compiler** below):
 
 | Command | Links use |

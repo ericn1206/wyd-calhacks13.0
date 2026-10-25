@@ -61,6 +61,16 @@ async function ensureWebSocket(): Promise<void> {
   ;(globalThis as { WebSocket?: unknown }).WebSocket = WebSocket
 }
 
+/** Turn a failed first call into what to do about it, with the identity involved. */
+function explainStartFailure(err: unknown, identity: string, database: string): string {
+  const msg = String(err instanceof Error ? err.message : err)
+  if (/already running/.test(msg)) return msg.replace(/^.*?(a clip compiler is already running)/s, '$1')
+  if (/only the AI worker/.test(msg))
+    return `${msg}\n  this compiler's identity (0x${identity}) is not an authorized worker. Authorize it once, from the CLI logged in as the publisher:\n  spacetime call ${database} authorize_worker '"0x${identity}"'\n  (or put the publisher's token in WYD_WORKER_TOKEN)`
+  if (/no such reducer/.test(msg)) return `${msg}\n  the published module on ${database} is older than this code: run \`spacetime publish\` from spacetimedb/ (docs/architecture/stack.md)`
+  return msg
+}
+
 /** A reducer call on a connection that drops mid-call never settles; give up on it instead of blocking the worker. */
 function withTimeout<T>(call: Promise<T>, label: string, ms: number): Promise<T> {
   let timer: NodeJS.Timeout | undefined
@@ -171,7 +181,7 @@ export async function startCompiler(o: CompilerOptions): Promise<RunningCompiler
         o.log('reconnected')
         break
       } catch (err) {
-        o.log(`reconnect failed: ${err instanceof Error ? err.message : err}`)
+        o.log(`reconnect failed: ${err instanceof Error ? err.message : err}${/no such reducer/.test(String(err)) ? ' (the published module is older than this code: republish it)' : ''}`)
       }
     }
     reconnecting = false
@@ -210,7 +220,7 @@ export async function startCompiler(o: CompilerOptions): Promise<RunningCompiler
     stopped = true
     conn?.disconnect()
     await new Promise<void>(r => server.close(() => r()))
-    throw new Error(String(err instanceof Error ? err.message : err).replace(/^.*?(a clip compiler is already running)/s, '$1'))
+    throw new Error(explainStartFailure(err, identity, o.database))
   }
   o.log(`connected as worker ${identity}; serving ${o.outDir} on :${port}; session page: ${pageBase}/session/<id>${o.lease ? '; lease taken' : ''}`)
   await publishPageUrl()
