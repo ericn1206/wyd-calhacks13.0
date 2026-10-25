@@ -232,7 +232,7 @@ function registerDesktopApi(): void {
   })
 
   // LiveKit call plumbing for the overlay check-in (src/renderer/src/overlay/LiveCheckIn.tsx).
-  ipcMain.handle('call:token', (_e, code: string, identity: string, name: string) => createCallToken(code, identity, name))
+  ipcMain.handle('call:token', (_e, code: string, identity: string, name: string, kind?: string) => createCallToken(code, identity, name, kind))
   ipcMain.handle('window:call-mode', (_e, on: boolean) => {
     // The check-in cameras live on the overlay, which is already above every app.
     if (overlayWindow && !overlayWindow.isDestroyed() && overlayWindow.isVisible()) return

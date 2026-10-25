@@ -110,6 +110,7 @@ Recording of the unfocused person at each check-in (their screen, webcam as an i
 ## LiveKit room
 Owner: `src/renderer/src/useCircleCall.ts`; token: `src/main/livekitToken.ts`.
 - Room: `lockin-<CODE>` (`CODE` = session code, A–Z0–9, 4–8 chars). One room per session; joined on entering the session, media published only during a call.
+- Break room: `lockin-<CODE>-break` (`getCallToken(code, identity, name, 'break')`, `useCircleCall({ kind: 'break' })`). Main window joins on the break screen of a DB session and calls `startCall({ durationMs: remaining break })`; same attributes below.
 - Identity: random UUID per app run. Name: lobby name (≤ 24 chars).
 - Token grants: `roomJoin`, `canPublish`, `canSubscribe`, `canPublishData`, `canUpdateOwnMetadata`; TTL 6 h.
 - Participant attributes:

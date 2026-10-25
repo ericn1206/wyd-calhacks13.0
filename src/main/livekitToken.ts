@@ -25,7 +25,7 @@ function cleanName(value: unknown): string {
  * API secret never reaches the renderer. (livekit-server-sdk needs Node 19+,
  * and Electron 28 ships Node 18.)
  */
-export function createCallToken(code: unknown, identity: unknown, name: unknown): CallToken {
+export function createCallToken(code: unknown, identity: unknown, name: unknown, kind?: unknown): CallToken {
   const url = process.env['LIVEKIT_URL']?.trim()
   const key = process.env['LIVEKIT_API_KEY']?.trim()
   const secret = process.env['LIVEKIT_API_SECRET']?.trim()
@@ -37,7 +37,8 @@ export function createCallToken(code: unknown, identity: unknown, name: unknown)
   const id = String(identity ?? '').slice(0, 64)
   if (sessionCode.length < 4 || !id) throw new Error('Enter a session code of at least 4 characters.')
 
-  const room = `lockin-${sessionCode}`
+  // The break room is its own room so check-in calls and break video never mix.
+  const room = kind === 'break' ? `lockin-${sessionCode}-break` : `lockin-${sessionCode}`
   const now = Math.floor(Date.now() / 1000)
   const header = { alg: 'HS256', typ: 'JWT' }
   const payload = {

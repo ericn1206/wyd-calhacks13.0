@@ -19,6 +19,8 @@ const IN_CALL = 'inCall'
 export interface CircleRoom {
   name: string
   sessionCode: string
+  /** 'break': the session's break room (separate LiveKit room). */
+  kind?: 'break'
 }
 
 export interface CirclePeer {
@@ -58,7 +60,7 @@ export interface CircleCall {
   muted: boolean
   cameraOn: boolean
   /** shareScreen: also share this screen (the person who drifted). */
-  startCall: (options?: { shareScreen?: boolean }) => void
+  startCall: (options?: { shareScreen?: boolean; durationMs?: number }) => void
   joinCall: () => void
   leaveCall: () => void
   dismissCallError: () => void
@@ -419,7 +421,7 @@ export function useCircleCall(room: CircleRoom | null, options: { autoJoin?: boo
       setStatus('connecting')
       try {
         if (!window.circleAPI) throw new Error('Calls need the Lock In desktop app.')
-        const { url, token } = await window.circleAPI.getCallToken(room.sessionCode, selfId.current, room.name)
+        const { url, token } = await window.circleAPI.getCallToken(room.sessionCode, selfId.current, room.name, room.kind)
         if (disposed) return
         await lk.connect(url, token)
         if (disposed) {
@@ -452,9 +454,9 @@ export function useCircleCall(room: CircleRoom | null, options: { autoJoin?: boo
       void lk.disconnect()
       window.circleAPI?.setCallMode(false)
     }
-  }, [room?.name, room?.sessionCode])
+  }, [room?.name, room?.sessionCode, room?.kind])
 
-  const startCall = useCallback((options?: { shareScreen?: boolean }) => {
+  const startCall = useCallback((options?: { shareScreen?: boolean; durationMs?: number }) => {
     declinedEndsAt.current = null
     shareScreenRef.current = Boolean(options?.shareScreen)
     if (callEndsAtRef.current && callEndsAtRef.current > Date.now()) {
@@ -466,7 +468,7 @@ export function useCircleCall(room: CircleRoom | null, options: { autoJoin?: boo
       setError('Still connecting to the circle. Try the call again in a moment.')
       return
     }
-    const endsAt = Date.now() + CALL_DURATION_MS
+    const endsAt = Date.now() + (options?.durationMs ?? CALL_DURATION_MS)
     ownEndsAt.current = endsAt
     setCallWindow(endsAt)
     setAttributes({ [CALL_ENDS_AT]: String(endsAt) })

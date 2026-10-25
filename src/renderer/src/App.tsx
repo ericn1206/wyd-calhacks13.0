@@ -552,7 +552,7 @@ export default function App() {
 
   if (screen === 'goals') return <GoalsScreen task={goals[0] ?? ''} setTask={(task) => setGoals([task])} onStart={async () => { const task = (goals[0] ?? '').trim(); if (!task) return; setGoals([task]); if (dbSession) { const error = await db.call('setGoals', { goals: [task] }); if (error) return window.alert(error) }; if (!dbSession && entryMode === 'join') setTimerRunning(true); setScreen(dbSession?.state === 'Break' ? 'break' : 'focus') }} />
 
-  if (screen === 'break') return <BreakScreen minutes={upcomingBreakMinutes} seconds={breakSeconds} goals={activeGoals} checked={checked} setChecked={updateChecked} onReturn={dbSession ? undefined : returnFromBreak} onEnd={dbSession?.isHost ? endSession : undefined} />
+  if (screen === 'break') return <BreakScreen minutes={upcomingBreakMinutes} seconds={breakSeconds} goals={activeGoals} checked={checked} setChecked={updateChecked} onReturn={dbSession ? undefined : returnFromBreak} onEnd={dbSession?.isHost ? endSession : undefined} room={dbSession ? { sessionCode, name: callName } : undefined} />
 
   if (screen === 'summary') return <SummaryScreen checked={checked} goalCount={activeGoals.length} stats={db.ended} clip={db.ended?.clipLink ? { link: db.ended.clipLink, state: db.ended.clipState } : null} />
 
