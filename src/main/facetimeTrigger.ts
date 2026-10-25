@@ -5,6 +5,20 @@ import { app } from 'electron'
 
 let child: ChildProcess | null = null
 
+/** One `debug {...}` line from vision/facetime_trigger.py (one per 10 s interval), plus arrival time. */
+export interface DetectorDebug {
+  t: number
+  status: 'on' | 'off' | 'none'
+  screen: 'ok' | 'off' | 'unknown'
+  reason: string
+  ocrChars: number
+  webcam: 'focused' | 'distracted' | 'none'
+  face: boolean
+  prob: number
+  screenStreak: number
+  camStreak: number
+}
+
 function projectRoot(): string {
   const candidates = [process.cwd(), app.getAppPath(), join(app.getAppPath(), '..'), join(__dirname, '..', '..')]
   for (const dir of candidates) {
@@ -17,7 +31,7 @@ function projectRoot(): string {
  * Run vision/facetime_trigger.py. A stdout line `face time` starts a circle check-in;
  * `status on` / `status off` (every interval with a verdict) drive the status dots.
  */
-export function startFacetimeTrigger(goal: string, onTrigger: () => void, onStatus: (offTask: boolean) => void): void {
+export function startFacetimeTrigger(goal: string, onTrigger: () => void, onStatus: (offTask: boolean) => void, onDebug: (entry: DetectorDebug) => void): void {
   stopFacetimeTrigger()
   const root = projectRoot()
   const python = join(root, 'vision/.venv/bin/python')
@@ -40,6 +54,13 @@ export function startFacetimeTrigger(goal: string, onTrigger: () => void, onStat
         onTrigger()
       }
       else if (line === 'status on' || line === 'status off') onStatus(line === 'status off')
+      else if (line.startsWith('debug {')) {
+        try {
+          onDebug({ ...(JSON.parse(line.slice(6)) as Omit<DetectorDebug, 't'>), t: Date.now() })
+        } catch {
+          // malformed debug line; ignore
+        }
+      }
       else if (line) process.stdout.write(`${line}\n`)
       nl = pending.indexOf('\n')
     }

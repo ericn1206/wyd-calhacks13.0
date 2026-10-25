@@ -3,7 +3,7 @@ import { promises as fs } from 'fs'
 import { join } from 'path'
 import { ActivityMonitor } from './activityMonitor'
 import { createAgentSession } from './cartesiaAgent'
-import { startFacetimeTrigger, stopFacetimeTrigger } from './facetimeTrigger'
+import { startFacetimeTrigger, stopFacetimeTrigger, type DetectorDebug } from './facetimeTrigger'
 import type { SessionContext } from './claudeJudge'
 import { loadEnv } from './env'
 import { createCallToken } from './livekitToken'
@@ -126,6 +126,15 @@ function sendToRenderer(channel: string, payload?: unknown): void {
   sendTo(mainWindow, channel, payload)
 }
 
+// Detector debug log for the Demo menu's log window and the dock debug strip (last 300 intervals).
+const DETECTOR_LOG_MAX = 300
+const detectorLog: DetectorDebug[] = []
+function recordDetectorDebug(entry: DetectorDebug): void {
+  detectorLog.push(entry)
+  if (detectorLog.length > DETECTOR_LOG_MAX) detectorLog.splice(0, detectorLog.length - DETECTOR_LOG_MAX)
+  sendToRenderer('wyd:detector-debug', entry)
+}
+
 function publishFacetime(): void {
   if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.showInactive()
   sendTo(overlayWindow, 'facetime:start')
@@ -198,6 +207,7 @@ function registerDesktopApi(): void {
   })
 
   // Goals or the voice interview → give the judge its context and start polling.
+  ipcMain.handle('wyd:detector-log:get', () => detectorLog)
   ipcMain.handle('wyd:tracking:start', (_e, ctx: { subject: string; goals: string[]; sites?: string; notes?: string }) => {
     const context: SessionContext = {
       subject: ctx.subject,
@@ -208,7 +218,7 @@ function registerDesktopApi(): void {
     monitor?.setSessionContext(context)
     monitor?.start()
     const goal = [context.subject, ...context.goals, context.sites, context.notes].filter((part) => part && part.trim()).join('. ') || 'study'
-    startFacetimeTrigger(goal, publishFacetime, (offTask) => sendToRenderer('wyd:detector-status', offTask))
+    startFacetimeTrigger(goal, publishFacetime, (offTask) => sendToRenderer('wyd:detector-status', offTask), recordDetectorDebug)
   })
 
   ipcMain.handle('session:start', async () => {

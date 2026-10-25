@@ -1,3 +1,5 @@
+import type { DetectorDebug } from '../../../main/facetimeTrigger'
+
 export type CheckInCorner = 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left'
 
 /** Main-window state the overlay window needs to draw the dock. Sent on every change. */
@@ -22,6 +24,9 @@ export type OverlayState = {
   checkInCorner: CheckInCorner
   /** Front site/app from activityMonitor (e.g. `instagram.com`, `Notion`); '' until the first poll. */
   currentActivity: string
+  /** Dock debug strip (toggled in the Demo menu); `debug` is the latest detector interval, null until one arrives. */
+  debugEnabled: boolean
+  debug: DetectorDebug | null
   /** My status as the session sees it (SpacetimeDB); null outside a DB session (demo uses local state). */
   selfStatus?: 'focused' | 'drifting' | null
   /** Shared by everyone in this study session. LiveKit room is lockin-<code>. */

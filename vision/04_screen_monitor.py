@@ -106,9 +106,11 @@ Return strict JSON: {{"is_off_task": false, "reason": "Short summary under 8 wor
 
 def check_once(user_goal):
     ui_state["checking"] = True
+    ui_state["ocr_chars"] = 0
     try:
         print(f"[{time.strftime('%H:%M:%S')}] Capturing screen...")
         text = capture_screen_text()
+        ui_state["ocr_chars"] = len(text)
         print(f" -> OCR got {len(text)} chars")
         if len(text) < 20:
             ui_state["reason"] = "Screen mostly desktop/blank"

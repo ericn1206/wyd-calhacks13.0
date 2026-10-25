@@ -348,6 +348,25 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
 .dock-goal { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; font-size: 11px; cursor: pointer; }
 .dock-goal input { display: none; }
 .dock-activity { cursor: default; }
+.dock-debug { display: flex; flex-wrap: wrap; gap: 5px; padding: 7px 10px 9px; border-top: 1px solid rgba(255,255,255,.1); }
+.debug-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 7px; padding: 3px 7px; color: #d7e4e1; background: rgba(255,255,255,.08); font-size: 9px; }
+.debug-chip b { color: #9fb5b1; font-weight: 700; margin-right: 3px; }
+.debug-chip.verdict { font-weight: 700; }
+.debug-chip.verdict.on { color: #10301f; background: #9fe0bf; }
+.debug-chip.verdict.off { color: #3a1714; background: #f4b5ad; }
+.detector-log { width: min(980px, 100%); max-height: calc(100vh - 40px); padding: 20px; display: flex; flex-direction: column; gap: 12px; background: white; }
+.detector-log-head { display: flex; align-items: center; gap: 12px; }
+.detector-log-head > div { flex: 1; display: grid; }
+.detector-log-head small { color: var(--muted); font-size: 12px; }
+.detector-log-head .secondary { min-height: 36px; padding: 0 12px; font-size: 12px; }
+.detector-log-scroll { overflow: auto; min-height: 0; }
+.detector-log table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
+.detector-log th { position: sticky; top: 0; background: white; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.detector-log td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.detector-log td small { color: var(--muted); }
+.log-pill { border-radius: 999px; padding: 2px 8px; font-weight: 700; font-size: 11px; background: #eef2ef; color: #4d605b; }
+.log-pill.on { background: #e4f5ed; color: #2f7a5b; }
+.log-pill.off { background: #fbefed; color: #9a4f47; }
 .team-empty { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .dock-activity > svg { width: 15px; height: 15px; flex: none; color: #9fb5b1; }
 .dock-goal .fake-check { border-color: rgba(255,255,255,.4); flex: none; }
