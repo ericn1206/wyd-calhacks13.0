@@ -31,7 +31,7 @@ Subscribe like: `SELECT * FROM my_session_statuses`.
 | Own session | session_compilation | `my_session_compilations` |
 | Own session, gated | session_clip | `my_session_clips`: metadata of finished clips of anyone in the session, plus own unfinished uploads. No bytes |
 | Owner only | session_summary, stuck_session, stuck_message, phone_sensor, replay_clip_meta | `my_session_summaries`, `my_stuck_*`, `my_phone_sensor` (also the paired phone), `my_replay_clips` |
-| Private (no client view) | signal_event, judgment, score_event, call_cooldown, call_member_trigger, worker_heartbeat, focus_history_index, authorized_worker, session_clip_chunk, timer tables | reducers only; worker views below |
+| Private (no client view) | signal_event, judgment, score_event, call_cooldown, call_member_trigger, worker_heartbeat, focus_history_index, authorized_worker, session_clip_chunk, compiler_lease, timer tables | reducers only; worker views below |
 
 Worker-only views (empty for non-workers): clip compiler (`clip-compiler.md`): `worker_ended_sessions` (all ended sessions), `worker_session_clips`, `worker_session_clip_chunks` (complete clips of ended sessions not yet in a Ready compilation of the same size), `worker_session_compilations` (all rows); `worker_pending_signal_events`, `worker_recent_judgments`,
 `worker_pending_summaries`, `worker_summary_goals`,

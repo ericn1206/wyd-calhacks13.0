@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { DbConnection } from '../../src/main/db/module_bindings/index.ts'
@@ -23,6 +24,15 @@ export interface CompilerOptions {
   ffmpegBin: string
   /** First wait before reconnecting after the connection drops; doubles up to 30 s. Default 2000. */
   reconnectMs?: number
+  /**
+   * Take the single-compiler lease in the database before doing anything (and keep it alive). Startup is refused while another
+   * compiler holds it, unless `takeover`. Without this option no lease is used (tests).
+   */
+  lease?: { label: string; takeover: boolean }
+  /** Called after the compiler stopped itself because another one took the lease. */
+  onLeaseLost?: () => void
+  /** Lease heartbeat interval. Default 5000 (the module treats 20 s of silence as gone). */
+  leaseHeartbeatMs?: number
   /** Give up on a database call that has not answered after this long (a dropped connection never answers). Default 20000. */
   callTimeoutMs?: number
   /** Extra wait after the quiet period before an ended session with no clips is reported as `empty`. Default 20000. */
@@ -138,6 +148,14 @@ export async function startCompiler(o: CompilerOptions): Promise<RunningCompiler
       if (stopped) break
       try {
         await connect()
+        try {
+          await claimLease() // same lease id: refreshes our lease, or is refused if someone took over while we were offline
+        } catch (err) {
+          if (/already running/.test(String(err))) { await loseLease(); break }
+          conn?.disconnect() // a transient failure: drop this connection and try again
+          conn = undefined
+          throw err
+        }
         await publishPageUrl()
         o.log('reconnected')
         break
@@ -146,6 +164,21 @@ export async function startCompiler(o: CompilerOptions): Promise<RunningCompiler
       }
     }
     reconnecting = false
+  }
+
+  // ── Single-compiler lease (database): two compilers would overwrite each other's URLs ──
+  const leaseId = randomUUID()
+  let heartbeat: NodeJS.Timeout | undefined
+  async function claimLease(takeover = o.lease?.takeover ?? false): Promise<void> {
+    const c = conn
+    if (!o.lease || !c) return
+    await withTimeout(c.reducers.claimCompilerLease({ leaseId, label: o.lease.label, url: o.publicUrl, takeover }), 'claim lease', callTimeout)
+  }
+  /** Another compiler took the lease (--takeover): stop serving so the two never run together. */
+  async function loseLease(): Promise<void> {
+    o.log('another clip compiler took over the lease; stopping this one')
+    await stopCompiler(false)
+    o.onLeaseLost?.()
   }
 
   /** Tell clients where the session pages live so the summary screen can link to them before the video exists. */
@@ -159,8 +192,27 @@ export async function startCompiler(o: CompilerOptions): Promise<RunningCompiler
     await new Promise<void>(r => server.close(() => r()))
     throw err
   })
-  o.log(`connected as worker ${identity}; serving ${o.outDir} on :${port}; session page: ${pageBase}/session/<id>`)
+  try {
+    await claimLease()
+  } catch (err) {
+    // Refused (another compiler is running) or the call failed: leave nothing behind.
+    stopped = true
+    conn?.disconnect()
+    await new Promise<void>(r => server.close(() => r()))
+    throw new Error(String(err instanceof Error ? err.message : err).replace(/^.*?(a clip compiler is already running)/s, '$1'))
+  }
+  o.log(`connected as worker ${identity}; serving ${o.outDir} on :${port}; session page: ${pageBase}/session/<id>${o.lease ? '; lease taken' : ''}`)
   await publishPageUrl()
+  if (o.lease) {
+    heartbeat = setInterval(() => {
+      const c = conn
+      if (!c || stopped) return
+      withTimeout(c.reducers.heartbeatCompilerLease({ leaseId }), 'lease heartbeat', callTimeout).catch(err => {
+        if (/lease lost/.test(String(err))) void loseLease()
+        else o.log(`lease heartbeat failed: ${err instanceof Error ? err.message : err}`)
+      })
+    }, o.leaseHeartbeatMs ?? 5000)
+  }
 
   async function setState(c: DbConnection, sessionId: bigint, status: 'Rendering' | 'Ready' | 'Failed', clipCount: number, url?: string, error?: string): Promise<void> {
     await withTimeout(c.reducers.setSessionCompilation({ sessionId, status: { tag: status }, clipCount, url, error }), `set compilation ${sessionId}`, callTimeout)
@@ -231,17 +283,27 @@ export async function startCompiler(o: CompilerOptions): Promise<RunningCompiler
   }
   timer = setInterval(() => { tick().catch(e => o.log(`tick failed: ${e instanceof Error ? e.message : e}`)) }, o.pollMs)
 
+  /** Stop everything; `release` frees the lease for the next compiler (not when it was already taken from us). */
+  async function stopCompiler(release: boolean): Promise<void> {
+    if (stopped && !conn && !timer) return
+    stopped = true
+    if (timer) clearInterval(timer)
+    if (heartbeat) clearInterval(heartbeat)
+    timer = null
+    heartbeat = undefined
+    const give = Date.now() + 10_000
+    while (busy && Date.now() < give) await new Promise(r => setTimeout(r, 50))
+    const c = conn
+    if (release && o.lease && c) await withTimeout(c.reducers.releaseCompilerLease({ leaseId }), 'release lease', 5000).catch(() => { /* it goes stale in 20 s */ })
+    c?.disconnect()
+    conn = undefined
+    await new Promise<void>(r => server.close(() => r()))
+  }
+
   return {
     identity,
     port,
     dropConnection() { conn?.disconnect() },
-    async stop() {
-      stopped = true
-      if (timer) clearInterval(timer)
-      const give = Date.now() + 10_000
-      while (busy && Date.now() < give) await new Promise(r => setTimeout(r, 50))
-      conn?.disconnect()
-      await new Promise<void>(r => server.close(() => r()))
-    }
+    stop: () => stopCompiler(true)
   }
 }

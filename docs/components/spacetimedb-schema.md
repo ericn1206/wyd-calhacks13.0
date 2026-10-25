@@ -96,6 +96,9 @@ id (PK, auto_inc) · clip_id (idx) · seq · data: byte array. File = chunks ord
 ### 19d. session_compilation — own session (`my_session_compilations`), written by the clip worker only
 session_id (PK) · status: CompilationStatus · clip_count (clips in the video at `url`; 0 until Ready) · url? · error? · updated_at. Flow: `clip-compiler.md`.
 
+### 19e. compiler_lease — private (no client view)
+key (PK, always `clip_compiler`) · lease_id (random per compiler process) · holder_identity · label · url · started_at · heartbeat_at. At most one row: the clip compiler that may run (`../components/clip-compiler.md#one-compiler`).
+
 ### 20. session_summary — owner only
 id (PK, auto_inc) · session_id (idx) · member_id (idx) · total_secs · deep_work_secs ·
 longest_block_secs · interruption_count · top_distraction_category? · goals_completed · goals_total ·
@@ -185,6 +188,9 @@ focus_ratio · indexed_at
 | upload_clip_chunk(clip_key, seq, data) | clip owner | ≤ 256 KiB; same `seq` again replaces |
 | finish_session_clip(clip_key) | clip owner | Needs every chunk and exact `size_bytes`; sets `complete` |
 | set_session_compilation(session_id, status, clip_count, url?, error?) | worker only | Upsert; `Ready` needs `url` |
+| claim_compiler_lease(lease_id, label, url, takeover) | worker only | Free, stale (heartbeat > 20 s) or same lease id → take/refresh; else error `a clip compiler is already running: …` unless `takeover` |
+| heartbeat_compiler_lease(lease_id) | worker only | Error `lease lost` if someone else holds it |
+| release_compiler_lease(lease_id) | worker only | Frees the lease if it is ours |
 | set_clip_page_base_url(url) | worker only | Upserts `app_setting` `clip_page_base_url` (JSON string, no trailing `/`); http(s), ≤ 200 chars |
 | start_stuck(topic) / post_stuck_message(stuck_id, text) / resolve_stuck(stuck_id) | owner (worker posts as Assistant) | |
 | authorize_worker(identity) | worker | Add another worker identity |

@@ -45,7 +45,7 @@ Desktop build: `electron.vite.config.ts` (main/preload externalize deps; rendere
 | 2 isolated clients (separate identity/localStorage via `--user-data-dir ~/.wyd-test/client-<i>`; builds once, runs `electron-vite preview`, no HMR) | `npm run dev:two [-- -n 3] [--no-build] [--fresh]` (`scripts/dev-two.sh`; `WYD_TEST_DIR` overrides dir). Same webcam/screen is shared. |
 | Session-clips tests (`tests/session-clips/README.md`) | `npm run test:clips [-- ts\|py]` |
 | Worker fixtures | `cd worker && npm run fixtures` |
-| Clip compiler (needs `ffmpeg`; env in `components/clip-compiler.md`) | `npm run worker:compile` |
+| Clip compiler (needs `ffmpeg`; env, flags and the one-compiler lease in `components/clip-compiler.md`) | `npm run clips:host` (links on the LAN address) or `npm run worker:compile`; `-- --takeover` replaces a running one |
 | Build / publish module | `cd spacetimedb && spacetime build` / `spacetime publish` |
 | Re-seed after publish | `spacetime call calhacks-13-wyd seed_defaults` |
 | Generate client bindings | `spacetime generate --lang typescript --module-path spacetimedb --out-dir src/main/db/module_bindings -y` |

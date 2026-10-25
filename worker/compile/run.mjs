@@ -17,7 +17,7 @@ await build({
   banner: { js: "import{createRequire as __cr}from'module';const require=__cr(import.meta.url);" },
   logLevel: 'error'
 })
-const child = spawn(process.execPath, ['--env-file-if-exists=' + join(here, '..', '..', '.env'), out], {
+const child = spawn(process.execPath, ['--env-file-if-exists=' + join(here, '..', '..', '.env'), out, ...process.argv.slice(2)], {
   stdio: 'inherit',
   env: { ...process.env, COMPILE_ROOT: join(here, '..', '..') }
 })
