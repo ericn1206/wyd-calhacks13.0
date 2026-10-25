@@ -955,9 +955,9 @@ export const mySessionClips = spacetimedb.view({ name: 'my_session_clips', publi
 // finished locally before upload starts, so it may arrive after the session ended or the member left.
 
 const CLIP_MIME = 'video/mp4';
-const CLIP_MAX_BYTES = 12 * 1024 * 1024;
+const CLIP_MAX_BYTES = 64 * 1024 * 1024;
 const CLIP_CHUNK_MAX_BYTES = 256 * 1024;
-const CLIP_MAX_CHUNKS = 64;
+const CLIP_MAX_CHUNKS = 400;
 const CLIP_MAX_MS = 60_000;
 const CLIPS_PER_MEMBER = 20;
 const CLIP_GRACE_SECS = 600;

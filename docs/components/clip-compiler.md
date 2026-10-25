@@ -21,7 +21,7 @@ worker: wait COMPILE_QUIET_SECS since the last change (clips of the last 20 s ar
   → setSessionCompilation(Ready, clipCount n, url) → members read it from my_session_compilations (desktop snapshot key `compilations`)
 ```
 - Views list only sessions whose complete clips are not already in a `Ready` compilation of the same `clipCount`: a late clip makes the session reappear, it is re-rendered to a new file name (`-<n>`), and older files of that session are deleted.
-- Order: `momentAtMs`, then clip id. Output: 320×240, 8 fps, H.264, faststart, no audio. Each input is normalised and joined with ffmpeg's concat filter (mixed size/codec is fine).
+- Order: `momentAtMs`, then clip id. Output: 1280×720, 10 fps, H.264 (crf 20), faststart, no audio. Each input is fitted into the frame (letterboxed, never stretched) and joined with ffmpeg's concat filter (older 320×240 webcam-only clips, mixed size/codec are fine).
 - `Failed` → error text in the row; retried after 60 s.
 
 ## Shareable link

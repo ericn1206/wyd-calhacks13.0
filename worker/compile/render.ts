@@ -5,20 +5,25 @@ import { join } from 'node:path'
 
 const RENDER_TIMEOUT_MS = 5 * 60 * 1000
 
+export const OUT_W = 1280
+export const OUT_H = 720
+export const OUT_FPS = 10
+
 /**
- * ffmpeg arguments that join the clips (already in order) into one 320x240, 8 fps H.264 mp4. Each input is
- * normalised first and joined with the concat filter, so a clip written with the `mp4v` fallback or at another
- * size/rate cannot break the join.
+ * ffmpeg arguments that join the clips (already in order) into one 1280x720, 10 fps H.264 mp4. Each input is
+ * fitted into the frame (letterboxed, never stretched) and joined with the concat filter, so older low-res webcam
+ * clips, the `mp4v` fallback or any other size/rate cannot break the join.
  */
 export function ffmpegArgs(clipPaths: readonly string[], outPath: string): string[] {
-  const normalised = clipPaths.map((_, i) => `[${i}:v]scale=320:240,setsar=1,fps=8,format=yuv420p[v${i}]`)
+  const fit = `scale=${OUT_W}:${OUT_H}:force_original_aspect_ratio=decrease,pad=${OUT_W}:${OUT_H}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${OUT_FPS},format=yuv420p`
+  const normalised = clipPaths.map((_, i) => `[${i}:v]${fit}[v${i}]`)
   const inputs = clipPaths.map((_, i) => `[v${i}]`).join('')
   return [
     '-v', 'error', '-y',
     ...clipPaths.flatMap(p => ['-i', p]),
     '-filter_complex', `${normalised.join(';')};${inputs}concat=n=${clipPaths.length}:v=1:a=0[out]`,
     '-map', '[out]',
-    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '26', '-pix_fmt', 'yuv420p',
+    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p',
     '-movflags', '+faststart',
     outPath
   ]

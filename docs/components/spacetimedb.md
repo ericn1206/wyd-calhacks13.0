@@ -37,7 +37,7 @@ Worker-only views (empty for non-workers): clip compiler (`clip-compiler.md`): `
 `worker_pending_summaries`, `worker_summary_goals`,
 `worker_session_contexts`, `worker_open_stuck_sessions`, `worker_open_stuck_messages`.
 
-Video: only `session_clip_chunk.data` (320×240 H.264 mp4 webcam clips, 30 s: 10 s before to 20 s after an off-task check-in). Uploaded by the unfocused member's laptop right after local recording (`begin_session_clip` → `upload_clip_chunk` × n → `finish_session_clip`); chunks are never mirrored to clients (`stdb.ts` VIEWS has no chunk view). Clips are joined into one video by the Node clip compiler (`clip-compiler.md`). `replay_clip_meta` is unused (path hash only).
+Video: only `session_clip_chunk.data` (1280×720 H.264 mp4, 30 s: 10 s before to 20 s after an off-task check-in; the drifter's screen with their webcam inset, recorded locally, ≤ 64 MiB). Uploaded by the unfocused member's laptop right after local recording (`begin_session_clip` → `upload_clip_chunk` × n → `finish_session_clip`); chunks are never mirrored to clients (`stdb.ts` VIEWS has no chunk view). Clips are joined into one video by the Node clip compiler (`clip-compiler.md`). `replay_clip_meta` is unused (path hash only).
 
 ## Behavior
 

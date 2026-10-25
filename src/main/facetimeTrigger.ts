@@ -30,6 +30,8 @@ export interface ClipInfo {
   width: number
   height: number
   fps: number
+  /** The clip includes the person's screen (not just the webcam). */
+  hasScreen?: boolean
 }
 
 function projectRoot(): string {
@@ -64,7 +66,8 @@ export function startFacetimeTrigger(
   const args = [script, goal]
   if (sites.trim()) args.push(sites)
   // stdin stays open: `clip <path>` lines request a session clip (see requestClip).
-  const proc = spawn(python, args, { cwd: root, stdio: ['pipe', 'pipe', 'pipe'] })
+  // WYD_APP_PID: the detector leaves this app's windows (overlay with the check-in tiles) out of the screen clip.
+  const proc = spawn(python, args, { cwd: root, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, WYD_APP_PID: String(process.pid) } })
   child = proc
   let pending = ''
   proc.stdout?.on('data', (buf: Buffer) => {

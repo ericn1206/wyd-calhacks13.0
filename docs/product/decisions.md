@@ -18,6 +18,7 @@
 | 2026-10-24 | Off-task clips: each check-in saves a 30 s webcam clip of the unfocused person (10 s before, 20 s after), uploaded to SpacetimeDB (`session_clip`) as soon as it is recorded, for an end-of-session compilation (not built). |
 | 2026-10-25 | Session clip compilation: a Node worker subscribes to the db (no procedures/webhooks), joins the clips with ffmpeg and hosts the video itself; runs locally in dev/testing. Individual clips stay in SpacetimeDB. Hosting for the real demo (LAN IP vs tunnel vs cloud) still open. |
 | 2026-10-25 | No privacy restrictions: video/screenshots/text may leave the laptop and be stored (`privacy.md`, `CLAUDE.md`). Replaces "all webcam processing local". |
+| 2026-10-25 | Clips are the drifter's own screen recording (WYD windows excluded) with their webcam inset, 1280×720 / 10 fps, recorded on their laptop and uploaded from there, not captured from the LiveKit call. |
 | 2026-10-24 | No pause. Host can force a break (`take_break`) and end the session (`end_session`); only the host ends a session (no auto-end). Disconnected members are removed after 60 s. |
 
 ## Open (ask, don't assume)

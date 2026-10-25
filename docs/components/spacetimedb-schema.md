@@ -181,7 +181,7 @@ focus_ratio · indexed_at
 | pair_phone(code, platform) | phone page | Links the phone's identity |
 | phone_heartbeat(visible) | paired phone | |
 | add_replay_clip(duration, reason, path_hash) | member | Metadata only (unused; superseded by `session_clip`) |
-| begin_session_clip(clip_key, moment_at_ms, started_at_ms, duration_ms, width, height, fps, mime, size_bytes, chunk_count) | member | Caller's newest member row; allowed up to 600 s after the session ended / member left. Same key again restarts the upload. Limits: 12 MiB, 64 chunks, 60 s, 20 clips per member |
+| begin_session_clip(clip_key, moment_at_ms, started_at_ms, duration_ms, width, height, fps, mime, size_bytes, chunk_count) | member | Caller's newest member row; allowed up to 600 s after the session ended / member left. Same key again restarts the upload. Limits: 64 MiB, 400 chunks, 60 s, 20 clips per member |
 | upload_clip_chunk(clip_key, seq, data) | clip owner | ≤ 256 KiB; same `seq` again replaces |
 | finish_session_clip(clip_key) | clip owner | Needs every chunk and exact `size_bytes`; sets `complete` |
 | set_session_compilation(session_id, status, clip_count, url?, error?) | worker only | Upsert; `Ready` needs `url` |

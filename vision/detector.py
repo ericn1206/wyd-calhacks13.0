@@ -2,9 +2,10 @@
 
 Prints one JSON line per second to stdout:
   {"t": ms, "face": bool, "prob": 0-1, "distracted": bool, "yaw": f, "pitch": f, "eyes": "open"|"closed"}
-Frames stay in memory (a rolling ~10 s of small JPEGs) unless Electron asks for a clip: a stdin line
-`clip <path>` writes the last CLIP_PRE_SECS plus the next CLIP_POST_SECS to <path> as H.264 mp4 and prints
-  {"clip": "<path>", "t": trigger ms, "startedAt": ms, "durationMs": n, "width": w, "height": h, "fps": n}
+Webcam and screen frames stay in memory (a rolling ~10 s of JPEGs, see clip_recorder.py) unless Electron asks
+for a clip: a stdin line `clip <path>` writes the last 10 s plus the next 20 s to <path> as one 1280x720 H.264 mp4
+(screen with the webcam inset; the WYD app's own windows, WYD_APP_PID, are left out of the screen) and prints
+  {"clip": "<path>", "t": trigger ms, "startedAt": ms, "durationMs": n, "width": w, "height": h, "fps": n, "hasScreen": bool}
 (or {"clip": null, "error": "..."}). Electron uploads the file and deletes it.
 Exits on SIGTERM or when stdin closes (so it dies with the app).
 
@@ -13,7 +14,6 @@ The XGBoost model is evaluated in pure Python, so xgboost (and libomp) is only n
 """
 
 import argparse
-import collections
 import ctypes
 import json
 import math
@@ -28,14 +28,12 @@ import cv2
 import mediapipe as mp
 import numpy as np
 
+from clip_recorder import ClipRecorder, ScreenSampler
+
 HISTORY = 20             # frames averaged, as in 03_detection_server.py
 DISTRACTED_ABOVE = 0.65  # as in 03_detection_server.py
 EYES_CLOSED_BELOW = 0.008  # mean normalized lid gap; rough, tune with real data
 FRAME_W, FRAME_H = 640, 480  # pixel size the Windows-trained model splits on
-# Clip format is fixed so the clips of a session can be joined with ffmpeg `-c copy`.
-CLIP_W, CLIP_H, CLIP_FPS = 320, 240, 8
-CLIP_PRE_SECS, CLIP_POST_SECS = 10, 20
-CLIP_JPEG_QUALITY = 70
 
 stop = threading.Event()
 _runloop = None
@@ -97,14 +95,15 @@ def lock_frame(frame):
 
 
 def read_frame(cap):
+    """(camera frame as delivered, same frame locked to FRAME_W x FRAME_H), or (None, None)."""
     for _ in range(20):
         if stop.is_set():
-            return None
+            return None, None
         ok, frame = cap.read()
         if ok and frame is not None and frame.size:
-            return lock_frame(frame)
+            return frame, lock_frame(frame)
         pump(0.05)
-    return None
+    return None, None
 
 
 class TreeModel:
@@ -184,88 +183,18 @@ def emit(payload):
     sys.stdout.flush()
 
 
-class ClipRecorder:
-    """Keeps the last CLIP_PRE_SECS of small JPEG frames; a request adds CLIP_POST_SECS, then writes the mp4."""
-
-    def __init__(self):
-        self.buffer = collections.deque()  # (monotonic s, jpeg bytes)
-        self.job = None  # {path, frames, moment_mono, moment_ms, end_mono}
-        self.writers = []
-
-    def add(self, frame, now):
-        small = cv2.resize(frame, (CLIP_W, CLIP_H), interpolation=cv2.INTER_AREA)
-        ok, jpg = cv2.imencode('.jpg', small, [cv2.IMWRITE_JPEG_QUALITY, CLIP_JPEG_QUALITY])
-        if not ok:
-            return
-        item = (now, jpg.tobytes())
-        if self.job is not None:
-            self.job['frames'].append(item)
-        self.buffer.append(item)
-        while self.buffer and now - self.buffer[0][0] > CLIP_PRE_SECS:
-            self.buffer.popleft()
-
-    def request(self, path, now):
-        if self.job is not None:
-            emit({'clip': None, 'error': 'busy'})
-            return
-        self.job = {
-            'path': path,
-            'frames': list(self.buffer),
-            'moment_mono': now,
-            'moment_ms': int(time.time() * 1000),
-            'end_mono': now + CLIP_POST_SECS,
-        }
-
-    def tick(self, now, flush=False):
-        job = self.job
-        if job is None or (now < job['end_mono'] and not flush):
-            return
-        self.job = None
-        t = threading.Thread(target=self._write, args=(job,), daemon=False)
-        self.writers.append(t)
-        t.start()
-
-    def wait(self):
-        for t in self.writers:
-            t.join(timeout=15)
-
-    @staticmethod
-    def _write(job):
-        try:
-            frames = job['frames']
-            if not frames:
-                raise RuntimeError('no frames buffered')
-            writer = None
-            for code in ('avc1', 'mp4v'):
-                writer = cv2.VideoWriter(job['path'], cv2.VideoWriter_fourcc(*code), CLIP_FPS, (CLIP_W, CLIP_H))
-                if writer.isOpened():
-                    break
-                writer.release()
-                writer = None
-            if writer is None:
-                raise RuntimeError('no mp4 encoder')
-            # Constant frame rate: tick k shows the newest frame at or before first + k / CLIP_FPS.
-            first, last = frames[0][0], frames[-1][0]
-            count = max(1, int((last - first) * CLIP_FPS) + 1)
-            j = 0
-            for k in range(count):
-                at = first + k / CLIP_FPS
-                while j + 1 < len(frames) and frames[j + 1][0] <= at:
-                    j += 1
-                img = cv2.imdecode(np.frombuffer(frames[j][1], np.uint8), cv2.IMREAD_COLOR)
-                writer.write(img)
-            writer.release()
-            emit({
-                'clip': job['path'],
-                't': job['moment_ms'],
-                'startedAt': job['moment_ms'] - int((job['moment_mono'] - first) * 1000),
-                'durationMs': int(count * 1000 / CLIP_FPS),
-                'width': CLIP_W,
-                'height': CLIP_H,
-                'fps': CLIP_FPS,
-            })
-        except Exception as err:
-            emit({'clip': None, 'error': f'{type(err).__name__}: {err}'})
+def start_screen_sampler(clips):
+    """Record the screen for clips, leaving out the WYD app's own windows (WYD_APP_PID, set by Electron)."""
+    try:
+        from screen_capture import ScreenGrabber
+        pid = os.environ.get('WYD_APP_PID')
+        grabber = ScreenGrabber(exclude_pid=int(pid) if pid and pid.isdigit() else None)
+    except Exception as err:
+        print(f'screen recording off: {type(err).__name__}: {err}', file=sys.stderr)
+        return None
+    sampler = ScreenSampler(clips, grabber, stop, log=lambda m: print(m, file=sys.stderr))
+    sampler.start()
+    return sampler
 
 
 def main():
@@ -287,7 +216,8 @@ def main():
     if cap is None:
         return 2
 
-    clips = ClipRecorder()
+    clips = ClipRecorder(emit)
+    start_screen_sampler(clips)
     history = []
     frame_gap = 1 / max(1.0, args.fps)
     last_emit = 0.0
@@ -297,7 +227,7 @@ def main():
     try:
         while not stop.is_set():
             started = time.monotonic()
-            frame = read_frame(cap)
+            raw, frame = read_frame(cap)
             if frame is None:
                 if stop.is_set():
                     break
@@ -305,7 +235,7 @@ def main():
                 return 3
 
             now = time.monotonic()
-            clips.add(frame, now)
+            clips.add_cam(raw, now)  # the camera's own frame, not the 640x480 one the model needs
             while not clip_requests.empty():
                 clips.request(clip_requests.get(), now)
             clips.tick(now)

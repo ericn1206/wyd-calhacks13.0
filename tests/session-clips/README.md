@@ -9,7 +9,9 @@ Feature: `contracts.md#session-clips`. No extra dependencies.
 
 | File | Covers |
 |---|---|
-| `python/test_clip_recorder.py` | `vision/detector.py` `ClipRecorder`: 10 s buffer, 10 s before + 20 s after, 320×240 / 8 fps constant-rate H.264, busy rejection, flush on shutdown, no frames, bad path, `mp4v` fallback, stdin `clip <path>` reader |
+| `python/test_clip_recorder.py` | `vision/clip_recorder.py`: webcam + screen buffers (10 s, thread-safe), 10 s before + 20 s after, 1280x720 / 10 fps composite (screen picture, webcam inset, letterbox, webcam-only, screen-only), busy rejection, flush, errors, `mp4v` fallback, `ScreenSampler` (rate, failures, give-up) |
+| `python/test_detector_stdin.py` | `vision/detector.py`: stdin `clip <path>` reader, raw + model-sized camera frame, screen sampler start (`WYD_APP_PID`, off-macOS fallback) |
+| `python/test_screen_capture.py` | `vision/screen_capture.py` on the real window server (macOS): BGR frame, excluding a process removes exactly its windows |
 | `python/test_trigger_forwarding.py` | `vision/facetime_trigger.py`: `clip {json}` re-print without touching the webcam vote, stdin → detector forwarding |
 | `ts/clipUpload.test.ts` | `src/main/clipUpload.ts` with a fake DB client: call order, chunk sizes and reassembly, retries, give-up, file deletion, clip dir |
 | `ts/facetimeTrigger.test.ts` | `requestClip` is false when tracking is off |

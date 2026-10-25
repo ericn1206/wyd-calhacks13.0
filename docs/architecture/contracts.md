@@ -82,12 +82,12 @@ No consent gating: all fields are stored as sent (consent flags and `set_consent
 Other reducers: `../components/spacetimedb-schema.md#reducers`.
 
 ## Session clips
-Webcam clip of the unfocused person at each check-in, uploaded to SpacetimeDB.
-- Capture: `vision/detector.py` keeps 10 s of 320×240 JPEG frames. stdin line `clip <path>` (from Electron via `facetime_trigger.py`) → it adds 20 s, writes `<path>` as constant-fps (8) H.264 mp4 (fallback `mp4v`) and prints `{"clip": path|null, "error"?, "t": moment ms, "startedAt": first frame ms, "durationMs", "width", "height", "fps"}`; `facetime_trigger.py` re-prints it as `clip {json}` (type `ClipInfo`, `src/main/facetimeTrigger.ts`). A request while one is recording → `error: "busy"`.
+Recording of the unfocused person at each check-in (their screen, webcam as an inset), made on **their own laptop** and uploaded from there. It is recorded locally from the camera and the display, never taken from the LiveKit call.
+- Capture (`vision/clip_recorder.py`, run by `vision/detector.py`): rolling 10 s of JPEG frames per stream: webcam (camera's own frame, ≤ 640 px wide, ~10 fps) and screen (`vision/screen_capture.py`: on-screen windows of the main display at 1x via CoreGraphics, 5 fps). **Windows owned by the WYD app (`WYD_APP_PID`, set by `facetimeTrigger.ts`) are left out**, so the overlay's check-in tiles never appear. stdin line `clip <path>` (from Electron via `facetime_trigger.py`) → it adds 20 s, then writes `<path>` as one constant-rate 1280×720, 10 fps H.264 mp4 (fallback `mp4v`): screen letterboxed full frame, webcam inset 320 px wide bottom-right with white border (webcam fills the frame when there is no screen stream). It prints `{"clip": path|null, "error"?, "t": moment ms, "startedAt": first frame ms, "durationMs", "width", "height", "fps", "hasScreen"}`; `facetime_trigger.py` re-prints it as `clip {json}` (type `ClipInfo`, `src/main/facetimeTrigger.ts`). A request while one is recording → `error: "busy"`. Screen capture needs the Screen Recording permission; without it (or off macOS) clips are webcam only.
 - Trigger: Electron `publishFacetime` (same moment the check-in opens, only while a DB session is not Ended) → `requestClip(newClipPath())`.
 - Compilation: after the session ends the Node clip compiler joins the clips and writes `session_compilation.url` (`../components/clip-compiler.md`); the desktop snapshot exposes it as `tables.compilations`.
 - Summary link: `app_setting` key `clip_page_base_url` (JSON string, written by the compiler) → desktop snapshot `tables.settings`; link = `<base>/session/<session.id>`.
-- Upload: `src/main/clipUpload.ts`, 192 KiB chunks; local file deleted afterwards (also all of `userData/clips/` at app start). Reducers + tables: `../components/spacetimedb-schema.md#19b-session_clip`.
+- Upload: `src/main/clipUpload.ts`, 240 KiB chunks (module limit 256 KiB); local file deleted afterwards (also all of `userData/clips/` at app start). Reducers + tables: `../components/spacetimedb-schema.md#19b-session_clip`.
 
 ## Desktop IPC (`src/preload/index.ts`)
 `window.wydDesktop` (typings: `src/renderer/src/electron.d.ts`):

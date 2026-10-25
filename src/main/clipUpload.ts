@@ -5,7 +5,7 @@ import { app } from 'electron'
 import type { StdbClient } from './db/stdb'
 import type { ClipInfo } from './facetimeTrigger'
 
-const CHUNK_BYTES = 192 * 1024 // module limit is 256 KiB per upload_clip_chunk
+const CHUNK_BYTES = 240 * 1024 // module limit is 256 KiB per upload_clip_chunk
 const RETRIES = 2
 
 /** Local clips live here until uploaded (or the next app start). */

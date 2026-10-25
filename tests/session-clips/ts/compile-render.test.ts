@@ -31,8 +31,8 @@ describe('ffmpegArgs', () => {
   it('normalises each input then concats them in order, as faststart H.264', () => {
     const args = ffmpegArgs(['/t/a.mp4', '/t/b.mp4'], '/o/out.mp4')
     const graph = args[args.indexOf('-filter_complex') + 1]
-    assert.match(graph, /\[0:v\]scale=320:240.*fps=8.*\[v0\]/)
-    assert.match(graph, /\[1:v\]scale=320:240.*fps=8.*\[v1\]/)
+    assert.match(graph, /\[0:v\]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720.*fps=10.*\[v0\]/)
+    assert.match(graph, /\[1:v\]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720.*fps=10.*\[v1\]/)
     assert.match(graph, /\[v0\]\[v1\]concat=n=2:v=1:a=0\[out\]/)
     assert.ok(args.includes('libx264') && args.includes('+faststart'))
   })
@@ -43,18 +43,30 @@ describe('renderCompilation', { skip }, () => {
   before(() => { dir = mkdtempSync(join(tmpdir(), 'wyd-render-')) })
   after(() => rmSync(dir, { recursive: true, force: true }))
 
-  it('joins clips in the given order into one 320x240 8 fps H.264 video', async () => {
+  it('joins clips in the given order into one 1280x720 10 fps H.264 video', async () => {
     const a = join(dir, 'a.mp4')
     const b = join(dir, 'b.mp4')
-    makeClip(a, '320x240', 8, 2)
-    makeClip(b, '640x480', 25, 1) // different size and rate than the camera clips
+    makeClip(a, '1280x720', 10, 2)
+    makeClip(b, '320x240', 8, 1) // an older low-res webcam clip
     const out = join(dir, 'out.mp4')
     await renderCompilation([readFileSync(a), readFileSync(b)], out)
     const info = probe(out)
     assert.equal(info.codec, 'h264')
-    assert.deepEqual([info.w, info.h], [320, 240])
-    assert.equal(info.fps, '8/1')
+    assert.deepEqual([info.w, info.h], [1280, 720])
+    assert.equal(info.fps, '10/1')
     assert.ok(Math.abs(info.secs - 3) < 0.4, `duration ${info.secs}`)
+  })
+
+  it('letterboxes a 4:3 clip instead of stretching it', async () => {
+    const a = join(dir, 'box.mp4')
+    makeClip(a, '640x480', 10, 1)
+    const out = join(dir, 'box-out.mp4')
+    await renderCompilation([readFileSync(a)], out)
+    // 640x480 fitted into 1280x720 is 960x720: black bars of 160 px on each side, picture in the middle.
+    const px = (x: number) => execFileSync('ffmpeg', ['-v', 'error', '-i', out, '-vf', `crop=2:2:${x}:360`, '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'gray', '-'], { maxBuffer: 1024 }).readUInt8(0)
+    assert.ok(px(40) < 24, `left bar luma ${px(40)}`)
+    assert.ok(px(1240) < 24, `right bar luma ${px(1240)}`)
+    assert.ok(px(640) > 24, `centre luma ${px(640)}`)
   })
 
   it('accepts clips written with the mp4v fallback codec', async () => {
