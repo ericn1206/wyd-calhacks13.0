@@ -44,22 +44,22 @@ export const DEFAULT_SETTINGS: Record<string, unknown> = {
 };
 
 const DEFAULT_RULES: Array<{ pattern: string; matchType: E.MatchType; category: E.AppCategory; onTask: boolean }> = [
-  { pattern: 'youtube.com', matchType: 'Domain', category: 'Entertainment', onTask: false },
-  { pattern: 'tiktok.com', matchType: 'Domain', category: 'Social', onTask: false },
-  { pattern: 'instagram.com', matchType: 'Domain', category: 'Social', onTask: false },
-  { pattern: 'reddit.com', matchType: 'Domain', category: 'Social', onTask: false },
-  { pattern: 'YouTube', matchType: 'TitleRegex', category: 'Entertainment', onTask: false },
-  { pattern: 'TikTok', matchType: 'TitleRegex', category: 'Social', onTask: false },
-  { pattern: 'Instagram', matchType: 'TitleRegex', category: 'Social', onTask: false },
-  { pattern: 'Reddit', matchType: 'TitleRegex', category: 'Social', onTask: false },
-  { pattern: 'Code', matchType: 'App', category: 'Work', onTask: true },
-  { pattern: 'Visual Studio Code', matchType: 'App', category: 'Work', onTask: true },
-  { pattern: 'docs.google.com', matchType: 'Domain', category: 'Work', onTask: true },
-  { pattern: 'Google Docs', matchType: 'TitleRegex', category: 'Work', onTask: true },
-  { pattern: 'Notion', matchType: 'App', category: 'Study', onTask: true },
-  { pattern: 'notion.so', matchType: 'Domain', category: 'Study', onTask: true },
-  { pattern: 'instructure.com', matchType: 'Domain', category: 'Study', onTask: true },
-  { pattern: 'Canvas', matchType: 'TitleRegex', category: 'Study', onTask: true },
+  { pattern: 'youtube.com', matchType: 'Domain', category: 'OffTask', onTask: false },
+  { pattern: 'tiktok.com', matchType: 'Domain', category: 'OffTask', onTask: false },
+  { pattern: 'instagram.com', matchType: 'Domain', category: 'OffTask', onTask: false },
+  { pattern: 'reddit.com', matchType: 'Domain', category: 'OffTask', onTask: false },
+  { pattern: 'YouTube', matchType: 'TitleRegex', category: 'OffTask', onTask: false },
+  { pattern: 'TikTok', matchType: 'TitleRegex', category: 'OffTask', onTask: false },
+  { pattern: 'Instagram', matchType: 'TitleRegex', category: 'OffTask', onTask: false },
+  { pattern: 'Reddit', matchType: 'TitleRegex', category: 'OffTask', onTask: false },
+  { pattern: 'Code', matchType: 'App', category: 'OnTask', onTask: true },
+  { pattern: 'Visual Studio Code', matchType: 'App', category: 'OnTask', onTask: true },
+  { pattern: 'docs.google.com', matchType: 'Domain', category: 'OnTask', onTask: true },
+  { pattern: 'Google Docs', matchType: 'TitleRegex', category: 'OnTask', onTask: true },
+  { pattern: 'Notion', matchType: 'App', category: 'OnTask', onTask: true },
+  { pattern: 'notion.so', matchType: 'Domain', category: 'OnTask', onTask: true },
+  { pattern: 'instructure.com', matchType: 'Domain', category: 'OnTask', onTask: true },
+  { pattern: 'Canvas', matchType: 'TitleRegex', category: 'OnTask', onTask: true },
 ];
 
 /** Idempotent: inserts missing settings and, if no global rules exist, the default rules. */
@@ -292,8 +292,6 @@ export function classify(db: RDb, sessionId: bigint, app: string, domain?: strin
 
 // ── Fallback judgment (used when the worker is offline or slow) ──
 
-const DISTRACTING: E.AppCategory[] = ['Social', 'Entertainment', 'Games', 'News'];
-
 export function ruleJudge(
   db: RDb,
   ev: SignalEvent
@@ -307,12 +305,10 @@ export function ruleJudge(
   if (ev.phoneState.tag === 'Phone_In_Use' || ev.phoneInHand) return { label: 'OffTask', reason: 'Phone', confidence: 0.8 };
   if (ctxRow && domainIn(ctxRow.blockedDomains)) return { label: 'OffTask', reason: 'Distracting_App', confidence: 0.9 };
   if (ctxRow && domainIn(ctxRow.allowedDomains)) return { label: 'Focused', reason: 'Unknown', confidence: 0.8 };
-  if (DISTRACTING.includes(ev.appCategory.tag)) return { label: 'OffTask', reason: 'Distracting_App', confidence: 0.8 };
+  if (ev.appCategory.tag === 'OffTask') return { label: 'OffTask', reason: 'Distracting_App', confidence: 0.8 };
   if (ev.eyesClosed) return { label: 'OffTask', reason: 'Eyes_Closed', confidence: 0.6 };
   if (ev.lookingAway) return { label: 'OffTask', reason: 'Looking_Away', confidence: 0.55 };
-  if (ev.appCategory.tag === 'Work' || ev.appCategory.tag === 'Study') return { label: 'Focused', reason: 'Unknown', confidence: 0.8 };
-  if (ev.appCategory.tag === 'Communication') return { label: 'Focused', reason: 'Unknown', confidence: 0.55 };
-  return { label: 'Unknown', reason: 'Unknown', confidence: 0.3 };
+  return { label: 'Focused', reason: 'Unknown', confidence: 0.8 };
 }
 
 export function insertFallbackJudgment(ctx: Ctx, ev: SignalEvent) {
@@ -467,7 +463,7 @@ function transition(ctx: Ctx, s: Session, st: Status, next: Candidate) {
   });
 }
 
-/** 60 s hold: the label only changes once a new confident label has held that long. */
+/** A confident OffTask label applies immediately so the group learns at once; any other change waits for the `smoothing_hold_secs` hold (avoids flapping back). */
 export function applySmoothing(ctx: Ctx, memberId: bigint) {
   const st = ctx.db.status.memberId.find(memberId);
   if (!st) return;
@@ -515,7 +511,7 @@ export function applySmoothing(ctx: Ctx, memberId: bigint) {
       smoothedOffTaskSecs: cand.label === 'OffTask' ? secsBetween(st.since, ctx.timestamp) : 0,
       updatedAt: ctx.timestamp,
     });
-  } else if (secsBetween(cand.since, ctx.timestamp) >= hold) {
+  } else if (cand.label === 'OffTask' || secsBetween(cand.since, ctx.timestamp) >= hold) {
     transition(ctx, s, st, cand);
   } else {
     ctx.db.status.memberId.update({

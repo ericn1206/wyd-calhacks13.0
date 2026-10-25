@@ -12,6 +12,9 @@
 | 2026-10-24 | No roasts, spoken or written. |
 | 2026-10-24 | Phone sensor is optional; the app works fully without it. |
 | 2026-10-24 | Onboarding: typed questionnaire (subject + goals). No AI voice. |
+| 2026-10-24 | Off-task is announced immediately: no hold, `off_task_threshold_secs` default 0; others learn at once. Privacy updated to allow OCR text → Gemini (`privacy.md`). |
+| 2026-10-24 | DB categories are binary: `AppCategory` = `OnTask`/`OffTask`. |
+| 2026-10-24 | Off-task detection: local OCR of screenshots every few seconds → Gemini API → OnTask/OffTask → `ingest_signal` → off-task event → other clients get a call alert. See `../architecture/overview.md#off-task-pipeline`. |
 
 ## Open (ask, don't assume)
 | Question | Current direction / notes |
@@ -19,8 +22,10 @@
 | Scores / leaderboard, or summary stats only? | Leaning no scores. DB has `score`, `session_award` (`scoreboard_enabled=false` by default). |
 | Teammate "close your tab" takeover? | Needs explicit consent; likely cut. DB has `takeover_request`. |
 | Canonical status vocabulary | Contract `on_task`/`off_task`/`break` vs DB `StatusLabel` vs desktop `productive`/`distracted`. |
-| Canonical category set | Contract lowercase 9 vs DB `AppCategory` vs `appClassifier.ts`. |
 | Event format | Contract JSON vs DB `SignalInput`. |
+| Where the AI worker runs | SpacetimeDB can't host a Node process; options: separate always-on process (VM/laptop) or port judge into module procedures (HTTP). Requested: "hosted on SpacetimeDB cloud". |
+| Pause/stop for everyone | Module has no pause reducer; add one (contract change) or drop pause/stop from the host console. |
+| Gemini pipeline vs project rules | `CLAUDE.md` says rules + cache first, only ambiguous titles go to a model, Claude judge. The decided pipeline calls Gemini every few seconds on OCR text. Update `CLAUDE.md`/`privacy.md` wording or add a cache; cost + on-screen text sent to Gemini. |
 | Which judge runs in the demo | Desktop `claudeJudge.ts`, worker `judge.ts`, or DB fallback. |
 | Timing numbers | Spec (2 min / 30 min / ~60 s) vs DB defaults (~60 s / 600 s / 90 s) vs LiveKit call 90 s. |
 | Inferentia small model vs Haiku only | Not started. |
