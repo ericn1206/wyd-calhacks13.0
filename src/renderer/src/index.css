@@ -183,6 +183,9 @@ input:focus { border-color: var(--purple); }
 .timer-controls button { min-height: 42px; border-radius: 11px; display: flex; align-items: center; justify-content: center; gap: 7px; font-size: 11px; font-weight: 700; }
 .timer-controls svg { width: 15px; }
 .timer-stop { border: 1px solid #dfe5e2; color: #64736e; background: white; }
+.end-session-button { width: 100%; min-height: 42px; margin: 0 0 11px; border: 1px solid #f0d6d2; border-radius: 11px; display: flex; align-items: center; justify-content: center; gap: 7px; color: #9a4f47; background: #fbefed; font-size: 11px; font-weight: 700; transition: background .2s; }
+.end-session-button:hover { background: #f7e3e0; }
+.end-session-button svg { width: 15px; }
 .timer-start { border: 0; color: #23464a; background: #7fcbd4; box-shadow: 0 6px 16px rgba(127,203,212,.24); }
 /* Before the session starts Stop is hidden: Start takes the full row. */
 .timer-start:only-child { grid-column: 1 / -1; }
