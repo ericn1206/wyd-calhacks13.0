@@ -19,10 +19,16 @@ export function BreakRoom({ sessionCode, name, seconds }: { sessionCode: string;
   const secondsRef = useRef(seconds)
   secondsRef.current = seconds
   const connected = circle.status === 'connected'
+  const peerCount = circle.peers.length
   useEffect(() => {
-    // Each laptop starts its own window for the remaining break; startCall joins if one is already running.
-    if (connected) circle.startCall({ durationMs: Math.max(5, secondsRef.current) * 1000 })
-  }, [connected]) // eslint-disable-line react-hooks/exhaustive-deps
+    // Alone in the room: no camera, no mic, nothing shown. Media starts once a teammate is connected
+    // and stops again if everyone else leaves.
+    if (!connected) return
+    if (peerCount > 0) circle.startCall({ durationMs: Math.max(5, secondsRef.current) * 1000 })
+    else if (circle.inCall) circle.leaveCall()
+  }, [connected, peerCount]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (peerCount === 0) return null
 
   return (
     <div className="break-room">

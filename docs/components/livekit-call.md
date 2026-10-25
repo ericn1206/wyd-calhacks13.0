@@ -27,7 +27,7 @@ Room name, identity, token grants, attributes (`callEndsAt`, `inCall`): `../arch
 | While sharing | Our windows are never the shared source, so the overlay's camera tiles can't appear (macOS 15+ ScreenCaptureKit ignores `setContentProtection`, which is still set as a fallback) |
 
 ## Break room
-`components/session/BreakRoom.tsx`, rendered by `BreakScreen` (main window) in DB sessions only: separate room `lockin-<CODE>-break`, everyone connects when the break starts (no prompt), camera + mic on, video grid for the rest of the break (`startCall({ durationMs })`); leaving the break screen disconnects. No screen share, no mute/camera buttons.
+`components/session/BreakRoom.tsx`, rendered by `BreakScreen` (main window) in DB sessions only: separate room `lockin-<CODE>-break`, everyone connects when the break starts (no prompt); camera + mic start only once another person is in the room (alone: nothing published or shown; stops if everyone else leaves); video grid for the rest of the break (`startCall({ durationMs })`); leaving the break screen disconnects. No screen share, no mute/camera buttons.
 
 ## Run & test
 1. Each laptop: `.env` `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` (`../architecture/stack.md`); Screen Recording allowed for Electron.
