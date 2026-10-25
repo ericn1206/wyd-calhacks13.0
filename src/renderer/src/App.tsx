@@ -63,7 +63,8 @@ export default function App() {
   const [pomodorosDone, setPomodorosDone] = useState(0)
   const [upcomingBreakMinutes, setUpcomingBreakMinutes] = useState(5)
   const [distraction, setDistraction] = useState('')
-  const [savedDistractions, setSavedDistractions] = useState<string[]>([])
+  const [parkNotice, setParkNotice] = useState('')
+  const restoreChecked = useRef<string[]>([])
   const [checked, setChecked] = useState<boolean[]>([true, false, false])
   const [breakSeconds, setBreakSeconds] = useState(300)
   const [isTired, setIsTired] = useState(false)
@@ -222,6 +223,15 @@ export default function App() {
     }
   }, [phaseKey])
 
+  // `set_goals` recreates every row uncompleted: re-check the ones that were done before the add.
+  useEffect(() => {
+    if (!restoreChecked.current.length) return
+    const done = restoreChecked.current
+    const rows = db.myGoals.filter((g) => !g.completed && done.includes(g.text))
+    if (!rows.length) return
+    restoreChecked.current = []
+    rows.forEach((g) => void db.call('checkGoal', { goalId: BigInt(g.id), done: true }))
+  }, [db.myGoals])
   const goalsKey = db.myGoals.map((g) => (g.completed ? 1 : 0)).join('')
   useEffect(() => {
     if (dbSession && db.myGoals.length) setChecked(db.myGoals.map((g) => !!g.completed))
@@ -353,7 +363,7 @@ export default function App() {
     }
     const task = activeGoals[0] || 'study'
     void window.wydDesktop?.startTracking({ subject: task, goals: activeGoals.length ? activeGoals : [task], sites: '', notes: '' })
-  }, [tracking])
+  }, [tracking, activeGoals.join('\n')])
   const finishPomodoro = () => {
     setTimerRunning(false)
     const completed = pomodorosDone + 1
@@ -393,10 +403,23 @@ export default function App() {
     setTimerRunning(false)
     setFocusSeconds(pomodoroMinutes * 60)
   }
-  const saveDistraction = () => {
-    if (!distraction.trim()) return
-    setSavedDistractions([...savedDistractions, distraction.trim()])
+  // "Park it here" adds a goal: sidebar list, DB (`set_goals` replaces the rows, so completed ones are re-checked
+  // once the new rows arrive) and the detector/judge (the tracking effect restarts on a goal change).
+  const saveDistraction = async () => {
+    const text = distraction.trim()
+    if (!text) return
+    if (activeGoals.length >= 3) return setParkNotice('Goal list is full (3). Finish one first.')
+    const nextGoals = [...activeGoals, text.slice(0, 200)]
+    const nextChecked = [...nextGoals.map((_, i) => !!checked[i]), false, false].slice(0, 3)
+    if (dbSession) {
+      const error = await db.call('setGoals', { goals: nextGoals })
+      if (error) return setParkNotice(error)
+      restoreChecked.current = nextGoals.filter((_, i) => nextChecked[i])
+    }
+    setGoals([...nextGoals, '', '', ''].slice(0, 3))
+    setChecked(nextChecked)
     setDistraction('')
+    setParkNotice(`Added to your goals (${nextGoals.length} of 3).`)
   }
   const signalTired = () => {
     setIsTired(true)
@@ -522,7 +545,7 @@ export default function App() {
       {demoOpen && <div className="demo-popover"><span>Prototype controls</span><button onClick={() => { triggerCheckIn('me', 'none'); setDemoOpen(false) }}>I go off task · no one joins</button><button onClick={() => { triggerCheckIn('me', 'people'); setDemoOpen(false) }}>I go off task · people join</button><button onClick={() => { triggerCheckIn('teammate'); setDemoOpen(false) }}>Teammate goes off task</button><div className="corner-setting"><small>Check-in corner</small><div>{(['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const).map((corner) => <button className={checkInCorner === corner ? 'active' : ''} key={corner} onClick={() => { setCheckInCorner(corner); window.wydDesktop?.setPreferences({ checkInCorner: corner }) }} aria-label={corner}>{corner.split('-').map((part) => part[0].toUpperCase()).join('')}</button>)}</div></div>{isHost && !dbSession && <button onClick={() => { finishPomodoro(); setDemoOpen(false) }}>Finish Pomodoro</button>}<button onClick={toggleDockDebug}>Dock debug: {dockDebug ? 'On' : 'Off'}</button><button onClick={() => { setLogOpen(true); setDemoOpen(false) }}>Detector log ({detectorLog.length})</button><button onClick={endSession}>{dbSession && !isHost ? 'Leave session' : 'End session'}</button></div>}
     </div>
     <section className="focus-grid">
-      <div className="timer-panel"><div className="eyebrow">Focus session · Round {(pomodorosDone % 4) + 1} of 4</div><div className="pomodoro-rounds">{[0, 1, 2, 3].map((round) => <span className={round < pomodorosDone % 4 ? 'done' : round === pomodorosDone % 4 ? 'current' : ''} key={round}><Icon name="check" /></span>)}</div><div className="timer-ring"><svg viewBox="0 0 180 180"><circle cx="90" cy="90" r="80" /><circle className="timer-progress" cx="90" cy="90" r="80" style={{ strokeDashoffset: 502 * (1 - focusSeconds / (pomodoroMinutes * 60)) }} /></svg><div><strong>{String(Math.floor(focusSeconds / 60)).padStart(2, '0')}:{String(focusSeconds % 60).padStart(2, '0')}</strong><span>{timerRunning ? 'focus time' : focusSeconds === pomodoroMinutes * 60 ? isHost ? 'ready when you are' : 'waiting for host' : 'paused by host'}</span></div></div><h2>{timerRunning ? 'Stay with it.' : isHost ? 'Choose one task.' : 'Your host sets the pace.'}</h2>{dbSession?.state === 'Lobby' && <p className="lobby-line">Invite code <strong>{dbSession.code}</strong> · {db.people.length} in the room</p>}<p>{activeGoals[0] || 'Pick something that deserves your full attention.'}</p>{isHost ? <div className="pomodoro-console host-console"><div className="console-role"><span className="host-control-badge"><Icon name="users" />Host controls</span><small>Everyone’s timer stays in sync with yours.</small></div><div className="time-select"><span>Focus length</span>{[15, 25, 45].map((minutes) => <button className={pomodoroMinutes === minutes ? 'active' : ''} onClick={() => selectPomodoroLength(minutes)} key={minutes}>{minutes} min</button>)}</div><div className="timer-controls">{sessionStarted && <button className="timer-stop" disabled={!!dbSession && dbSession.state !== 'Active'} onClick={() => dbSession ? takeBreak() : resetPomodoro()}><Icon name={dbSession ? 'clock' : 'x'} />{dbSession ? 'Take a break' : 'Stop'}</button>}<button className="timer-start" disabled={!!dbSession && (dbSession.state !== 'Lobby' || timerRunning)} onClick={() => dbSession ? setRunning(true) : setTimerRunning(!timerRunning)}><Icon name={timerRunning ? 'clock' : 'arrow'} />{dbSession ? (dbSession.state === 'Lobby' && !timerRunning ? 'Start session' : 'Session running') : timerRunning ? 'Pause for everyone' : focusSeconds < pomodoroMinutes * 60 ? 'Resume session' : 'Start session'}</button></div>{dbSession && dbSession.state !== 'Lobby' && <button className="end-session-button" onClick={endSession}><Icon name="x" />End session for everyone</button>}<div className="focus-oath"><Icon name="target" /><span><strong>My focus promise</strong>I’ll give this task my full attention until the timer rings.</span></div><div className="distraction-capture"><input value={distraction} onChange={(event) => setDistraction(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && saveDistraction()} placeholder="Something else came to mind? Park it here." /><button onClick={saveDistraction}>Save</button>{savedDistractions.length > 0 && <small>{savedDistractions.length} item{savedDistractions.length === 1 ? '' : 's'} saved for later</small>}</div></div> : <div className="pomodoro-console participant-console"><div className="participant-host"><span className="avatar bg-[#dbe9ff]">MK<i /></span><div><small>Session host</small><strong>{hostName} controls this Pomodoro</strong><p>You’ll start, pause, and take breaks together.</p></div><span className="sync-status"><i />Synced</span></div><div className="participant-schedule"><span><small>Focus</small><strong>{pomodoroMinutes} min</strong></span><Icon name="arrow" /><span><small>Short break</small><strong>5 min</strong></span><Icon name="arrow" /><span><small>After 4 rounds</small><strong>20 min</strong></span></div><div className="focus-oath"><Icon name="lock" /><span><strong>Timer controls are host-only</strong>Your timer updates automatically when {hostName} starts the session.</span></div><div className="distraction-capture"><input value={distraction} onChange={(event) => setDistraction(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && saveDistraction()} placeholder="Something else came to mind? Park it here." /><button onClick={saveDistraction}>Save</button>{savedDistractions.length > 0 && <small>{savedDistractions.length} item{savedDistractions.length === 1 ? '' : 's'} saved for later</small>}</div></div>}</div>
+      <div className="timer-panel"><div className="eyebrow">Focus session · Round {(pomodorosDone % 4) + 1} of 4</div><div className="pomodoro-rounds">{[0, 1, 2, 3].map((round) => <span className={round < pomodorosDone % 4 ? 'done' : round === pomodorosDone % 4 ? 'current' : ''} key={round}><Icon name="check" /></span>)}</div><div className="timer-ring"><svg viewBox="0 0 180 180"><circle cx="90" cy="90" r="80" /><circle className="timer-progress" cx="90" cy="90" r="80" style={{ strokeDashoffset: 502 * (1 - focusSeconds / (pomodoroMinutes * 60)) }} /></svg><div><strong>{String(Math.floor(focusSeconds / 60)).padStart(2, '0')}:{String(focusSeconds % 60).padStart(2, '0')}</strong><span>{timerRunning ? 'focus time' : focusSeconds === pomodoroMinutes * 60 ? isHost ? 'ready when you are' : 'waiting for host' : 'paused by host'}</span></div></div><h2>{timerRunning ? 'Stay with it.' : isHost ? 'Choose one task.' : 'Your host sets the pace.'}</h2>{dbSession?.state === 'Lobby' && <p className="lobby-line">Invite code <strong>{dbSession.code}</strong> · {db.people.length} in the room</p>}<p>{activeGoals[0] || 'Pick something that deserves your full attention.'}</p>{isHost ? <div className="pomodoro-console host-console"><div className="console-role"><span className="host-control-badge"><Icon name="users" />Host controls</span><small>Everyone’s timer stays in sync with yours.</small></div><div className="time-select"><span>Focus length</span>{[15, 25, 45].map((minutes) => <button className={pomodoroMinutes === minutes ? 'active' : ''} onClick={() => selectPomodoroLength(minutes)} key={minutes}>{minutes} min</button>)}</div><div className="timer-controls">{sessionStarted && <button className="timer-stop" disabled={!!dbSession && dbSession.state !== 'Active'} onClick={() => dbSession ? takeBreak() : resetPomodoro()}><Icon name={dbSession ? 'clock' : 'x'} />{dbSession ? 'Take a break' : 'Stop'}</button>}<button className="timer-start" disabled={!!dbSession && (dbSession.state !== 'Lobby' || timerRunning)} onClick={() => dbSession ? setRunning(true) : setTimerRunning(!timerRunning)}><Icon name={timerRunning ? 'clock' : 'arrow'} />{dbSession ? (dbSession.state === 'Lobby' && !timerRunning ? 'Start session' : 'Session running') : timerRunning ? 'Pause for everyone' : focusSeconds < pomodoroMinutes * 60 ? 'Resume session' : 'Start session'}</button></div>{dbSession && dbSession.state !== 'Lobby' && <button className="end-session-button" onClick={endSession}><Icon name="x" />End session for everyone</button>}<div className="focus-oath"><Icon name="target" /><span><strong>My focus promise</strong>I’ll give this task my full attention until the timer rings.</span></div><div className="distraction-capture"><input value={distraction} onChange={(event) => setDistraction(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && saveDistraction()} placeholder="Something else came to mind? Add it to your goals." /><button onClick={saveDistraction}>Add goal</button>{parkNotice && <small>{parkNotice}</small>}</div></div> : <div className="pomodoro-console participant-console"><div className="participant-host"><span className="avatar bg-[#dbe9ff]">MK<i /></span><div><small>Session host</small><strong>{hostName} controls this Pomodoro</strong><p>You’ll start, pause, and take breaks together.</p></div><span className="sync-status"><i />Synced</span></div><div className="participant-schedule"><span><small>Focus</small><strong>{pomodoroMinutes} min</strong></span><Icon name="arrow" /><span><small>Short break</small><strong>5 min</strong></span><Icon name="arrow" /><span><small>After 4 rounds</small><strong>20 min</strong></span></div><div className="focus-oath"><Icon name="lock" /><span><strong>Timer controls are host-only</strong>Your timer updates automatically when {hostName} starts the session.</span></div><div className="distraction-capture"><input value={distraction} onChange={(event) => setDistraction(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && saveDistraction()} placeholder="Something else came to mind? Add it to your goals." /><button onClick={saveDistraction}>Add goal</button>{parkNotice && <small>{parkNotice}</small>}</div></div>}</div>
       <SessionSidebar sessionName={sessionName} role={isHost ? 'Host' : 'Participant'} goals={activeGoals} checked={checked} setChecked={updateChecked} people={db.people.filter((p) => !p.me)} />
     </section>
     {complete && <div className="overlay"><div className="complete-modal"><div className="icon-bubble mint"><Icon name="check" /></div><div className="eyebrow">{pomodoroMinutes} minutes complete</div><h2>Pomodoro complete.</h2><p>{upcomingBreakMinutes >= 20 ? 'That’s four rounds. Take a longer 20-minute break so your brain can recharge.' : 'Mark it complete and take a five-minute break before the next round.'}</p><div className="button-row"><button className="secondary" onClick={() => { setComplete(false); endSession() }}>{dbSession && !isHost ? 'Leave session' : 'End session'}</button><button className="primary" onClick={() => { setComplete(false); setScreen('break') }}>Take {upcomingBreakMinutes} min break <Icon name="arrow" /></button></div></div></div>}
