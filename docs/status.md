@@ -27,6 +27,7 @@ Last updated: 2026-10-24. Biggest gap: **activity signals do not reach Spacetime
 - UI wiring: `activity:update`/`activity:alert` not consumed (UI uses Demo-menu triggers); summary stats (see `ui_integration.md` demo-only inventory).
 - Off-task pipeline: local OCR + Gemini classification → `ingest_signal` (`architecture/overview.md#off-task-pipeline`). Replaces desktop `categorize.ts`/`appClassifier.ts`/`claudeJudge.ts` as the verdict source.
 - Desktop → SpacetimeDB: no `ingest_signal` calls yet; no UI for `my_alerts`, group calls, takeover, phone pairing, stuck, awards.
+- Pomodoro: in a DB session all clocks/screens derive from the server (`components/spacetimedb.md#behavior`, skew-corrected); the local timer, `finishPomodoro`, break countdown and "Back to focus" exist only in the offline demo flow. Long (20 min) break / "of 4" rounds: demo flow only.
 - Pause: decided against. Host has `take_break` (force a break now, work round only) and `end_session`; the DB-session dock shows Start (lobby) + Take a break only.
 - Session lifecycle (published to maincloud 2026-10-25, additive): resume after restart, ended session → summary with real stats, host End session, 60 s disconnect reaper (`disconnect_timer`), name input (`set_profile`). Module verified via CLI on a scratch db; UI click-through untested.
 - Overlay window gets DB state only via `App.tsx` → `OverlayState`; it has no direct DB feed.

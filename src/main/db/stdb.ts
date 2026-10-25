@@ -35,11 +35,13 @@ export type DbSnapshot = {
   connected: boolean
   identity: string | null
   error: string | null
+  /** Local clock minus server clock (ms), least-latency estimate; null until a live server event arrives. */
+  clockOffsetMs: number | null
   tables: Record<keyof typeof VIEWS, Record<string, unknown>[]>
 }
 
 type ReducerName = keyof typeof reducers
-type Table = { iter(): Iterable<unknown>; onInsert(cb: () => void): void; onUpdate(cb: () => void): void; onDelete(cb: () => void): void }
+type Table = { iter(): Iterable<unknown>; onInsert(cb: (ctx: unknown) => void): void; onUpdate(cb: (ctx: unknown) => void): void; onDelete(cb: (ctx: unknown) => void): void }
 
 const tokenPath = () => join(app.getPath('userData'), 'stdb-token.json')
 const readToken = (): string | undefined => {
@@ -67,6 +69,7 @@ export class StdbClient {
   private listener: (snapshot: DbSnapshot) => void = () => {}
   private timer: NodeJS.Timeout | null = null
   private lastKey = ''
+  private clockOffsetMs: number | null = null
 
   onChange(cb: (snapshot: DbSnapshot) => void): void { this.listener = cb }
 
@@ -90,7 +93,8 @@ export class StdbClient {
           .subscribe(queries)
         for (const name of Object.values(VIEWS)) {
           const table = (conn.db as unknown as Record<string, Table>)[name]
-          table.onInsert(() => this.emit()); table.onUpdate(() => this.emit()); table.onDelete(() => this.emit())
+          const changed = (ctx: unknown) => { this.sampleClock(ctx); this.emit() }
+          table.onInsert(changed); table.onUpdate(changed); table.onDelete(changed)
         }
         this.emit()
       })
@@ -105,7 +109,7 @@ export class StdbClient {
       const table = this.conn ? (this.conn.db as unknown as Record<string, Table>)[name] : undefined
       tables[key] = table ? ([...table.iter()].map(plain) as Record<string, unknown>[]) : []
     }
-    return { connected: this.conn !== null && this.identity !== null, identity: this.identity, error: this.error, tables }
+    return { connected: this.conn !== null && this.identity !== null, identity: this.identity, error: this.error, clockOffsetMs: this.clockOffsetMs, tables }
   }
 
   /** Call a reducer by its generated accessor name (e.g. `createSession`). Rejects on server errors. */
@@ -128,6 +132,22 @@ export class StdbClient {
   private counts(): Record<string, number> {
     const snap = this.snapshot().tables
     return Object.fromEntries(Object.entries(snap).map(([k, rows]) => [k, rows.length]))
+  }
+
+  /**
+   * A row change caused by a reducer carries the server's start time for it. Local receipt time minus
+   * that is (clock skew + one-way latency); the smallest sample is the best skew estimate. Rows from
+   * the initial subscription carry no reducer event and are ignored.
+   */
+  private sampleClock(ctx: unknown): void {
+    const event = (ctx as { event?: { tag?: string; value?: { timestamp?: { toMillis(): bigint } } } } | undefined)?.event
+    const ts = event?.tag === 'Reducer' ? event.value?.timestamp : undefined
+    if (!ts) return
+    const sample = Date.now() - Number(ts.toMillis())
+    if (this.clockOffsetMs === null || sample < this.clockOffsetMs) {
+      this.clockOffsetMs = sample
+      dbLog('clock', 'offset estimate', { ms: sample })
+    }
   }
 
   disconnect(): void { this.conn?.disconnect(); this.conn = null }

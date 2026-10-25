@@ -53,6 +53,8 @@ OffTask: −2 per tick (Penalty). Returning to Focused within `quick_recovery_wi
 nudge or call in that episode: +3 (QuickRecovery). `focus_ratio` = DeepWork secs / (DeepWork +
 Interruption secs). `final_score = focus_ratio × goals_completed`.
 
+**Pomodoro clock.** Server is the single source of truth and sends no ticks. Session row holds `state`, `current_phase`, `phase_started_at`, lengths; `pomodoro_timer` flips Work ↔ Break. Clients render `phase length − (server now − phase_started_at)`; server now = `Date.now() − clockOffsetMs`, where `clockOffsetMs` (main process, `stdb.ts`) is the minimum of `Date.now() − event.timestamp` over live reducer-caused row changes (skew + least latency; `null` until the first live event, then treated as 0). Screens change only on a phase change (start, `take_break`, timer flip, `end_session`); in a session there are no local timers, no early return from break, no completion modal.
+
 **Group call.** Same off-task condition, `group_call_enabled`, once per episode, no call already
 ringing/active. Inside `call_cooldown_secs` of the last call, or with fewer than 2 active members,
 the member gets a NudgeSelf alert instead. Otherwise: group_call (Ringing), a call_participant +

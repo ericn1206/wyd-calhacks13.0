@@ -118,14 +118,14 @@ export default function App() {
 
 
   useEffect(() => {
-    if (screen !== 'break') return
+    if (screen !== 'break' || dbSession) return
     const id = window.setInterval(() => setBreakSeconds((s) => s > 0 ? s - 1 : 0), 1000)
     return () => window.clearInterval(id)
-  }, [screen])
+  }, [screen, !!dbSession])
 
   useEffect(() => {
-    // Offline, or right after an optimistic Start while the server still reports Lobby.
-    if ((dbSession && dbSession.state !== 'Lobby') || screen !== 'focus' || !timerRunning || focusSeconds <= 0) return
+    // Local demo flow only: in a database session the server's phase_started_at drives every clock.
+    if (dbSession || screen !== 'focus' || !timerRunning || focusSeconds <= 0) return
     const id = window.setInterval(() => setFocusSeconds((seconds) => Math.max(0, seconds - 1)), 1000)
     return () => window.clearInterval(id)
   }, [screen, timerRunning, focusSeconds, dbSession])
@@ -134,8 +134,21 @@ export default function App() {
     if (!dbSession && timerRunning && focusSeconds === 0) finishPomodoro()
   }, [focusSeconds, timerRunning])
 
-  // Server-driven session: SpacetimeDB owns the clock (phase_started_at + phase length).
+  // Server-driven session: SpacetimeDB is the single source of truth. Nothing ticks on the server; each
+  // client shows phase_started_at + phase length against the server's clock (local clock corrected by
+  // the offset measured from server event timestamps), so every screen agrees. Only a phase change
+  // (start, take break, timer flip, end) moves the UI between screens.
   const phaseKey = dbSession ? `${dbSession.state}:${dbSession.phase}:${dbSession.cycle}` : ''
+  const serverActive = dbSession?.state === 'Active' || dbSession?.state === 'Break'
+  const sessionStarted = dbSession ? serverActive : timerRunning || focusSeconds < pomodoroMinutes * 60
+  useEffect(() => {
+    if (!serverActive) return
+    const id = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(id)
+  }, [serverActive])
+
+  const serverNow = now - (db.snapshot.clockOffsetMs ?? 0)
+  const elapsedSecs = dbSession?.phaseStartedAt ? Math.max(0, Math.floor((serverNow - dbSession.phaseStartedAt) / 1000)) : 0
   useEffect(() => {
     if (!dbSession) return
     setSessionName(dbSession.name)
@@ -143,33 +156,20 @@ export default function App() {
     setPomodoroMinutes(Math.round(dbSession.workSecs / 60))
     setUpcomingBreakMinutes(Math.round(dbSession.breakSecs / 60))
     if (dbSession.state === 'Lobby') { setFocusSeconds(dbSession.workSecs); setTimerRunning(false) }
-  }, [dbSession?.name, dbSession?.code, dbSession?.workSecs, dbSession?.breakSecs, dbSession?.state])
-
-  const serverActive = dbSession?.state === 'Active' || dbSession?.state === 'Break'
-  const sessionStarted = dbSession ? serverActive || timerRunning : timerRunning || focusSeconds < pomodoroMinutes * 60
-  useEffect(() => {
-    if (!serverActive) return
-    const id = window.setInterval(() => setNow(Date.now()), 1000)
-    return () => window.clearInterval(id)
-  }, [serverActive])
-
-  const elapsedSecs = dbSession?.phaseStartedAt ? Math.max(0, Math.floor((now - dbSession.phaseStartedAt) / 1000)) : 0
-  useEffect(() => {
-    if (dbSession?.state === 'Active') setFocusSeconds(Math.max(0, dbSession.workSecs - elapsedSecs))
-  }, [phaseKey, elapsedSecs])
+    else if (dbSession.state === 'Active') { setFocusSeconds(Math.max(0, dbSession.workSecs - elapsedSecs)); setTimerRunning(true) }
+    else if (dbSession.state === 'Break') { setBreakSeconds(Math.max(0, dbSession.breakSecs - elapsedSecs)); setTimerRunning(false) }
+  }, [dbSession?.name, dbSession?.code, dbSession?.workSecs, dbSession?.breakSecs, dbSession?.state, phaseKey, elapsedSecs])
 
   useEffect(() => {
     if (!dbSession) return
+    setComplete(false)
     if (dbSession.state === 'Active') {
-      setTimerRunning(true)
       setPomodorosDone(dbSession.cycle - 1)
-      setComplete(false)
+      setIsTired(false)
       setScreen((s) => (s === 'break' ? 'focus' : s))
     } else if (dbSession.state === 'Break') {
-      setTimerRunning(false)
       setPomodorosDone(dbSession.cycle)
-      setBreakSeconds(Math.max(0, dbSession.breakSecs - Math.floor((Date.now() - (dbSession.phaseStartedAt ?? Date.now())) / 1000)))
-      setScreen((s) => { if (s === 'focus') setComplete(true); return s })
+      setScreen((s) => (s === 'focus' ? 'break' : s))
     }
   }, [phaseKey])
 
@@ -264,18 +264,7 @@ export default function App() {
   const selectPomodoroLength = (minutes: number) => {
     if (dbSession) {
       if (!dbSession.isHost) return
-      // Show the new length now; the server confirms (or we roll back to its value).
-      const session = dbSession
-      setPomodoroMinutes(minutes)
-      setFocusSeconds(minutes * 60)
-      setTimerRunning(false)
-      db.call('setPomodoro', { workSecs: minutes * 60, breakSecs: session.breakSecs }).then((error) => {
-        if (!error) return
-        setPomodoroMinutes(Math.round(session.workSecs / 60))
-        if (session.state === 'Lobby') setFocusSeconds(session.workSecs)
-        else setTimerRunning(session.state === 'Active')
-        window.alert(error)
-      })
+      db.call('setPomodoro', { workSecs: minutes * 60, breakSecs: dbSession.breakSecs }).then((error) => { if (error) window.alert(error) })
       return
     }
     setPomodoroMinutes(minutes)
@@ -283,18 +272,7 @@ export default function App() {
     setTimerRunning(false)
   }
   const resetPomodoro = () => {
-    if (dbSession) {
-      if (!dbSession.isHost) return
-      const session = dbSession
-      setTimerRunning(false)
-      setFocusSeconds(session.workSecs)
-      db.call('stopPomodoro').then((error) => {
-        if (!error) return
-        setTimerRunning(session.state === 'Active')
-        window.alert(error)
-      })
-      return
-    }
+    if (dbSession) return // no stop in a session: the host takes a break or ends it
     setTimerRunning(false)
     setFocusSeconds(pomodoroMinutes * 60)
   }
@@ -315,6 +293,7 @@ export default function App() {
     setScreen('summary')
   }
   const returnFromBreak = () => {
+    if (dbSession) return // the server's timer ends the break for everyone
     setBreakSeconds(upcomingBreakMinutes * 60)
     setFocusSeconds(pomodoroMinutes * 60)
     setIsTired(false)
@@ -325,14 +304,7 @@ export default function App() {
   const setRunning = (running: boolean) => {
     if (dbSession) {
       if (!running || !dbSession.isHost || dbSession.state !== 'Lobby') return
-      // Start counting now; the server's phase_started_at takes over once Active arrives.
-      setTimerRunning(true)
-      db.call('startSession').then((error) => {
-        if (!error) return
-        setTimerRunning(false)
-        setFocusSeconds(dbSession.workSecs)
-        window.alert(error)
-      })
+      db.call('startSession').then((error) => { if (error) window.alert(error) })
       return
     }
     setTimerRunning(running)
@@ -424,14 +396,14 @@ export default function App() {
 
   if (screen === 'goals') return <GoalsScreen goals={goals} setGoals={setGoals} onStart={() => { void beginFocus(sessionName, activeGoals) }} />
 
-  if (screen === 'break') return <BreakScreen minutes={upcomingBreakMinutes} seconds={breakSeconds} goals={activeGoals} checked={checked} setChecked={updateChecked} onReturn={returnFromBreak} />
+  if (screen === 'break') return <BreakScreen minutes={upcomingBreakMinutes} seconds={breakSeconds} goals={activeGoals} checked={checked} setChecked={updateChecked} onReturn={dbSession ? undefined : returnFromBreak} onEnd={dbSession?.isHost ? endSession : undefined} />
 
   if (screen === 'summary') return <SummaryScreen checked={checked} goalCount={activeGoals.length} stats={db.ended} />
 
   return <main className="focus-page">
     <div className="demo-menu">
       <button className="demo-trigger" onClick={() => setDemoOpen(!demoOpen)}>Demo <Icon name="arrow" /></button>
-      {demoOpen && <div className="demo-popover"><span>Prototype controls</span><button onClick={() => { triggerCheckIn('me', 'none'); setDemoOpen(false) }}>I go off task · no one joins</button><button onClick={() => { triggerCheckIn('me', 'people'); setDemoOpen(false) }}>I go off task · people join</button><button onClick={() => { triggerCheckIn('teammate'); setDemoOpen(false) }}>Teammate goes off task</button><div className="corner-setting"><small>Check-in corner</small><div>{(['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const).map((corner) => <button className={checkInCorner === corner ? 'active' : ''} key={corner} onClick={() => { setCheckInCorner(corner); window.wydDesktop?.setPreferences({ checkInCorner: corner }) }} aria-label={corner}>{corner.split('-').map((part) => part[0].toUpperCase()).join('')}</button>)}</div></div>{isHost && <button onClick={() => { finishPomodoro(); setDemoOpen(false) }}>Finish Pomodoro</button>}<button onClick={endSession}>{dbSession && !isHost ? 'Leave session' : 'End session'}</button></div>}
+      {demoOpen && <div className="demo-popover"><span>Prototype controls</span><button onClick={() => { triggerCheckIn('me', 'none'); setDemoOpen(false) }}>I go off task · no one joins</button><button onClick={() => { triggerCheckIn('me', 'people'); setDemoOpen(false) }}>I go off task · people join</button><button onClick={() => { triggerCheckIn('teammate'); setDemoOpen(false) }}>Teammate goes off task</button><div className="corner-setting"><small>Check-in corner</small><div>{(['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const).map((corner) => <button className={checkInCorner === corner ? 'active' : ''} key={corner} onClick={() => { setCheckInCorner(corner); window.wydDesktop?.setPreferences({ checkInCorner: corner }) }} aria-label={corner}>{corner.split('-').map((part) => part[0].toUpperCase()).join('')}</button>)}</div></div>{isHost && !dbSession && <button onClick={() => { finishPomodoro(); setDemoOpen(false) }}>Finish Pomodoro</button>}<button onClick={endSession}>{dbSession && !isHost ? 'Leave session' : 'End session'}</button></div>}
     </div>
     <section className="focus-grid">
       <div className="timer-panel"><div className="eyebrow">Focus session · Round {(pomodorosDone % 4) + 1} of 4</div><div className="pomodoro-rounds">{[0, 1, 2, 3].map((round) => <span className={round < pomodorosDone % 4 ? ‘done’ : round === pomodorosDone % 4 ? ‘current’ : ‘’} key={round}><Icon name="check" /></span>)}</div><div className="timer-ring"><svg viewBox="0 0 180 180"><circle cx="90" cy="90" r="80" /><circle className="timer-progress" cx="90" cy="90" r="80" style={{ strokeDashoffset: 502 * (1 - focusSeconds / (pomodoroMinutes * 60)) }} /></svg><div><strong>{String(Math.floor(focusSeconds / 60)).padStart(2, ‘0’)}:{String(focusSeconds % 60).padStart(2, ‘0’)}</strong><span>{timerRunning ? ‘focus time’ : focusSeconds === pomodoroMinutes * 60 ? isHost ? ‘ready when you are’ : ‘waiting for host’ : ‘paused by host’}</span></div></div><h2>{timerRunning ? ‘Stay with it.’ : isHost ? ‘Choose one task.’ : ‘Your host sets the pace.’}</h2>{dbSession?.state === ‘Lobby’ && <p className="lobby-line">Invite code <strong>{dbSession.code}</strong> · {db.people.length} in the room</p>}<p>{activeGoals[0] || ‘Pick something that deserves your full attention.’}</p>{isHost ? <div className="pomodoro-console host-console"><div className="console-role"><span className="host-control-badge"><Icon name="users" />Host controls</span><small>Everyone’s timer stays in sync with yours.</small></div><div className="time-select"><span>Focus length</span>{[15, 25, 45].map((minutes) => <button className={pomodoroMinutes === minutes ? ‘active’ : ‘’} onClick={() => selectPomodoroLength(minutes)} key={minutes}>{minutes} min</button>)}</div><div className="timer-controls">{sessionStarted && <button className="timer-stop" onClick={resetPomodoro}><Icon name="x" />Stop</button>}<button className="timer-start" disabled={!!dbSession && (dbSession.state !== ‘Lobby’ || timerRunning)} onClick={() => dbSession ? setRunning(true) : setTimerRunning(!timerRunning)}><Icon name={timerRunning ? ‘clock’ : ‘arrow’} />{dbSession ? (dbSession.state === ‘Lobby’ && !timerRunning ? ‘Start session’ : ‘Session running’) : timerRunning ? ‘Pause for everyone’ : focusSeconds < pomodoroMinutes * 60 ? ‘Resume session’ : ‘Start session’}</button></div><div className="focus-oath"><Icon name="target" /><span><strong>My focus promise</strong>I’ll give this task my full attention until the timer rings.</span></div><div className="distraction-capture"><input value={distraction} onChange={(event) => setDistraction(event.target.value)} onKeyDown={(event) => event.key === ‘Enter’ && saveDistraction()} placeholder="Something else came to mind? Park it here." /><button onClick={saveDistraction}>Save</button>{savedDistractions.length > 0 && <small>{savedDistractions.length} item{savedDistractions.length === 1 ? ‘’ : ‘s’} saved for later</small>}</div></div> : <div className="pomodoro-console participant-console"><div className="participant-host"><span className="avatar bg-[#dbe9ff]">MK<i /></span><div><small>Session host</small><strong>{hostName} controls this Pomodoro</strong><p>You’ll start, pause, and take breaks together.</p></div><span className="sync-status"><i />Synced</span></div><div className="participant-schedule"><span><small>Focus</small><strong>{pomodoroMinutes} min</strong></span><Icon name="arrow" /><span><small>Short break</small><strong>5 min</strong></span><Icon name="arrow" /><span><small>After 4 rounds</small><strong>20 min</strong></span></div><div className="focus-oath"><Icon name="lock" /><span><strong>Timer controls are host-only</strong>Your timer updates automatically when {hostName} starts the session.</span></div><div className="distraction-capture"><input value={distraction} onChange={(event) => setDistraction(event.target.value)} onKeyDown={(event) => event.key === ‘Enter’ && saveDistraction()} placeholder="Something else came to mind? Park it here." /><button onClick={saveDistraction}>Save</button>{savedDistractions.length > 0 && <small>{savedDistractions.length} item{savedDistractions.length === 1 ? ‘’ : ‘s’} saved for later</small>}</div></div>}</div>
