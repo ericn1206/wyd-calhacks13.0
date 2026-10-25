@@ -328,10 +328,10 @@ export default function App() {
 
   const activeGoals = goals.filter((goal) => goal.trim())
 
-  // The detector (webcam + screen checks) and activity polling run on the focus screen, from the lobby on
-  // (like prod, so it is warmed up when the host presses Start), but not on breaks, after the session
-  // ends, or on the entry/summary screens. Status still only reaches the DB while Active/Break.
-  const tracking = screen === 'focus' && (!dbSession || (dbSession.state !== 'Break' && dbSession.state !== 'Ended'))
+  // The detector (webcam + screen checks) and activity polling run only while a round's timer runs on the
+  // focus screen: DB session Active (not Lobby, Break or Ended); offline once the local timer has started.
+  // Nothing is tracked before Start (the app may auto-resume into a lobby at launch), on breaks, or outside.
+  const tracking = screen === 'focus' && (dbSession ? dbSession.state === 'Active' : sessionStarted)
   useEffect(() => {
     if (!tracking) {
       void window.wydDesktop?.stopTracking()

@@ -89,8 +89,8 @@ Other reducers: `../components/spacetimedb-schema.md#reducers`.
 | `setAlwaysOnTop` / `setIgnoreMouseEvents` / `moveToCorner` / `getDisplays` | `wyd:window:*`, `wyd:displays:get` | invoke | window/display control |
 | `setOverlayVisible` | `wyd:overlay:set-visible` | invoke | `boolean`; creates/shows/hides the overlay window (shown on focus screen) |
 | `bridge.send` / `bridge.onMessage` | `wyd:bridge:send` → `wyd:bridge:message` | window ↔ window via main | `BridgeMessage` (`src/renderer/src/overlay/bridge.ts`): main→overlay `state`/`checkIn`/`reveal`/`reset`; overlay→main `ready`/`action` |
-| `startTracking` | `wyd:tracking:start` | invoke | `{subject, goals[]}` → `monitor.setSessionContext` + `start()`; called on the focus screen from the lobby on (not on Break/Ended); payload `{subject, goals[], sites, notes}` — `sites`/`notes` from the Goals screen's optional fields, added to Gemini's goal text |
-| `stopTracking` | `wyd:tracking:stop` | invoke | stops `facetime_trigger.py` (webcam + screen checks) and activity polling; called whenever that stops (entry, break, ended, summary). `face time` only pops a check-in while the overlay is wanted (focus/break). |
+| `startTracking` | `wyd:tracking:start` | invoke | `{subject, goals[]}` → `monitor.setSessionContext` + `start()`; called only while a round's timer runs (focus screen + DB `Active`, or offline once the local timer started); payload `{subject, goals[], sites, notes}` — `sites`/`notes` from the Goals screen's optional fields, added to Gemini's goal text |
+| `stopTracking` | `wyd:tracking:stop` | invoke | stops `facetime_trigger.py` (webcam + screen checks) and activity polling; called whenever that stops (entry, lobby, break, ended, summary). `face time` only pops a check-in while the overlay is wanted (focus/break). |
 | `onActivityUpdate` | `activity:update` | main → renderer | `ActivityState` (every 2 s); `App.tsx` turns `appName`/`url` into `OverlayState.currentActivity` (dock \"Currently on\": site hostname, else app name) |
 | `onActivityAlert` | `activity:alert` | main → renderer | `ActivityState` when `alertLevel` is `warning`/`alert`; no UI consumer yet |
 
