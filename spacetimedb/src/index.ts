@@ -23,6 +23,7 @@ import spacetimedb, {
   scoreTickTimer,
   callTimeoutTimer,
   disconnectTimer,
+  activeConnection,
   session,
   sessionAward,
   sessionContext,
@@ -49,6 +50,7 @@ import {
   insertAlert,
   insertFallbackJudgment,
   isServer,
+  isSessionHost,
   isWorker,
   logGoalChecked,
   maybeTriggerGroupCall,
@@ -84,6 +86,12 @@ export const init = spacetimedb.init(ctx => {
 });
 
 export const onConnect = spacetimedb.clientConnected(ctx => {
+  // One live connection per identity: the newest wins, so a lingering old socket can't undo it.
+  if (ctx.connectionId) {
+    const active = ctx.db.activeConnection.identity.find(ctx.sender);
+    if (active) ctx.db.activeConnection.identity.update({ ...active, connectionId: ctx.connectionId });
+    else ctx.db.activeConnection.insert({ identity: ctx.sender, connectionId: ctx.connectionId });
+  }
   const u = ctx.db.user.identity.find(ctx.sender);
   if (u) {
     ctx.db.user.identity.update({ ...u, online: true });
@@ -104,6 +112,10 @@ export const onConnect = spacetimedb.clientConnected(ctx => {
 });
 
 export const onDisconnect = spacetimedb.clientDisconnected(ctx => {
+  // Only the identity's current connection going away counts; a superseded socket closing is ignored.
+  const active = ctx.db.activeConnection.identity.find(ctx.sender);
+  if (active && ctx.connectionId && !active.connectionId.isEqual(ctx.connectionId)) return;
+  ctx.db.activeConnection.identity.delete(ctx.sender);
   const u = ctx.db.user.identity.find(ctx.sender);
   if (u) ctx.db.user.identity.update({ ...u, online: false });
   for (const m of ctx.db.member.identity.filter(ctx.sender)) {
@@ -168,7 +180,6 @@ export const createSession = spacetimedb.reducer(
       id: 0n,
       code,
       name: name.trim().slice(0, 80) || 'Focus session',
-      hostIdentity: ctx.sender,
       state: tag('Lobby'),
       startedAt: undefined,
       endedAt: undefined,
@@ -198,7 +209,6 @@ function insertMember(ctx: Ctx, sessionId: bigint, isHost: boolean) {
     id: 0n,
     sessionId,
     identity: ctx.sender,
-    joinedAt: ctx.timestamp,
     leftAt: undefined,
     deviceStatus: tag('Connected'),
     phoneLinked: false,
@@ -226,9 +236,9 @@ function leaveMember(ctx: Ctx, memberId: bigint) {
     return;
   }
   if (m.isHost) {
-    const next = remaining.sort((a, b) => (a.joinedAt.microsSinceUnixEpoch < b.joinedAt.microsSinceUnixEpoch ? -1 : 1))[0];
+    // Next host = longest-standing active member (lowest row id; a rejoin gets a fresh row).
+    const next = remaining.reduce((a, b) => (b.id < a.id ? b : a));
     ctx.db.member.id.update({ ...next, isHost: true });
-    ctx.db.session.id.update({ ...s, hostIdentity: next.identity });
   }
 }
 
@@ -240,10 +250,8 @@ export const joinSession = spacetimedb.reducer({ code: t.string() }, (ctx, { cod
   if (current && current.session.id === s.id) return;
   if (current) leaveMember(ctx, current.member.id);
 
-  const previous = [...ctx.db.member.bySessionIdentity.filter([s.id, ctx.sender])][0];
-  const m = previous
-    ? ctx.db.member.id.update({ ...previous, leftAt: undefined, deviceStatus: tag('Connected') })
-    : insertMember(ctx, s.id, false);
+  // Always a fresh row: a rejoiner goes to the back of the host line and starts with no goals.
+  const m = insertMember(ctx, s.id, false);
   ensureTracking(ctx, m, ctx.db.session.id.find(s.id)!);
 });
 
@@ -397,7 +405,7 @@ export const finalizeSessionReducer = spacetimedb.reducer(
   (ctx, { sessionId }) => {
     const s = ctx.db.session.id.find(sessionId);
     if (!s) throw new SenderError('no such session');
-    if (!isServer(ctx) && !isWorker(ctx.db, ctx.sender) && !s.hostIdentity.equals(ctx.sender)) {
+    if (!isServer(ctx) && !isWorker(ctx.db, ctx.sender) && !isSessionHost(ctx.db, s.id, ctx.sender)) {
       throw new SenderError('only the host or worker may finalize');
     }
     if (s.state.tag !== 'Ended') throw new SenderError('end the session first');
@@ -408,7 +416,7 @@ export const finalizeSessionReducer = spacetimedb.reducer(
 export const deleteReplayMetaOnEnd = spacetimedb.reducer({ sessionId: t.u64() }, (ctx, { sessionId }) => {
   const s = ctx.db.session.id.find(sessionId);
   if (!s) throw new SenderError('no such session');
-  if (!isServer(ctx) && !isWorker(ctx.db, ctx.sender) && !s.hostIdentity.equals(ctx.sender)) {
+  if (!isServer(ctx) && !isWorker(ctx.db, ctx.sender) && !isSessionHost(ctx.db, s.id, ctx.sender)) {
     throw new SenderError('only the host or worker may do this');
   }
   if (s.state.tag !== 'Ended') throw new SenderError('session has not ended');

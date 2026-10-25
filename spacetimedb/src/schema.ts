@@ -49,7 +49,6 @@ export const session = table(
     id: t.u64().primaryKey().autoInc(),
     code: t.string().unique(),
     name: t.string(),
-    hostIdentity: t.identity(),
     state: SessionState,
     startedAt: t.option(t.timestamp()),
     endedAt: t.option(t.timestamp()),
@@ -76,7 +75,6 @@ export const member = table(
     id: t.u64().primaryKey().autoInc(),
     sessionId: t.u64().index('btree'),
     identity: t.identity().index('btree'),
-    joinedAt: t.timestamp(),
     leftAt: t.option(t.timestamp()),
     deviceStatus: DeviceStatus,
     phoneLinked: t.bool(),
@@ -501,8 +499,18 @@ export const disconnectTimer = table(
   }
 );
 
+// The one live connection per identity (newest wins). A stale socket's disconnect is ignored.
+export const activeConnection = table(
+  { name: 'active_connection' },
+  {
+    identity: t.identity().primaryKey(),
+    connectionId: t.connectionId(),
+  }
+);
+
 const spacetimedb = schema({
   user,
+  activeConnection,
   session,
   member,
   goal,

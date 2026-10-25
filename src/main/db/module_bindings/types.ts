@@ -10,6 +10,12 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const ActiveConnection = __t.object("ActiveConnection", {
+  identity: __t.identity(),
+  connectionId: __t.connectionId(),
+});
+export type ActiveConnection = __Infer<typeof ActiveConnection>;
+
 export const Alert = __t.object("Alert", {
   id: __t.u64(),
   sessionId: __t.u64(),
@@ -91,6 +97,7 @@ export const CallEndedReason = __t.enum("CallEndedReason", {
   ManualEnd: __t.unit(),
   AllLeft: __t.unit(),
   Declined: __t.unit(),
+  Superseded: __t.unit(),
 });
 export type CallEndedReason = __Infer<typeof CallEndedReason>;
 
@@ -257,7 +264,6 @@ export const Member = __t.object("Member", {
   id: __t.u64(),
   sessionId: __t.u64(),
   identity: __t.identity(),
-  joinedAt: __t.timestamp(),
   leftAt: __t.option(__t.timestamp()),
   get deviceStatus() {
     return DeviceStatus;
@@ -461,7 +467,6 @@ export const Session = __t.object("Session", {
   id: __t.u64(),
   code: __t.string(),
   name: __t.string(),
-  hostIdentity: __t.identity(),
   get state() {
     return SessionState;
   },

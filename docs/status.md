@@ -48,7 +48,7 @@ Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` â†
 | Avatar | Name input done (`set_profile`); avatar color fixed `#7C8CF8` |
 | Break / goal check-in | Show `GoalCheckin` alerts + `mark_alert_delivered`; long (20 min) break not supported by module (one `pomodoro_break_secs`) |
 | Summary extras | Summary shows real stats from `my_session_summaries`; awards, scores, Claude recap (worker `set_summary_text`) not shown |
-| Host leave | Module auto-transfers host to earliest member; UI shows no notice |
+| Host leave | Module moves `is_host` to the lowest-id active member; UI shows no notice |
 | Overlay direct DB feed | Currently relayed through `App.tsx` |
 | Worker | Subscribe `worker_pending_signal_events`, `write_judgment`; hosting undecided (see `product/decisions.md`) |
 | Camera-on disclosure / vision | MediaPipe not built |
@@ -73,6 +73,7 @@ Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` â†
 5. Resolve judge + category mismatches.
 
 ## Gotchas
+- 2026-10-24: module published to maincloud with `--delete-data=on-conflict` (data wiped; `init` re-seeded 12 settings): removed `member.joined_at`, `session.host_identity`; added `active_connection`, `CallEndedReason.Superseded`. Client bindings regenerated.
 - 2026-10-24: db wiped + republished (`--delete-data=on-conflict`) for the binary `AppCategory`; `seed_defaults` re-run. Any old session/token state is gone (identities persist per client token).
 - `set_pomodoro` published to maincloud 2026-10-24 (additive publish, data kept).
 - 2026-10-25: module published to maincloud (additive, data kept): `take_break`, `stop_pomodoro`, unlocked `set_pomodoro`, `disconnect_timer` reaper, `create_session(code?)`. Bindings are generated (no hand-added files).

@@ -1,5 +1,5 @@
 // Shared reducer logic. Nothing here is a module export; index.ts wires it up.
-import { ScheduleAt, Timestamp } from 'spacetimedb';
+import { ScheduleAt, Timestamp, type Identity } from 'spacetimedb';
 import { SenderError } from 'spacetimedb/server';
 import type { Ctx, RDb } from './schema';
 import type * as E from './enums';
@@ -144,6 +144,11 @@ export function requireActiveMember(ctx: Ctx) {
 
 export function activeMembersOf(db: RDb, sessionId: bigint): Member[] {
   return [...db.member.sessionId.filter(sessionId)].filter(m => m.leftAt === undefined);
+}
+
+/** Host = the active member row with `isHost` (single source of truth). */
+export function isSessionHost(db: RDb, sessionId: bigint, sender: Identity): boolean {
+  return activeMembersOf(db, sessionId).some(m => m.isHost && m.identity.equals(sender));
 }
 
 export function requireHost(ctx: Ctx) {
@@ -640,7 +645,6 @@ export function maybeTriggerGroupCall(ctx: Ctx, memberId: bigint) {
   if (trigger && trigger.lastTriggeredAt.microsSinceUnixEpoch >= st.since.microsSinceUnixEpoch) return;
 
   const calls = [...ctx.db.groupCall.sessionId.filter(s.id)];
-  if (calls.some(c => c.state.tag === 'Ringing' || c.state.tag === 'Active')) return;
 
   if (trigger) {
     ctx.db.callMemberTrigger.memberId.update({ ...trigger, lastTriggeredAt: ctx.timestamp });
@@ -659,6 +663,11 @@ export function maybeTriggerGroupCall(ctx: Ctx, memberId: bigint) {
       message: 'Drifting a bit? Your group is still locked in.',
     });
     return;
+  }
+
+  // A new call replaces any call still ringing or active.
+  for (const old of calls) {
+    if (old.state.tag === 'Ringing' || old.state.tag === 'Active') endCall(ctx, old, 'Superseded');
   }
 
   const maxSecs = Math.min(s.maxCallSecs, settingNum(ctx.db, 'call_max_secs'));
@@ -711,7 +720,7 @@ export function endCall(ctx: Ctx, call: GroupCall, reason: E.CallEndedReason) {
       ctx.db.callParticipant.id.update({ ...p, leftAt: ctx.timestamp });
     }
   }
-  const state: E.CallState = !anyJoined && reason === 'Timeout' ? 'Missed' : 'Ended';
+  const state: E.CallState = !anyJoined && (reason === 'Timeout' || reason === 'Superseded') ? 'Missed' : 'Ended';
   ctx.db.groupCall.id.update({ ...call, state: tag(state), endedAt: ctx.timestamp, endedReason: tag(reason) });
   for (const timer of [...ctx.db.callTimeoutTimer.callId.filter(call.id)]) {
     ctx.db.callTimeoutTimer.scheduledId.delete(timer.scheduledId);
@@ -757,14 +766,13 @@ export function finalizeSession(ctx: Ctx, s: Session) {
     const blocks = [...ctx.db.focusBlock.memberId.filter(m.id)];
     const deep = blocks.filter(b => b.kind.tag === 'DeepWork');
     const goals = [...ctx.db.goal.memberId.filter(m.id)];
-    const start = s.startedAt && s.startedAt.microsSinceUnixEpoch > m.joinedAt.microsSinceUnixEpoch ? s.startedAt : m.joinedAt;
     const top = topDistraction(ctx, m.id);
 
     ctx.db.sessionSummary.insert({
       id: 0n,
       sessionId: s.id,
       memberId: m.id,
-      totalSecs: s.startedAt ? secsBetween(start, memberEnd) : 0,
+      totalSecs: s.startedAt ? secsBetween(s.startedAt, memberEnd) : 0,
       deepWorkSecs: deep.reduce((sum, b) => sum + b.durationSecs, 0),
       longestBlockSecs: deep.reduce((max, b) => Math.max(max, b.durationSecs), 0),
       interruptionCount: blocks.filter(b => b.kind.tag === 'Interruption').length,
