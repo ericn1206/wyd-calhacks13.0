@@ -110,9 +110,9 @@ describe('clip compilation, end to end', { skip }, () => {
 
     const row = await until('Ready compilation (2 clips)', () => ready(member, 2))
     const url = row.url as string
-    assert.match(url, new RegExp(`^http://127\\.0\\.0\\.1:${port}/compilations/session-\\d+-2\\.mp4$`))
+    assert.match(url, /^\/compilations\/session-\d+-2\.mp4$/, 'stored as a path, without the host')
 
-    const res = await fetch(url)
+    const res = await fetch(`http://127.0.0.1:${port}${url}`)
     assert.equal(res.status, 200)
     assert.equal(res.headers.get('content-type'), 'video/mp4')
     const file = join(outDir, 'fetched.mp4')
@@ -124,12 +124,15 @@ describe('clip compilation, end to end', { skip }, () => {
     const again = await until('Ready compilation (3 clips)', () => ready(member, 3))
     const url3 = again.url as string
     assert.match(url3, /session-\d+-3\.mp4$/)
-    const res3 = await fetch(url3)
+    const res3 = await fetch(`http://127.0.0.1:${port}${url3}`)
     assert.equal(res3.status, 200)
     writeFileSync(file, Buffer.from(await res3.arrayBuffer()))
     assert.ok(Math.abs(secs(file) - 6) < 0.7, `compilation is ${secs(file)} s, expected ~6`)
-    assert.equal((await fetch(url)).status, 404, 'the old render is removed')
+    assert.equal((await fetch(`http://127.0.0.1:${port}${url}`)).status, 404, 'the old render is removed')
     assert.ok(readFileSync(file).length > 0)
+    // Stop it now: a compiler left running would render later tests' sessions into its own folder.
+    await compiler.stop()
+    compiler = undefined
     member.disconnect()
   })
 
@@ -226,7 +229,7 @@ describe('clip compilation, end to end', { skip }, () => {
     })
     const row = await until('Ready compilation with 2 clips', () => ready(member, 2))
     assert.match(String(row.error), /1 unreadable clip\(s\) left out/)
-    const res = await fetch(row.url as string)
+    const res = await fetch(`http://127.0.0.1:${port}${row.url as string}`)
     assert.equal(res.status, 200)
     const file = join(outDir, 'partial.mp4')
     writeFileSync(file, Buffer.from(await res.arrayBuffer()))

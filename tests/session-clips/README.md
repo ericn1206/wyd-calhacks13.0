@@ -16,12 +16,12 @@ Feature: `contracts.md#session-clips`. No extra dependencies.
 | `ts/clipUpload.test.ts` | `src/main/clipUpload.ts` with a fake DB client: call order, chunk sizes and reassembly, retries, give-up, file deletion, clip dir |
 | `ts/facetimeTrigger.test.ts` | `requestClip` is false when tracking is off |
 | `ts/module.integration.test.ts` | `session_clip` reducers on a real db (validation, ownership, limits, grace window). Skipped unless env set |
-| `ts/compile-plan.test.ts` | `worker/compile/plan.ts`: clip order, when a session is due (quiet period, all chunks, retry back-off), file names |
+| `ts/compile-plan.test.ts` | `worker/compile/plan.ts`: clip order, when a session is due (quiet period, all chunks, retry back-off), file names, which Ready rows have no file here |
 | `ts/compile-serve.test.ts` | `worker/compile/serve.ts`: Range/206/416, HEAD, CORS, 404 for anything but compiled videos, path tricks; `/session/<id>` page and `/status` JSON for every state, numeric ids only |
 | `ts/compile-render.test.ts` | `worker/compile/render.ts` with real ffmpeg: order, mixed size/codec, no leftovers, errors. Skipped without ffmpeg |
 | `ts/network.test.ts` | `worker/compile/network.ts` `lanAddress`: Wi-Fi first, VPN/virtual last, loopback/link-local/IPv6 ignored |
-| `ts/compile.lease.integration.test.ts` | One-compiler lease on a real db: refuse + who holds it, nothing left behind, graceful release, `--takeover` (old one stops itself), stale takeover after 20 s, reconnect keeps the lease. Needs the same env as `compile.integration` |
-| `ts/summary-link.test.ts` | `useDb.ts` `clipInfo`: summary-screen link and state from `app_setting` + `session_compilation` |
+| `ts/compile.lease.integration.test.ts` | One-compiler lease on a real db: refuse + who holds it, nothing left behind, graceful release, `--takeover` (old one stops itself), stale takeover after 20 s, reconnect keeps the lease; rebuilding of missing videos (a deleted file comes back, a compiler on another folder rebuilds, no rebuild without a lease). Needs the same env as `compile.integration` |
+| `ts/summary-link.test.ts` | `useDb.ts` `clipInfo`: summary-screen link, state and video address (stored path + current base) from `app_setting` + `session_compilation` |
 | `ts/compile.integration.test.ts` | Full flow on a real db: upload clips, end session, compiler renders + hosts, URL in `compilations`, late clip re-render, ended session without clips → `empty`, dropped connection → `offline` then recovers, non-worker rejected. Needs ffmpeg + `WYD_TEST_WORKER_TOKEN` |
 
 Python needs `cv2` + `numpy`: uses `vision/.venv` (`npm run setup:vision`), else `WYD_TEST_PYTHON=/path/to/python`; skipped with a message if missing.

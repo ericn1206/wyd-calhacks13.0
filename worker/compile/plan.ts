@@ -41,6 +41,20 @@ export function dueSessions(a: DueArgs): bigint[] {
   })
 }
 
+export interface CompilationRow {
+  sessionId: bigint
+  status: string
+  clipCount: number
+}
+
+/**
+ * Sessions the database calls Ready whose video file is not in this compiler's folder (it was moved to another
+ * machine, the folder was wiped, ...): they need rendering again.
+ */
+export function missingVideos(rows: readonly CompilationRow[], exists: (fileName: string) => boolean): bigint[] {
+  return rows.filter(r => r.status === 'Ready' && r.clipCount > 0 && !exists(videoName(r.sessionId, r.clipCount))).map(r => r.sessionId)
+}
+
 /** File name of a session's video; the clip count in the name makes a re-render (late clip) a new URL. */
 export const videoName = (sessionId: bigint, clipCount: number) => `session-${sessionId}-${clipCount}.mp4`
 

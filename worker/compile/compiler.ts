@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { dirname, join } from 'node:path'
 import { DbConnection } from '../../src/main/db/module_bindings/index.ts'
 import type { CompileState } from './page.ts'
-import { dueSessions, orderClips, staleVideos, videoName } from './plan.ts'
+import { dueSessions, missingVideos, orderClips, staleVideos, videoName } from './plan.ts'
 import type { PlanClip } from './plan.ts'
 import { renderCompilation } from './render.ts'
 import { createVideoServer, VIDEO_PATH } from './serve.ts'
@@ -33,6 +33,12 @@ export interface CompilerOptions {
   onLeaseLost?: () => void
   /** Lease heartbeat interval. Default 5000 (the module treats 20 s of silence as gone). */
   leaseHeartbeatMs?: number
+  /**
+   * Re-render videos the database calls Ready but whose file is not in `outDir` (a new machine, a wiped folder).
+   * Default: on when a lease is used. Without the lease two compilers with different folders would keep
+   * invalidating each other's videos, so never turn this on for several compilers.
+   */
+  rebuildMissing?: boolean
   /** Give up on a database call that has not answered after this long (a dropped connection never answers). Default 20000. */
   callTimeoutMs?: number
   /** Extra wait after the quiet period before an ended session with no clips is reported as `empty`. Default 20000. */
@@ -81,6 +87,10 @@ export async function startCompiler(o: CompilerOptions): Promise<RunningCompiler
   const lastActivity = new Map<bigint, number>()
   const failedAt = new Map<bigint, number>()
   const rendering = new Set<bigint>()
+  /** Sessions being re-queued because their file is gone: their clips reappearing is not new activity. */
+  const rebuilding = new Set<bigint>()
+  const rebuildMissing = o.rebuildMissing ?? !!o.lease
+  const hasFile = (id: bigint, clipCount: number) => existsSync(join(o.outDir, videoName(id, clipCount)))
 
   let stopped = false
   let timer: NodeJS.Timeout | null = null
@@ -93,7 +103,8 @@ export async function startCompiler(o: CompilerOptions): Promise<RunningCompiler
     if (rendering.has(id)) return { state: 'rendering' }
     const row = [...c.db.workerSessionCompilations.iter()].find(r => r.sessionId === id)
     if (row) {
-      if (row.status.tag === 'Ready') return { state: 'ready', clipCount: row.clipCount }
+      // Ready in the database but no file here: it is being (or is about to be) rebuilt, do not offer a broken video.
+      if (row.status.tag === 'Ready') return rebuildMissing && !hasFile(id, row.clipCount) ? { state: 'rendering' } : { state: 'ready', clipCount: row.clipCount }
       if (row.status.tag === 'Failed') return { state: 'failed', error: row.error ?? 'unknown error' }
       return { state: 'rendering' }
     }
@@ -114,7 +125,7 @@ export async function startCompiler(o: CompilerOptions): Promise<RunningCompiler
       let built: DbConnection | undefined
       // Only changes caused by a reducer while connected count as activity; the initial snapshot (old sessions) does not.
       const live = (ctx: unknown) => (ctx as { event?: { tag?: string } } | undefined)?.event?.tag === 'Reducer'
-      const bump = (ctx: unknown, sessionId: bigint) => { if (live(ctx)) lastActivity.set(sessionId, Date.now()) }
+      const bump = (ctx: unknown, sessionId: bigint) => { if (live(ctx) && !rebuilding.has(sessionId)) lastActivity.set(sessionId, Date.now()) }
       built = DbConnection.builder()
         .withUri(o.uri)
         .withDatabaseName(o.database)
@@ -220,6 +231,7 @@ export async function startCompiler(o: CompilerOptions): Promise<RunningCompiler
 
   async function render(c: DbConnection, sessionId: bigint): Promise<void> {
     rendering.add(sessionId)
+    rebuilding.delete(sessionId)
     try {
       const clips = orderClips([...c.db.workerSessionClips.iter()].filter(clip => clip.sessionId === sessionId))
       o.log(`session ${sessionId}: rendering ${clips.length} clip(s)`)
@@ -243,7 +255,8 @@ export async function startCompiler(o: CompilerOptions): Promise<RunningCompiler
       // clipCount stays the number of clips the session has (what the module compares), even when some were unreadable.
       const note = skipped.length ? `${skipped.length} unreadable clip(s) left out (ids ${skipped.map(i => clips[i].id).join(', ')})` : undefined
       if (note) o.log(`session ${sessionId}: ${note}`)
-      await setState(c, sessionId, 'Ready', clips.length, `${pageBase}${VIDEO_PATH}${name}`, note)
+      // Stored without the host: clients add the current clip_page_base_url, so a changed address never stales it.
+      await setState(c, sessionId, 'Ready', clips.length, `${VIDEO_PATH}${name}`, note)
       failedAt.delete(sessionId)
       o.log(`session ${sessionId}: ready ${name} (${Date.now() - started} ms)`)
     } catch (err) {
@@ -262,6 +275,17 @@ export async function startCompiler(o: CompilerOptions): Promise<RunningCompiler
     if (busy || stopped || !c) return
     busy = true
     try {
+      if (rebuildMissing) {
+        // Back to Rendering makes the module list the session's clips again (views hide Ready sessions), so the normal path re-renders it.
+        const rows = [...c.db.workerSessionCompilations.iter()].map(r => ({ sessionId: r.sessionId, status: r.status.tag, clipCount: r.clipCount }))
+        for (const id of missingVideos(rows, name => existsSync(join(o.outDir, name))).slice(0, 5)) {
+          if (stopped || conn !== c || rendering.has(id)) break
+          o.log(`session ${id}: video file is not here, rebuilding`)
+          rebuilding.add(id)
+          lastActivity.set(id, 0)
+          await setState(c, id, 'Rendering', 0).catch(err => { rebuilding.delete(id); o.log(`could not queue session ${id} for rebuild: ${err instanceof Error ? err.message : err}`) })
+        }
+      }
       const clips: PlanClip[] = [...c.db.workerSessionClips.iter()].map(clip => ({ id: clip.id, sessionId: clip.sessionId, momentAtMs: clip.momentAtMs, chunkCount: clip.chunkCount }))
       const held = new Map<bigint, number>()
       for (const ch of c.db.workerSessionClipChunks.iter()) held.set(ch.clipId, (held.get(ch.clipId) ?? 0) + 1)

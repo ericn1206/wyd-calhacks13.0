@@ -1,11 +1,14 @@
 // The single-compiler lease, on a real database. Opt-in like compile.integration.test.ts:
 // WYD_TEST_STDB_URI, WYD_TEST_STDB_DB and WYD_TEST_WORKER_TOKEN (see ../README.md).
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, afterEach, describe, it } from 'node:test'
+import { StdbClient } from '../../../src/main/db/stdb'
+import { newClipPath, uploadClip } from '../../../src/main/clipUpload'
 import { startCompiler, type CompilerOptions, type RunningCompiler } from '../../../worker/compile/compiler'
 
 const uri = process.env['WYD_TEST_STDB_URI']
@@ -34,7 +37,7 @@ async function start(label: string, over: Partial<CompilerOptions> = {}, takeove
   const c = await startCompiler({
     uri: uri!, database: db!, token: workerToken, tokenFile: join(outDir, 'token'), outDir, port,
     publicUrl: `http://127.0.0.1:${port}`, quietMs: 60_000, retryMs: 1000, pollMs: 500, ffmpegBin: 'ffmpeg', reconnectMs: 200,
-    lease: { label, takeover }, leaseHeartbeatMs: 300,
+    lease: { label, takeover }, leaseHeartbeatMs: 300, rebuildMissing: false, // these tests are about the lease, not the old sessions in the db
     log: m => logs.push(m),
     ...over
   })
@@ -112,5 +115,113 @@ describe('compiler lease', { skip }, () => {
     const free = await start('ignored', { lease: undefined })
     assert.equal(await health(free.port), true)
     assert.equal(await health(holder.port), true)
+  })
+})
+
+
+// ── Videos that are not on this machine ──
+const none = undefined
+
+async function memberWithEndedSession(): Promise<{ member: StdbClient; sessionId: number }> {
+  const dir = mkdtempSync(join(tmpdir(), 'wyd-it-'))
+  dirs.push(dir)
+  process.env['WYD_TEST_USERDATA'] = dir
+  process.env['SPACETIME_URI'] = uri
+  process.env['SPACETIME_DB'] = db
+  const member = new StdbClient()
+  await member.connect()
+  await sleep(1500)
+  await member.call('createSession', {
+    name: 'rebuild',
+    settings: { pomodoroWorkSecs: none, pomodoroBreakSecs: none, offTaskThresholdSecs: none, callCooldownSecs: none, maxCallSecs: none, scoreboardEnabled: none, groupCallEnabled: none, topicDescription: none, allowedDomains: none, blockedDomains: none },
+    code: none
+  })
+  await sleep(300)
+  const sessionId = member.snapshot().tables.sessions.map(r => Number(r.id)).sort((a, b) => b - a)[0]
+  const clip = newClipPath()
+  execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=320x240:rate=8', '-t', '2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', clip])
+  const now = Date.now()
+  await uploadClip(member, { clip, t: now, startedAt: now - 10_000, durationMs: 2000, width: 320, height: 240, fps: 8 })
+  await member.call('endSession', {})
+  return { member, sessionId }
+}
+
+async function waitFor(what: string, fn: () => boolean | Promise<boolean>, ms = 60_000): Promise<void> {
+  const end = Date.now() + ms
+  while (Date.now() < end) {
+    if (await fn()) return
+    await sleep(250)
+  }
+  throw new Error(`timed out waiting for ${what}`)
+}
+
+describe('rebuilding videos that are not here', { skip, timeout: 240_000 }, () => {
+  afterEach(async () => {
+    for (const c of running.splice(0)) await c.stop().catch(() => {})
+  })
+
+  const startWithLease = (label: string, outDir: string) => {
+    const port = freePort()
+    return port.then(async p => {
+      const c = await startCompiler({
+        uri: uri!, database: db!, token: workerToken, tokenFile: join(outDir, 'token'), outDir, port: p,
+        publicUrl: `http://127.0.0.1:${p}`, quietMs: 0, retryMs: 60_000, pollMs: 300, ffmpegBin: 'ffmpeg', reconnectMs: 200,
+        lease: { label, takeover: false }, leaseHeartbeatMs: 300, log: () => {}
+      })
+      running.push(c)
+      return { c, port: p }
+    })
+  }
+
+  it('a video file that disappears is rendered again, and the stored url is a path without a host', async () => {
+    const { member, sessionId } = await memberWithEndedSession()
+    const outDir = mkdtempSync(join(tmpdir(), 'wyd-rb-'))
+    dirs.push(outDir)
+    const file = join(outDir, `session-${sessionId}-1.mp4`)
+    const { port } = await startWithLease('rebuilder', outDir)
+    await waitFor('the first render', () => existsSync(file))
+    const row = member.snapshot().tables.compilations.find(r => r.sessionId === sessionId)
+    assert.match(String(row?.url), /^\/compilations\/session-\d+-1\.mp4$/)
+
+    rmSync(file) // e.g. someone cleaned the folder
+    await waitFor('the file to be rebuilt', () => existsSync(file))
+    const res = await fetch(`http://127.0.0.1:${port}/compilations/session-${sessionId}-1.mp4`)
+    assert.equal(res.status, 200)
+    await res.arrayBuffer()
+    await waitFor('the row to be Ready again', () => member.snapshot().tables.compilations.some(r => r.sessionId === sessionId && (r.status as { tag: string }).tag === 'Ready'))
+    member.disconnect()
+  })
+
+  it('a compiler started on another machine (another folder) rebuilds the existing videos', async () => {
+    const { member, sessionId } = await memberWithEndedSession()
+    const folderA = mkdtempSync(join(tmpdir(), 'wyd-rbA-'))
+    const folderB = mkdtempSync(join(tmpdir(), 'wyd-rbB-'))
+    dirs.push(folderA, folderB)
+    const first = await startWithLease('machine A', folderA)
+    await waitFor('machine A to render', () => existsSync(join(folderA, `session-${sessionId}-1.mp4`)))
+    await first.c.stop() // machine A goes away (releases the lease)
+
+    const second = await startWithLease('machine B', folderB)
+    await waitFor('machine B to rebuild the video', () => existsSync(join(folderB, `session-${sessionId}-1.mp4`)))
+    const res = await fetch(`http://127.0.0.1:${second.port}/session/${sessionId}/status`)
+    assert.equal(((await res.json()) as { state: string }).state, 'ready')
+    member.disconnect()
+  })
+
+  it('without a lease the compiler does not rebuild anything (so several test compilers never fight)', async () => {
+    const { member, sessionId } = await memberWithEndedSession()
+    const outDir = mkdtempSync(join(tmpdir(), 'wyd-norb-'))
+    dirs.push(outDir)
+    const port = await freePort()
+    const logs: string[] = []
+    const c = await startCompiler({
+      uri: uri!, database: db!, token: workerToken, tokenFile: join(outDir, 'token'), outDir, port,
+      publicUrl: `http://127.0.0.1:${port}`, quietMs: 0, retryMs: 60_000, pollMs: 300, ffmpegBin: 'ffmpeg', log: m => logs.push(m)
+    })
+    running.push(c)
+    await waitFor('the render', () => existsSync(join(outDir, `session-${sessionId}-1.mp4`)))
+    await sleep(2500)
+    assert.equal(logs.some(l => l.includes('rebuilding')), false, logs.join(' | '))
+    member.disconnect()
   })
 })

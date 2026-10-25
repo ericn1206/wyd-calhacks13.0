@@ -94,7 +94,7 @@ mime (`video/mp4`) · size_bytes · chunk_count · received_chunks · complete �
 id (PK, auto_inc) · clip_id (idx) · seq · data: byte array. File = chunks ordered by `seq`. Chunk ≤ 256 KiB.
 
 ### 19d. session_compilation — own session (`my_session_compilations`), written by the clip worker only
-session_id (PK) · status: CompilationStatus · clip_count (clips in the video at `url`; 0 until Ready) · url? · error? · updated_at. Flow: `clip-compiler.md`.
+session_id (PK) · status: CompilationStatus · clip_count (clips in the video at `url`; 0 until Ready) · url? (a path such as `/compilations/session-45-2.mp4`; add `clip_page_base_url`) · error? (a note on Ready, e.g. unreadable clips left out) · updated_at. Flow: `clip-compiler.md`.
 
 ### 19e. compiler_lease — private (no client view)
 key (PK, always `clip_compiler`) · lease_id (random per compiler process) · holder_identity · label · url · started_at · heartbeat_at. At most one row: the clip compiler that may run (`../components/clip-compiler.md#one-compiler`).

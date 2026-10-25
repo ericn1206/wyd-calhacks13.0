@@ -11,7 +11,7 @@ The app is a **macOS-only Electron desktop app**. It talks to a hosted Spacetime
 | Desktop app (Electron + React) | `src/` | **Yes** | Your Mac |
 | Vision detector (webcam + screen OCR, Python) | `vision/` | **Yes** (drift detection; spawned by the app) | Your Mac, in `vision/.venv` |
 | SpacetimeDB module (session state, rules) | `spacetimedb/` | Already published to maincloud (db `calhacks-13-wyd`). Only republish if you changed it | SpacetimeDB maincloud |
-| Clip compiler (joins session clips into one video) | `worker/compile/` | Optional | Your Mac, Node + ffmpeg |
+| Clip compiler (joins session clips into one video and hosts it) | `worker/compile/` | Optional: needed for the highlight video link. **One per database** | One Mac, Node + ffmpeg |
 | AI worker fixtures | `worker/` | Optional (dev only) | Your Mac, Node 24 |
 
 ## 1. Prerequisites
@@ -122,7 +122,7 @@ macOS prompts on first use. Grant them to the app that launches `npm run dev` (T
 | Permission | Why | If missing |
 |---|---|---|
 | Camera | webcam distraction detector (`vision/detector.py`) | no webcam vote, no clips |
-| Screen Recording | screen OCR, window titles, screen share in check-in calls | screen vote unknown; call is camera-only |
+| Screen Recording | screen OCR, window titles, screen share in check-in calls, and the screen part of session clips | screen vote unknown; call is camera-only; clips are webcam only (the terminal prints `screen recording off: Screen Recording permission is not granted...`) |
 | Accessibility | read front app / window title | activity tracking empty |
 | Automation → System Events (and your browser) | `osascript` for front app + browser URL | same |
 
@@ -138,6 +138,50 @@ npm run dev:two -- --fresh        # wipe their saved data first
 ```
 
 Create a session in client 1, join from client 2 with the code. Both share your webcam and screen. Data lives in `~/.wyd-test/client-<i>`.
+
+### Test with two separate devices
+
+Use this to try the full flow (check-in, clip, highlight video) across two Macs. Both need sections 1-3 done (Node, Python 3.12, `npm install`, `npm run setup:vision`, `.env`) and the **same branch**:
+
+```bash
+git clone -b feat/clips-two-device https://github.com/ericn1206/attentionmaxx.git
+```
+
+**Step 0, once, on one Mac: a database that matches this branch.** This branch's module has a breaking change (status label `Unknown` renamed to `Idle`), so it cannot be published over `calhacks-13-wyd` without wiping that database. Use a separate test database instead; a new one has nothing to wipe:
+
+```bash
+spacetime login
+spacetime publish calhacks-13-wyd-test --module-path spacetimedb -y
+```
+
+The account that publishes becomes the database's worker (needed for the clip compiler). Then **both** Macs add the same line to `.env`:
+
+```
+SPACETIME_DB=calhacks-13-wyd-test
+```
+
+**Step 1, Mac A (the host): start the clip compiler.** Both Macs must be on the same Wi-Fi (a VPN on either one can break the links and Gemini). If A is the Mac that published the database:
+
+```bash
+export WYD_WORKER_TOKEN=$(grep spacetimedb_token ~/.config/spacetime/cli.toml | cut -d'"' -f2)
+npm run clips:host
+```
+
+It prints the page address to share (`http://<A's address>:8787/session/<id>`). Allow incoming connections if macOS asks. If you start it on a different Mac than the publisher, start it once without the token and run the `authorize_worker` command it prints, as the publisher. A second compiler is refused (`a clip compiler is already running`); `npm run clips:host -- --takeover` replaces it.
+
+**Step 2, both Macs: run the app.**
+
+```bash
+npm run dev
+```
+
+Mac A creates a session and reads out the code. Mac B joins with it. Both enter a goal and the host starts the round.
+
+**Step 3: make someone drift.** On either Mac switch to something clearly off-task (a YouTube video) for about 15 seconds. After two off-task checks (5 s apart) the check-in fires on that Mac. **Stay in the session for 30 more seconds** so the 20 s after the check-in is recorded, then have the host end the session.
+
+**Step 4: look at the result.** About 30 seconds later the summary screen shows a "Session highlights" card. Open its link on either Mac: it says "putting your clips together" and then plays the video. It shows the drifter's screen with their webcam in the corner (WYD's own windows are left out). If nothing was recorded it says "No highlights this time".
+
+What to check: the clip came from the Mac that drifted (not from the call), the screen is visible and the check-in tiles are not in it, the link opens on the other Mac, and quitting the app leaves no `facetime_trigger.py` running (`pgrep -f facetime_trigger`).
 
 ### Run the detector alone (no Electron)
 
@@ -163,33 +207,31 @@ cd ..
 spacetime generate --lang typescript --module-path spacetimedb --out-dir src/main/db/module_bindings -y
 ```
 
-Breaking schema changes need `--delete-data=on-conflict` on publish and wipe the data. Tell the team first. Details: `docs/components/spacetimedb.md`.
+Breaking schema changes need `--delete-data=on-conflict` on publish and wipe the data. Tell the team first. **This branch contains one** (`StatusLabel` `Unknown` renamed to `Idle`): publishing it to `calhacks-13-wyd` wipes sessions, clips and compilations, so test against a separate database (see "Test with two separate devices"). Details: `docs/components/spacetimedb.md`.
 
 ## 6. Clip compiler (optional)
 
-After a session ends, this joins every member's check-in clip into one video and writes its URL to the database.
+What gets recorded: when the check-in fires, the drifting person's own laptop saves 10 s before and 20 s after as one 1280x720 clip (their screen, with their webcam in the corner), recorded locally and uploaded straight from that laptop, not taken from the video call. After the session ends, the compiler joins every clip of the session into one video and hosts it. The clips themselves stay in the database.
 
 ```bash
-# 1. Authorize a worker identity. Use the token of the identity that published the db:
-grep spacetimedb_token ~/.config/spacetime/cli.toml
-export WYD_WORKER_TOKEN=<that token>
+# worker identity: the token of the account that published the database...
+export WYD_WORKER_TOKEN=$(grep spacetimedb_token ~/.config/spacetime/cli.toml | cut -d'"' -f2)
+# ...or start without it once and run the `authorize_worker` command it prints
 
-# 2. Start it (ffmpeg must be on PATH)
-npm run worker:compile
+npm run clips:host            # links use this Mac's network address, so other devices can open them
+npm run worker:compile        # links use COMPILE_PUBLIC_URL, else localhost (single-machine tests)
 ```
 
-For teammates on other laptops to open the video, set your LAN IP before starting:
-
-```bash
-COMPILE_PUBLIC_URL=http://192.168.1.20:8787 npm run worker:compile
-```
-
-Videos land in `worker/out/compilations/`. All options: `docs/components/clip-compiler.md`.
+- Needs `ffmpeg` (`brew install ffmpeg`), only on the Mac that runs the compiler.
+- **One compiler per database.** It takes a lease in the database; a second one exits with `a clip compiler is already running: <host>`. `npm run clips:host -- --takeover` replaces the running one (the old one stops itself). A crashed compiler's lease frees itself after 20 s.
+- It re-renders any video whose file is missing (new Mac, wiped folder) while it holds the lease.
+- Videos are written to `worker/out/compilations/` and served on port 8787 while it runs. `http://<host>:8787/session/<id>` is a page that waits, then plays the video; `/health` checks the server.
+- Options (`COMPILE_PORT`, `COMPILE_PUBLIC_URL`, `COMPILE_QUIET_SECS`, `FFMPEG_BIN`, ...): `docs/components/clip-compiler.md`.
 
 ## 7. Tests and build
 
 ```bash
-npm run test:clips                 # session-clips tests (python side needs vision/.venv)
+npm run test:clips                 # session-clips tests (python side needs vision/.venv; needs ffmpeg)
 npm run test:clips -- ts           # TS tests only
 npm run test:clips -- py           # Python tests only
 npm run build                      # production build into out/
@@ -200,7 +242,7 @@ cd worker && npm install && npm run fixtures && cd ..
 nvm use 20
 ```
 
-The clip integration test needs a scratch database, never maincloud: see `tests/session-clips/README.md`.
+The integration tests (database, compiler, lease) are skipped unless pointed at a scratch database, never maincloud: see `tests/session-clips/README.md`.
 
 ## Troubleshooting
 
@@ -215,6 +257,13 @@ The clip integration test needs a scratch database, never maincloud: see `tests/
 | `npm install` errors about vite | Keep `vite` pinned in `package.json` (`^5.4`); delete `node_modules` and `package-lock.json` only as a last resort |
 | Dock icon missing / odd window behavior | See `docs/status.md` Gotchas (macOS overlay) |
 | Need DB logs | `WYD_DEBUG=1 npm run dev`, or `tail -f ~/Library/Application Support/attentionmaxx/logs/stdb.log` |
+| `a clip compiler is already running: <host>` | Only one compiler per database. Use that one, or `npm run clips:host -- --takeover` |
+| `clips:host` / `worker:compile` fails with an unknown reducer | The database has an older module. Publish this branch's module to the database you use (test database: see "Test with two separate devices") |
+| `could not publish the page url (not an authorized worker?)` | Set `WYD_WORKER_TOKEN` to the publisher's token, or run the `authorize_worker` line the compiler prints |
+| Clip shows only the webcam / log says `screen recording off` | Grant Screen Recording to the app that launched `npm run dev`, then quit and reopen it |
+| Highlight page says "waiting" forever | The session has not ended, or the compiler is not running. "No highlights this time" means the check-in never fired in that session (Gemini unreachable? see "Drift never triggers") |
+| Link works on the host but not on the other device | Same Wi-Fi? VPN off? Allow incoming connections for Node in the macOS firewall. Start with `npm run clips:host` (not `worker:compile`) so links use the network address |
+| `facetime_trigger.py` still running after quitting | Should not happen any more (it stops itself within ~4 s). If it does: `pkill -f facetime_trigger` and report it |
 | Teammates see different data | Everyone must use the same `SPACETIME_DB` (default `calhacks-13-wyd`) |
 
 ## Docs

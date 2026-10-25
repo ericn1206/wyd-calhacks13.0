@@ -34,6 +34,8 @@ export type DbEnded = {
   clipLink: string | null
   /** The compiler's state for this session; `waiting` until it has written a row. */
   clipState: 'waiting' | 'rendering' | 'ready' | 'failed'
+  /** The finished mp4 itself, only once the video is ready. The database stores a path; this adds the current address. */
+  clipVideo: string | null
 } | null
 
 const EMPTY: DbSnapshot = {
@@ -47,13 +49,20 @@ const tag = (v: unknown) => (v as Tag | undefined)?.tag ?? ''
 const STATUS_BY_LABEL: Record<string, string> = { Focused: 'focused', OffTask: 'drifting', Away: 'drifting', Break: 'resting', Idle: 'idle' }
 
 /** Link to the session's highlight page and the compiler's progress, from `app_setting` + `session_compilation`. */
-export function clipInfo(tables: DbSnapshot['tables'], sessionId: number): Pick<NonNullable<DbEnded>, 'clipLink' | 'clipState'> {
+export function clipInfo(tables: DbSnapshot['tables'], sessionId: number): Pick<NonNullable<DbEnded>, 'clipLink' | 'clipState' | 'clipVideo'> {
   let base = ''
   try { base = JSON.parse(tables.settings.find((s) => s.key === 'clip_page_base_url')?.valueJson ?? '""') } catch { /* no link */ }
-  const status = tag(tables.compilations.find((c) => c.sessionId === sessionId)?.status).toLowerCase()
+  if (typeof base !== 'string') base = ''
+  const row = tables.compilations.find((c) => c.sessionId === sessionId)
+  const status = tag(row?.status).toLowerCase()
+  const state = status === 'ready' || status === 'rendering' || status === 'failed' ? status : 'waiting'
+  // `url` is a path ("/compilations/session-45-1.mp4"); rows written by older compilers hold a full address.
+  const url = typeof row?.url === 'string' ? row.url : ''
+  const video = state !== 'ready' || !url ? null : /^https?:\/\//.test(url) ? url : base ? `${base}${url}` : null
   return {
-    clipLink: typeof base === 'string' && base ? `${base}/session/${sessionId}` : null,
-    clipState: status === 'ready' || status === 'rendering' || status === 'failed' ? status : 'waiting'
+    clipLink: base ? `${base}/session/${sessionId}` : null,
+    clipState: state,
+    clipVideo: video
   }
 }
 const initialsOf = (name: string) => name.replace(/[^A-Za-z0-9 ]/g, '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?'
