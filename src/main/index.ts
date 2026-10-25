@@ -159,6 +159,11 @@ function registerDesktopApi(): void {
     window?.setAlwaysOnTop(Boolean(enabled), 'floating')
     window?.setVisibleOnAllWorkspaces(Boolean(enabled), { visibleOnFullScreen: true })
   })
+  // While this laptop shares its screen, hide the calling window (overlay with everyone's camera tiles)
+  // from screen capture (macOS: excluded from the capture stream, still visible to the user).
+  ipcMain.handle('wyd:window:capture-hidden', (event, hidden: boolean) => {
+    BrowserWindow.fromWebContents(event.sender)?.setContentProtection(Boolean(hidden))
+  })
   ipcMain.handle('wyd:window:ignore-mouse', (event, enabled: boolean) => {
     BrowserWindow.fromWebContents(event.sender)?.setIgnoreMouseEvents(Boolean(enabled), { forward: true })
   })

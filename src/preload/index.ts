@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('wydDesktop', {
   requestMediaPermissions: () => ipcRenderer.invoke('wyd:media:request'),
   setAlwaysOnTop: (enabled: boolean) => ipcRenderer.invoke('wyd:window:always-on-top', enabled),
   setIgnoreMouseEvents: (enabled: boolean) => ipcRenderer.invoke('wyd:window:ignore-mouse', enabled),
+  setCaptureHidden: (hidden: boolean) => ipcRenderer.invoke('wyd:window:capture-hidden', hidden),
   moveToCorner: (corner: CheckInCorner, size?: { width?: number; height?: number }) =>
     ipcRenderer.invoke('wyd:window:move-to-corner', corner, size),
   getDisplays: () => ipcRenderer.invoke('wyd:displays:get'),

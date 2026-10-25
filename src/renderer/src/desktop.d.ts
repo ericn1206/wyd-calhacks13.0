@@ -13,6 +13,7 @@ declare global {
       requestMediaPermissions(): Promise<{ camera: boolean; microphone: boolean }>
       setAlwaysOnTop(enabled: boolean): Promise<void>
       setIgnoreMouseEvents(enabled: boolean): Promise<void>
+      setCaptureHidden(hidden: boolean): Promise<void>
       moveToCorner(corner: CheckInCorner, size?: { width?: number; height?: number }): Promise<void>
       getDisplays(): Promise<unknown[]>
       setOverlayVisible(visible: boolean): Promise<void>

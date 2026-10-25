@@ -178,6 +178,7 @@ export function useCircleCall(room: CircleRoom | null, options: { autoJoin?: boo
     setJoining(false)
     const lk = roomRef.current
     if (lk && sharingRef.current) void lk.localParticipant.setScreenShareEnabled(false).catch(() => undefined)
+    if (sharingRef.current) void window.wydDesktop?.setCaptureHidden(false)
     sharingRef.current = false
     shareScreenRef.current = false
     screenStream.current = null
@@ -243,9 +244,12 @@ export function useCircleCall(room: CircleRoom | null, options: { autoJoin?: boo
         if (shareScreenRef.current) {
           // The person who drifted shares their screen; the call still works if this is refused.
           try {
+            // Hide our own window (camera tiles) from the capture before the first frame goes out.
+            await window.wydDesktop?.setCaptureHidden(true)
             await lk.localParticipant.setScreenShareEnabled(true, { audio: false })
             sharingRef.current = true
           } catch (err) {
+            void window.wydDesktop?.setCaptureHidden(false)
             console.warn('Screen share failed (Screen Recording permission?)', err)
           }
         }
