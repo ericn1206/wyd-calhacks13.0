@@ -2,7 +2,7 @@ import { useCartesiaCall, type AgentCredentials } from '../../cartesiaCall'
 import { Icon } from '../ui/Icon'
 import { Shell } from '../ui/Shell'
 
-type VoicePhase = 'idle' | 'speaking' | 'listening' | 'processing' | 'done'
+export type VoicePhase = 'idle' | 'speaking' | 'listening' | 'processing' | 'done'
 
 export function VoiceScreen({
   phase,
@@ -27,13 +27,13 @@ export function VoiceScreen({
   const line = error
     ? error
     : saving
-      ? 'Saving what you’re studying…'
+      ? "Saving what you're studying…"
       : !creds
         ? 'Starting the voice interview…'
         : speaking
           ? 'Listen, then answer out loud.'
           : call.status === 'listening'
-            ? 'Your turn. Say what you’re working on.'
+            ? "Your turn. Say what you're working on."
             : 'Connecting…'
 
   return (
