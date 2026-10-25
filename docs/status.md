@@ -57,7 +57,7 @@ Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` �
 ## Mismatches (unresolved; decisions tracked in `product/decisions.md`)
 | Area | Variants in code |
 |---|---|
-| Judge | `src/main/claudeJudge.ts`: `gemini-3.5-flash-lite`, labels `productive`/`distracted`/`neutral` · `worker/judge.ts`: same model via `worker/claude.ts`, labels `on_task`/`off_task`/`break` · DB `StatusLabel`: `Focused`/`OffTask`/`Away`/`Break`/`Unknown` |
+| Judge | `src/main/claudeJudge.ts`: `gemini-3.5-flash-lite`, labels `productive`/`distracted`/`neutral` · `worker/judge.ts`: same model via `worker/claude.ts`, labels `on_task`/`off_task`/`break` · DB `StatusLabel`: `Focused`/`OffTask`/`Away`/`Break`/`Idle` |
 | Categories | `categorize.ts`: contract lowercase 9 · `appClassifier.ts`: `productive`/`distracted`/`neutral`/`unknown` (drives alerts) · DB `AppCategory`: `OnTask`/`OffTask` (published 2026-10-24). Desktop sets still to be replaced by the OCR + Gemini verdict (`architecture/overview.md#off-task-pipeline`). |
 | Event format | Contract JSON (`worker/types.ts`) vs DB `SignalInput`. See `architecture/contracts.md`. |
 | Timing | Spec: drift 2 min, call cooldown 30 min, call ~60 s · DB: call immediately on OffTask (`off_task_threshold_secs` 0), cooldown 600 s, max call 90 s · Desktop: alerts at 30/60 s, auto-call cooldown 5 min, LiveKit call 30 s |
@@ -80,6 +80,7 @@ Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` �
 - 2026-10-25: module published to maincloud (additive, data kept): `session_clip`, `session_clip_chunk`, `session_compilation`, clip reducers, `set_session_compilation`, `my_session_clips`, `my_session_compilations`, `worker_*` clip views. The compiler's identity must be an authorized worker (`components/clip-compiler.md#run`). Compilation URLs default to `localhost`: set `COMPILE_PUBLIC_URL` to the LAN IP for other laptops.
 - macOS overlay: `type: 'panel'` (clicks don't activate the app / raise the main window) and `setVisibleOnAllWorkspaces(..., { skipTransformProcessType: true })` (without it Electron makes the app a UI-element process and its Dock icon disappears).
 - 2026-10-24: module published to maincloud with `--delete-data=on-conflict` (data wiped; `init` re-seeded 12 settings): removed `member.joined_at`, `session.host_identity`; added `active_connection`, `CallEndedReason.Superseded`. Client bindings regenerated.
+- `StatusLabel.Unknown` → `Idle` (enum change): module not yet republished. Run `spacetime publish calhacks-13-wyd --delete-data=on-conflict -y` (wipes data) then `seed_defaults`, and regenerate bindings (`types.ts` was hand-edited to match). Tell the team.
 - 2026-10-24: db wiped + republished (`--delete-data=on-conflict`) for the binary `AppCategory`; `seed_defaults` re-run. Any old session/token state is gone (identities persist per client token).
 - `set_pomodoro` published to maincloud 2026-10-24 (additive publish, data kept).
 - Module published to maincloud (additive, data kept): `take_break`, `stop_pomodoro`, unlocked `set_pomodoro`, `disconnect_timer` reaper, `create_session(code?)`. Bindings are generated (no hand-added files).

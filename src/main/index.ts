@@ -299,6 +299,9 @@ app.whenReady().then(() => {
   registerDesktopApi()
   createWindow()
 
+  // TODO(session-resting): derive working/resting from the snapshot's session `currentPhase`
+  // here (Work → working, Break → resting) and call `monitor.setResting(...)` on change,
+  // so no off-task checking happens during rest. See ActivityMonitor.poll.
   stdb.onChange(snapshot => sendToRenderer('wyd:db:state', snapshot))
   stdb.connect().catch(err => console.error('[stdb] connect failed', err))
 

@@ -43,6 +43,9 @@ const EMPTY: DbSnapshot = {
 
 const tag = (v: unknown) => (v as Tag | undefined)?.tag ?? ''
 
+/** DB `StatusLabel` → `Person.status` (CSS class). Idle = joined or back from rest, no verdict yet. */
+const STATUS_BY_LABEL: Record<string, string> = { Focused: 'focused', OffTask: 'drifting', Away: 'drifting', Break: 'resting', Idle: 'idle' }
+
 /** Link to the session's highlight page and the compiler's progress, from `app_setting` + `session_compilation`. */
 export function clipInfo(tables: DbSnapshot['tables'], sessionId: number): Pick<NonNullable<DbEnded>, 'clipLink' | 'clipState'> {
   let base = ''
@@ -102,7 +105,7 @@ export function useDb() {
           const u = users.get(m.identity)
           const name = u?.displayName ?? 'guest'
           const label = tag(tables.statuses.find((x) => x.memberId === m.id)?.label)
-          return { name, initials: initialsOf(name), color: '', hex: u?.avatarColor, status: label === 'OffTask' || label === 'Away' ? 'drifting' : 'focused', offline: tag(m.deviceStatus) === 'Disconnected', me: m.id === session.memberId, host: !!m.isHost }
+          return { name, initials: initialsOf(name), color: '', hex: u?.avatarColor, status: STATUS_BY_LABEL[label] ?? 'idle', offline: tag(m.deviceStatus) === 'Disconnected', me: m.id === session.memberId, host: !!m.isHost }
         })
       : []
     const myGoals = session ? tables.goals.filter((g) => g.memberId === session.memberId).sort((a, b) => a.position - b.position) : []

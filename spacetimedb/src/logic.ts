@@ -202,7 +202,7 @@ export function ensureTracking(ctx: Ctx, m: Member, s: Session) {
     ctx.db.status.insert({
       memberId: m.id,
       sessionId: s.id,
-      label: tag(s.currentPhase.tag === 'Break' ? 'Break' : 'Unknown'),
+      label: tag(s.currentPhase.tag === 'Break' ? 'Break' : 'Idle'),
       reasonCode: tag('Unknown'),
       confidence: 0,
       since: ctx.timestamp,
@@ -404,7 +404,7 @@ type Candidate = { label: E.StatusLabel; reason: E.ReasonCode; confidence: numbe
 
 /**
  * Finds the newest confident label and how long it has held without a
- * contradicting confident label. Low-confidence/Unknown judgments are neutral.
+ * contradicting confident label. Low-confidence/Idle judgments are neutral.
  */
 function currentCandidate(ctx: Ctx, memberId: bigint, notBefore: Timestamp | undefined): Candidate | undefined {
   const lowConf = settingNum(ctx.db, 'low_confidence_threshold');
@@ -415,7 +415,7 @@ function currentCandidate(ctx: Ctx, memberId: bigint, notBefore: Timestamp | und
     const ev = ctx.db.signalEvent.id.find(j.eventId);
     if (!ev || secsBetween(ev.ts, ctx.timestamp) > window) continue;
     if (notBefore && ev.ts.microsSinceUnixEpoch < notBefore.microsSinceUnixEpoch) continue;
-    if (j.rawLabel.tag === 'Unknown' || j.rawConfidence < lowConf) continue;
+    if (j.rawLabel.tag === 'Idle' || j.rawConfidence < lowConf) continue;
     judged.push({ ts: ev.ts, label: j.rawLabel.tag, reason: j.reasonCode.tag, confidence: j.rawConfidence, eventId: ev.id });
   }
   if (judged.length === 0) return undefined;
@@ -832,12 +832,12 @@ export function flipPhase(ctx: Ctx, s: Session) {
   for (const m of activeMembersOf(ctx.db, s.id)) {
     insertAlert(ctx, s.id, m.id, 'PomodoroPhaseChange', { phase: updated.currentPhase.tag, cycle: updated.cycleNumber, secs });
     if (toBreak) insertAlert(ctx, s.id, m.id, 'GoalCheckin', { cycle: updated.cycleNumber });
-    // Back from break: start fresh; the 60 s hold re-establishes the label.
+    // Back from break: start fresh as Idle; the hold re-establishes the label.
     if (!toBreak) {
       const st = ctx.db.status.memberId.find(m.id);
       if (st) {
         stopTracking(ctx, m.id);
-        ctx.db.status.memberId.update({ ...st, label: tag('Unknown'), reasonCode: tag('Unknown'), since: ctx.timestamp, smoothedOffTaskSecs: 0, updatedAt: ctx.timestamp });
+        ctx.db.status.memberId.update({ ...st, label: tag('Idle'), reasonCode: tag('Unknown'), since: ctx.timestamp, smoothedOffTaskSecs: 0, updatedAt: ctx.timestamp });
         ensureTracking(ctx, m, updated);
       }
     } else {

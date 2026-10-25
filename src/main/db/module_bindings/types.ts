@@ -683,7 +683,7 @@ export const StatusLabel = __t.enum("StatusLabel", {
   OffTask: __t.unit(),
   Away: __t.unit(),
   Break: __t.unit(),
-  Unknown: __t.unit(),
+  Idle: __t.unit(),
 });
 export type StatusLabel = __Infer<typeof StatusLabel>;
 
