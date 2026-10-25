@@ -48,7 +48,7 @@ export type ScoreEventKind = (typeof ScoreEventKind)[number];
 export const CallState = ['Ringing', 'Active', 'Ended', 'Missed'] as const;
 export type CallState = (typeof CallState)[number];
 
-export const CallEndedReason = ['Timeout', 'ManualEnd', 'AllLeft', 'Declined'] as const;
+export const CallEndedReason = ['Timeout', 'ManualEnd', 'AllLeft', 'Declined', 'Superseded'] as const;
 export type CallEndedReason = (typeof CallEndedReason)[number];
 
 export const CallResponse = ['Pending', 'Joined', 'Declined', 'Missed'] as const;

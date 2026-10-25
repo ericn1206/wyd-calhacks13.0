@@ -12,15 +12,16 @@ identity (PK) · display_name · avatar_color · created_at · online
 Auto-created on connect as `guest-xxxx`; set with `set_profile`.
 
 ### 2. session — own session
-id (PK, auto_inc) · code (unique, 6 chars) · name · host_identity · state: SessionState ·
+id (PK, auto_inc) · code (unique, 6 chars) · name · state: SessionState ·
 started_at? · ended_at? · pomodoro_work_secs (1500) · pomodoro_break_secs (300) ·
 current_phase: PomodoroPhase · phase_started_at? · cycle_number · off_task_threshold_secs (0) ·
 call_cooldown_secs (600) · max_call_secs (90) · scoreboard_enabled (false) · group_call_enabled (true)
 
 ### 3. member — own session
-id (PK, auto_inc) · session_id (idx) · identity (idx) · joined_at · left_at? ·
+id (PK, auto_inc) · session_id (idx) · identity (idx) · left_at? ·
 device_status: DeviceStatus · phone_linked · is_host · goals_set
 Extra index: (session_id, identity).
+`is_host` is the only host record. Host leaves → active member with the lowest `id` becomes host. `join_session` always inserts a fresh row (rejoiners go to the back of the line, goals reset).
 
 ### 4. goal — own session
 id (PK, auto_inc) · session_id (idx) · member_id (idx) · text · position (1–3) · completed ·
@@ -125,6 +126,7 @@ focus_ratio · indexed_at
 
 ### Internal
 - `authorized_worker`: identity (PK) · added_at. Seeded with the publisher's identity.
+- `active_connection`: identity (PK) · connection_id. Newest connection wins; a superseded socket's disconnect is ignored (no Disconnected flip, no reaper).
 - `pomodoro_timer`: one-shot → `advance_pomodoro`
 - `score_tick_timer`: every 10 s per tracked member → `tick_score`
 - `call_timeout_timer`: one-shot → `call_timeout`
@@ -157,6 +159,7 @@ focus_ratio · indexed_at
 | maybe_trigger_group_call(member_id) | worker only | Also runs every tick |
 | set_call_room_url(call_id, url) | worker only | For a Daily/LiveKit room the worker created |
 | respond_to_call(call_id, Joined/Declined) | participant | First join: Ringing → Active; all declined → Ended(Declined) |
+| (call trigger) | server | A new call ends any Ringing/Active call first (`Superseded`; unanswered → Missed). Cooldown still applies |
 | end_call(call_id) | participant | Host ends for all; otherwise leaves, ends when everyone has left |
 | call_timeout | scheduler only | Ended(Timeout), or Missed if nobody joined |
 | mark_alert_delivered(alert_id) | alert target | |

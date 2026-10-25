@@ -40,7 +40,7 @@ Wire format: in module code / TS bindings a value is `{ tag: 'Focused' }`. Raw J
 | FocusBlockKind | DeepWork, Interruption, Break |
 | ScoreEventKind | Tick, StreakBonus, Penalty, QuickRecovery, GoalChecked |
 | CallState | Ringing, Active, Ended, Missed |
-| CallEndedReason | Timeout, ManualEnd, AllLeft, Declined |
+| CallEndedReason | Timeout, ManualEnd, AllLeft, Declined, Superseded |
 | CallResponse | Pending, Joined, Declined, Missed |
 | AlertKind | NudgeSelf, GroupAlert, PomodoroPhaseChange, GoalCheckin, CallIncoming, TakeoverRequest |
 | TakeoverState | Requested, Approved, Denied, Executed, Expired |
