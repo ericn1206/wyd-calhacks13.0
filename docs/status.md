@@ -73,7 +73,7 @@ Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` â†
 5. Resolve judge + category mismatches.
 
 ## Gotchas
-- 2026-10-24: **unpublished** module change (breaking: removed `member.joined_at`, `session.host_identity`; added `active_connection`, `CallEndedReason.Superseded`). Needs `spacetime publish calhacks-13-wyd --delete-data=on-conflict -y` (wipes data); bindings already regenerated.
+- 2026-10-24: module published to maincloud with `--delete-data=on-conflict` (data wiped; `init` re-seeded 12 settings): removed `member.joined_at`, `session.host_identity`; added `active_connection`, `CallEndedReason.Superseded`. Client bindings regenerated.
 - 2026-10-24: db wiped + republished (`--delete-data=on-conflict`) for the binary `AppCategory`; `seed_defaults` re-run. Any old session/token state is gone (identities persist per client token).
 - `set_pomodoro` published to maincloud 2026-10-24 (additive publish, data kept).
 - 2026-10-25: module published to maincloud (additive, data kept): `take_break`, `stop_pomodoro`, unlocked `set_pomodoro`, `disconnect_timer` reaper, `create_session(code?)`. Bindings are generated (no hand-added files).

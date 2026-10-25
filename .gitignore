@@ -66,3 +66,5 @@ vision/.venv/
 .venv/
 __pycache__/
 distraction_dataset.csv
+
+.claude/settings.local.json
