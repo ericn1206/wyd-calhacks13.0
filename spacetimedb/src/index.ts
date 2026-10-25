@@ -156,7 +156,7 @@ export const createSession = spacetimedb.reducer(
       currentPhase: tag('Work'),
       phaseStartedAt: undefined,
       cycleNumber: 0,
-      offTaskThresholdSecs: settings.offTaskThresholdSecs ?? 60,
+      offTaskThresholdSecs: settings.offTaskThresholdSecs ?? 0,
       callCooldownSecs: settings.callCooldownSecs ?? settingNum(ctx.db, 'call_cooldown_secs'),
       maxCallSecs: settings.maxCallSecs ?? settingNum(ctx.db, 'call_max_secs'),
       scoreboardEnabled: settings.scoreboardEnabled ?? false,
@@ -426,8 +426,7 @@ export const ingestSignal = spacetimedb.reducer({ event: SignalInput }, (ctx, { 
   const app = event.activeApp.slice(0, 120);
   const title = event.activeWindowTitle?.slice(0, 300);
   const domain = event.activeUrlDomain?.toLowerCase().slice(0, 200);
-  let category = event.appCategory.tag;
-  if (category === 'Other') category = classify(ctx.db, s.id, app, domain, title) ?? 'Other';
+  const category = event.appCategory.tag;
 
   // The paired phone page is the source of truth for phone state when it's fresh.
   let phoneState = event.phoneState;
@@ -463,8 +462,11 @@ export const ingestSignal = spacetimedb.reducer({ event: SignalInput }, (ctx, { 
   });
 
   if (m.deviceStatus.tag !== 'Connected') ctx.db.member.id.update({ ...m, deviceStatus: tag('Connected') });
-  // Keep the demo working without the worker: judge locally when it's offline.
-  if (!workerOnline(ctx)) insertFallbackJudgment(ctx, ev);
+  // The client's OnTask/OffTask verdict is the judgment: apply it and notify the group now,
+  // not on the next tick. A later worker judgment for the same event replaces it.
+  insertFallbackJudgment(ctx, ev);
+  applySmoothing(ctx, m.id);
+  maybeTriggerGroupCall(ctx, m.id);
 });
 
 export const writeJudgment = spacetimedb.reducer(
@@ -501,6 +503,8 @@ export const writeJudgment = spacetimedb.reducer(
     const existing = [...ctx.db.judgment.eventId.filter(ev.id)][0];
     if (existing) ctx.db.judgment.id.update({ ...existing, ...row });
     else ctx.db.judgment.insert({ id: 0n, ...row });
+    applySmoothing(ctx, ev.memberId);
+    maybeTriggerGroupCall(ctx, ev.memberId);
   }
 );
 

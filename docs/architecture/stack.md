@@ -30,6 +30,7 @@ Desktop build: `electron.vite.config.ts` (main/preload externalize deps; rendere
 | `LIVEKIT_URL` (`wss://…`), `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | desktop main, `livekitToken.ts`; secret never reaches the renderer |
 | `SPACETIME_URI` (default `wss://maincloud.spacetimedb.com`), `SPACETIME_DB` (default `calhacks-13-wyd`) | desktop main, `src/main/db/stdb.ts` (optional overrides) |
 | `WYD_DEBUG` (`1`/`0`; default on unless packaged) | desktop main, `src/main/db/debugLog.ts`: logs DB connect/subscribe/reducer calls/state changes to the terminal and `~/Library/Application Support/attentionmaxx/logs/stdb.log` |
+| `GEMINI_API_KEY` (planned, not read by any code yet) | desktop main, off-task classification (see `overview.md#off-task-pipeline`) |
 | `CARTESIA_API_KEY`, `CARTESIA_AGENT_ID`, `CARTESIA_VOICE_ID` | used only by archived `outdated/` voice code |
 
 ## Commands

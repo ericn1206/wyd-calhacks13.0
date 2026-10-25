@@ -14,7 +14,7 @@ Auto-created on connect as `guest-xxxx`; set with `set_profile`.
 ### 2. session — own session
 id (PK, auto_inc) · code (unique, 6 chars) · name · host_identity · state: SessionState ·
 started_at? · ended_at? · pomodoro_work_secs (1500) · pomodoro_break_secs (300) ·
-current_phase: PomodoroPhase · phase_started_at? · cycle_number · off_task_threshold_secs (60) ·
+current_phase: PomodoroPhase · phase_started_at? · cycle_number · off_task_threshold_secs (0) ·
 call_cooldown_secs (600) · max_call_secs (90) · scoreboard_enabled (false) · group_call_enabled (true)
 
 ### 3. member — own session
@@ -100,7 +100,8 @@ id (PK, auto_inc) · stuck_id (idx) · role: StuckRole · text · ts
 
 ### 24. app_category_rule — public
 id (PK, auto_inc) · session_id? (none = global) · pattern · match_type: MatchType ·
-category: AppCategory · on_task_default
+category: AppCategory (`OnTask`/`OffTask`) · on_task_default
+No longer consulted by `ingest_signal` (classification is client-side); seeded rows remain. Candidate to drop.
 `session_id` is not indexed (SpacetimeDB can't index option columns; the table is tiny).
 
 ### 25. session_context — own session
@@ -147,7 +148,7 @@ focus_ratio · indexed_at
 | delete_replay_meta_on_end(session_id) | host / worker | Ended sessions only |
 | ingest_signal(event) | member | Validates member/session, rejects duplicate seq, rule-classifies `Other`, fallback-judges when the worker is offline |
 | write_judgment(...) | worker only | |
-| apply_smoothing(member_id) | worker only | Also runs every tick |
+| apply_smoothing(member_id) | worker only | Also runs every tick and on every `ingest_signal`/`write_judgment` |
 | tick_score | scheduler only | Fallback-judges stale events, smoothing, scoring, call/nudge trigger |
 | maybe_trigger_group_call(member_id) | worker only | Also runs every tick |
 | set_call_room_url(call_id, url) | worker only | For a Daily/LiveKit room the worker created |
