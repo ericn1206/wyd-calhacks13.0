@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path'
 import { DbConnection } from '../../src/main/db/module_bindings/index.ts'
 import { dueSessions, orderClips, staleVideos, videoName } from './plan.ts'
 import type { PlanClip } from './plan.ts'
+import type { CompileState } from './page.ts'
 import { renderCompilation } from './render.ts'
 import { createVideoServer, VIDEO_PATH } from './serve.ts'
 
@@ -54,11 +55,19 @@ export async function startCompiler(o: CompilerOptions): Promise<RunningCompiler
   let stopped = false
   let timer: NodeJS.Timeout | null = null
 
-  const server = createVideoServer(o.outDir)
+  let connection: DbConnection | undefined
+  const statusOf = (id: bigint): CompileState => {
+    if (rendering.has(id)) return { state: 'rendering' }
+    const row = connection && [...connection.db.workerSessionCompilations.iter()].find(r => r.sessionId === id)
+    if (!row) return { state: 'waiting' }
+    if (row.status.tag === 'Ready') return { state: 'ready', clipCount: row.clipCount }
+    if (row.status.tag === 'Failed') return { state: 'failed', error: row.error ?? 'unknown error' }
+    return { state: 'rendering' }
+  }
+  const server = createVideoServer(o.outDir, statusOf)
   await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(o.port, '0.0.0.0', resolve) })
   const port = (server.address() as { port: number }).port
 
-  let connection: DbConnection | undefined
   const identity = await new Promise<string>((resolve, reject) => {
     const bump = (sessionId: bigint) => { if (applied) lastActivity.set(sessionId, Date.now()) }
     connection = DbConnection.builder()
@@ -82,7 +91,7 @@ export async function startCompiler(o: CompilerOptions): Promise<RunningCompiler
     throw err
   })
   const conn = connection as DbConnection
-  o.log(`connected as worker ${identity}; serving ${o.outDir} on :${port}`)
+  o.log(`connected as worker ${identity}; serving ${o.outDir} on :${port}; session page: ${o.publicUrl.replace(/\/$/, '')}/session/<id>`)
 
   async function setState(sessionId: bigint, status: 'Rendering' | 'Ready' | 'Failed', clipCount: number, url?: string, error?: string): Promise<void> {
     await conn.reducers.setSessionCompilation({ sessionId, status: { tag: status }, clipCount, url, error })

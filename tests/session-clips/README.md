@@ -15,7 +15,7 @@ Feature: `contracts.md#session-clips`. No extra dependencies.
 | `ts/facetimeTrigger.test.ts` | `requestClip` is false when tracking is off |
 | `ts/module.integration.test.ts` | `session_clip` reducers on a real db (validation, ownership, limits, grace window). Skipped unless env set |
 | `ts/compile-plan.test.ts` | `worker/compile/plan.ts`: clip order, when a session is due (quiet period, all chunks, retry back-off), file names |
-| `ts/compile-serve.test.ts` | `worker/compile/serve.ts`: Range/206/416, HEAD, CORS, 404 for anything but compiled videos, path tricks |
+| `ts/compile-serve.test.ts` | `worker/compile/serve.ts`: Range/206/416, HEAD, CORS, 404 for anything but compiled videos, path tricks; `/session/<id>` page and `/status` JSON for every state, numeric ids only |
 | `ts/compile-render.test.ts` | `worker/compile/render.ts` with real ffmpeg: order, mixed size/codec, no leftovers, errors. Skipped without ffmpeg |
 | `ts/compile.integration.test.ts` | Full flow on a real db: upload clips, end session, compiler renders + hosts, URL in `compilations`, late clip re-render, non-worker rejected. Needs ffmpeg + `WYD_TEST_WORKER_TOKEN` |
 

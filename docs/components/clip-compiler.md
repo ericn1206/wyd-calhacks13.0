@@ -9,7 +9,8 @@ Purpose: after a session ends, join its clips (`session_clip`, `contracts.md#ses
 | `worker/compile/compiler.ts` | Subscribes as a worker identity, decides, renders, reports (`setSessionCompilation`) |
 | `worker/compile/plan.ts` | Pure: `orderClips`, `dueSessions`, `videoName`, `staleVideos` |
 | `worker/compile/render.ts` | ffmpeg join (`ffmpegArgs`, `renderCompilation`) |
-| `worker/compile/serve.ts` | HTTP: `GET /compilations/session-<id>-<n>.mp4` (Range, CORS `*`), `GET /health` |
+| `worker/compile/serve.ts` | HTTP: `GET /compilations/session-<id>-<n>.mp4` (Range, CORS `*`), `GET /session/<id>` (shareable page), `GET /session/<id>/status` (JSON), `GET /health` |
+| `worker/compile/page.ts` | The `/session/<id>` HTML (polls `/status` every 3 s: waiting → rendering → video) and the status JSON shape |
 | `worker/compile/run.mjs` | Bundles `main.ts` with esbuild (bindings are TS Node can't run) and runs it |
 
 ## Flow
@@ -22,6 +23,9 @@ worker: wait COMPILE_QUIET_SECS since the last change (clips of the last 20 s ar
 - Views list only sessions whose complete clips are not already in a `Ready` compilation of the same `clipCount`: a late clip makes the session reappear, it is re-rendered to a new file name (`-<n>`), and older files of that session are deleted.
 - Order: `momentAtMs`, then clip id. Output: 320×240, 8 fps, H.264, faststart, no audio. Each input is normalised and joined with ffmpeg's concat filter (mixed size/codec is fine).
 - `Failed` → error text in the row; retried after 60 s.
+
+## Shareable link
+`<COMPILE_PUBLIC_URL>/session/<session id>` works before the session ends: it shows "waiting for the session to end", then "putting your clips together", then the video, without a reload. Status JSON: `{state: waiting|rendering|ready|failed, clipCount?, video?, error?}` (`waiting` also for ids the worker has never heard of). The id is `session.id` (`tables.sessions[].id` in the desktop snapshot). The page is served by this process, so it only loads while it runs.
 
 ## Run
 1. `brew install ffmpeg` (needs `ffmpeg` on PATH or `FFMPEG_BIN`).
