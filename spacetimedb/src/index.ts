@@ -49,6 +49,7 @@ import {
   isWorker,
   logGoalChecked,
   maybeTriggerGroupCall,
+  proposedOrRandomCode,
   randomCode,
   recomputeGoals,
   requireActiveMember,
@@ -136,13 +137,14 @@ const SessionSettings = t.object('SessionSettings', {
 });
 
 export const createSession = spacetimedb.reducer(
-  { name: t.string(), settings: SessionSettings },
-  (ctx, { name, settings }) => {
+  { name: t.string(), settings: SessionSettings, code: t.option(t.string()) },
+  (ctx, { name, settings, code: proposed }) => {
     seedDefaults(ctx);
     const current = activeMember(ctx);
     if (current) leaveMember(ctx, current.member.id);
 
-    const code = randomCode(ctx, 6, c => ctx.db.session.code.find(c) != null);
+    // The app shows its proposed code before creating; keep it unless it is taken.
+    const code = proposedOrRandomCode(ctx, proposed, 6, c => ctx.db.session.code.find(c) != null);
     const s = ctx.db.session.insert({
       id: 0n,
       code,

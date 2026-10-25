@@ -39,6 +39,14 @@ footer { height: 56px; color: #97a19d; font-size: 12px; text-align: center; }
 .card { background: rgba(255,255,255,.92); border: 1px solid rgba(222,226,223,.9); border-radius: 24px; box-shadow: 0 16px 50px rgba(43,55,50,.07); }
 .intro-card, .consent-card, .goals-card { width: min(100%, 560px); padding: clamp(26px, 5vw, 46px); }
 .intro-card { text-align: center; }
+.entry-panels { display: grid; }
+.entry-panel { grid-area: 1 / 1; }
+.entry-panel[aria-hidden="true"] { visibility: hidden; }
+/* `.primary` transitions `all`, which includes visibility: hide the inactive tab instantly. */
+.entry-panel[aria-hidden="true"] * { transition: none; }
+/* Join is shorter than Create: spread heading / code / preview over the shared height. */
+.join-panel { display: flex; flex-direction: column; justify-content: space-evenly; }
+.join-panel h1 { margin: 22px 0 18px; }
 .entry-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: -18px -18px 30px; padding: 4px; border-radius: 13px; background: #eef2ef; }
 .entry-switch button { min-height: 38px; border: 0; border-radius: 10px; color: var(--muted); background: transparent; font-size: 11px; font-weight: 700; transition: background .2s, color .2s, box-shadow .2s; }
 .entry-switch button.active { color: #315f64; background: white; box-shadow: 0 3px 12px rgba(37,57,52,.08); }
@@ -131,12 +139,13 @@ input:focus { border-color: var(--purple); }
 
 .focus-grid { width: min(1180px, calc(100% - clamp(28px, 4vw, 64px))); height: 100dvh; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, .8fr); gap: clamp(24px, 4vw, 52px); align-items: center; padding: clamp(18px, 3vh, 34px) 0; }
 .timer-panel { text-align: center; }
-.timer-ring { width: clamp(205px, 30vh, 290px); max-width: 76vw; aspect-ratio: 1; position: relative; margin: clamp(8px, 1.4vh, 16px) auto; }
+.timer-ring { width: clamp(205px, 30vh, 290px); max-width: 76vw; aspect-ratio: 1; position: relative; margin: clamp(8px, 1.4vh, 16px) auto; container-type: inline-size; }
 .timer-ring svg { width: 100%; transform: rotate(-90deg); }
 .timer-ring circle { fill: none; stroke: #e5e8e5; stroke-width: 5; }
 .timer-ring .timer-progress { stroke: var(--purple); stroke-linecap: round; stroke-dasharray: 502; stroke-dashoffset: 66; filter: drop-shadow(0 3px 4px rgba(127,203,212,.3)); }
 .timer-ring > div { position: absolute; inset: 0; display: grid; place-content: center; }
-.timer-ring strong { font: 800 clamp(3.2rem, 7vw, 5.2rem)/1 'Manrope'; letter-spacing: -.07em; }
+/* Sized to the ring (cqw), not the window, so "25:00" always clears the stroke. */
+.timer-ring strong { font: 800 21cqw/1 'Manrope'; letter-spacing: -.07em; }
 .timer-ring span { color: var(--muted); font-size: 12px; margin-top: 8px; }
 .timer-panel h2 { margin-top: -2px; }
 .timer-panel > p { color: var(--muted); margin-top: 6px; }
@@ -147,7 +156,7 @@ input:focus { border-color: var(--purple); }
 .pomodoro-rounds svg { width: 11px; }
 .pomodoro-console { width: min(510px, 100%); margin: clamp(10px, 1.5vh, 18px) auto 0; padding: clamp(11px, 1.7vh, 16px); border: 1px solid var(--line); border-radius: 20px; text-align: left; background: rgba(255,255,255,.82); box-shadow: 0 12px 35px rgba(37,57,52,.07); }
 .console-role { display: flex; align-items: center; justify-content: space-between; margin-bottom: 11px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
-.console-role > small { color: var(--muted); font-size: 8px; }
+.console-role > small { color: var(--muted); font-size: 11px; }
 .host-control-badge { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 10px; color: #315f64; background: #dff3ee; font-size: 9px; font-weight: 700; }
 .host-control-badge svg { width: 13px; }
 .time-select { display: flex; align-items: center; gap: 6px; }
@@ -159,12 +168,15 @@ input:focus { border-color: var(--purple); }
 .timer-controls svg { width: 15px; }
 .timer-stop { border: 1px solid #dfe5e2; color: #64736e; background: white; }
 .timer-start { border: 0; color: #23464a; background: #7fcbd4; box-shadow: 0 6px 16px rgba(127,203,212,.24); }
+/* Before the session starts Stop is hidden: Start takes the full row. */
+.timer-start:only-child { grid-column: 1 / -1; }
 .focus-oath { display: flex; align-items: flex-start; gap: 9px; padding: 11px; border-radius: 11px; color: var(--muted); background: #f2f7f5; font-size: 9px; line-height: 1.4; }
 .focus-oath svg { width: 16px; flex: none; color: var(--blue-ink); }
 .focus-oath span { display: grid; }
 .focus-oath strong { color: var(--ink); }
 .distraction-capture { position: relative; display: grid; grid-template-columns: 1fr auto; gap: 6px; margin-top: 10px; }
 .distraction-capture input { height: 38px; font-size: 9px; }
+.distraction-capture input::placeholder { color: #a3ada9; }
 .distraction-capture button { border: 1px solid #dfe5e2; border-radius: 9px; padding: 0 11px; color: #52645f; background: white; font-size: 9px; font-weight: 700; }
 .distraction-capture small { grid-column: 1 / -1; color: var(--green); font-size: 8px; }
 .participant-console { display: grid; gap: 11px; }
@@ -323,9 +335,9 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
 .dock-actions { display: flex; gap: 5px; flex: none; }
 .dock-actions button { border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.08); color: white; border-radius: 9px; padding: 8px 10px; display: flex; align-items: center; gap: 6px; font-size: 10px; white-space: nowrap; }
 .dock-actions button.break-button, .dock-actions button.tired-button { width: 96px; justify-content: center; }
-.dock-actions button.leave-session-button { width: 66px; justify-content: center; color: #e7c2bd; background: rgba(139,77,70,.16); }
+.dock-actions button.leave-session-button { min-width: 96px; justify-content: center; color: #e7c2bd; background: rgba(139,77,70,.16); }
 .dock-actions button:hover { background: rgba(255,255,255,.14); }
-.dock-actions button.tired-button { color: #6c5a39; background: rgba(244,222,166,.13); }
+.dock-actions button.tired-button { color: #f4dea6; background: rgba(244,222,166,.13); }
 .dock-actions button.tired-button.active { color: #3c5e56; background: #dff3e9; border-color: rgba(177,220,202,.35); }
 .dock-actions svg { width: 14px; height: 14px; }
 .dock-toast { width: min(410px, calc(100% - 16px)); margin: 8px auto 0; padding: 12px; border: 1px solid rgba(38,51,47,.1); background: rgba(255,255,255,.94); backdrop-filter: blur(15px); border-radius: 15px; box-shadow: 0 12px 35px rgba(35,44,41,.16); color: var(--ink); display: flex; align-items: center; gap: 11px; animation: slide .3s ease; }
@@ -378,7 +390,7 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
 .corner-bottom-left .spotlight-video, .corner-bottom-left.self-glass .member-video:first-child { transform-origin: bottom left; }
 .glass-leave { position: absolute; top: calc(100% + 7px); right: 0; border: 1px solid rgba(255,255,255,.8); border-radius: 12px; padding: 7px 11px; color: #875853; background: rgba(255,255,255,.76); box-shadow: 0 7px 20px rgba(36,57,52,.12); backdrop-filter: blur(14px); pointer-events: auto; font-size: 9px; font-weight: 700; }
 .corner-top-left .glass-leave, .corner-bottom-left .glass-leave { right: auto; left: 0; }
-.teammate-share-window { position: fixed; z-index: 18; top: 50%; left: 50%; width: min(828px, 64.4vw); height: min(598px, 76vh); overflow: hidden; border: 1px solid rgba(255,255,255,.78); border-radius: 24px; background: rgba(239,247,245,.72); box-shadow: 0 22px 65px rgba(30,49,45,.23), inset 0 1px 0 white; backdrop-filter: blur(24px) saturate(140%); animation: window-fade .35s ease both; }
+.teammate-share-window { position: fixed; z-index: 18; top: 50%; left: 50%; width: min(952px, 74vw); height: min(688px, 87vh); overflow: hidden; border: 1px solid rgba(255,255,255,.78); border-radius: 24px; background: rgba(239,247,245,.72); box-shadow: 0 22px 65px rgba(30,49,45,.23), inset 0 1px 0 white; backdrop-filter: blur(24px) saturate(140%); animation: window-fade .35s ease both; }
 .teammate-share-window.corner-top-right { top: 24px; right: 24px; transform-origin: top right; }
 .teammate-share-window.corner-top-left { top: 24px; left: 24px; transform-origin: top left; }
 .teammate-share-window.corner-bottom-right { right: 24px; bottom: 24px; transform-origin: bottom right; }
@@ -406,16 +418,16 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
 .shared-work main h3 { margin-top: 8px; font-size: clamp(14px, 1.6vw, 20px); }
 .equation { margin: 24px 0; font: 600 clamp(18px, 2.2vw, 28px) 'Manrope'; }
 .screen-answer { width: 72%; padding: 12px; border: 1px solid #dce5e1; border-radius: 10px; color: #9aa5a1; background: white; font-size: 10px; }
-.embedded-webcam { position: absolute; z-index: 3; right: 22px; bottom: 22px; width: 132px; height: 96px; overflow: hidden; border: 2px solid rgba(255,255,255,.86); border-radius: 18px; box-shadow: 0 12px 30px rgba(31,51,46,.22); }
-.embedded-webcam .avatar { width: 100%; height: 100%; border-radius: 0; font-size: 17px; }
-.embedded-webcam .avatar i { position: absolute; top: 8px; right: 8px; width: 9px; height: 9px; border: 2px solid white; border-radius: 50%; background: #ec7770; }
-.embedded-webcam > span { position: absolute; left: 7px; bottom: 6px; padding: 3px 5px; border-radius: 6px; color: white; background: rgba(29,47,45,.58); font-size: 7px; }
-.checkin-observers { position: absolute; z-index: 3; left: 22px; bottom: 22px; display: flex; gap: 7px; }
-.checkin-observers > div { width: 72px; height: 54px; position: relative; overflow: hidden; border: 2px solid rgba(255,255,255,.86); border-radius: 13px; box-shadow: 0 8px 22px rgba(31,51,46,.16); animation: glass-slide-right .4s ease both; }
+.embedded-webcam { position: absolute; z-index: 3; right: 22px; bottom: 22px; width: 264px; height: 192px; overflow: hidden; border: 2px solid rgba(255,255,255,.86); border-radius: 24px; box-shadow: 0 12px 30px rgba(31,51,46,.22); }
+.embedded-webcam .avatar { width: 100%; height: 100%; border-radius: 0; font-size: 34px; }
+.embedded-webcam .avatar i { position: absolute; top: 12px; right: 12px; width: 13px; height: 13px; border: 2px solid white; border-radius: 50%; background: #ec7770; }
+.embedded-webcam > span { position: absolute; left: 10px; bottom: 9px; padding: 4px 8px; border-radius: 8px; color: white; background: rgba(29,47,45,.58); font-size: 11px; }
+.checkin-observers { position: absolute; z-index: 3; left: 22px; bottom: 22px; display: flex; gap: 10px; }
+.checkin-observers > div { width: 144px; height: 108px; position: relative; overflow: hidden; border: 2px solid rgba(255,255,255,.86); border-radius: 18px; box-shadow: 0 8px 22px rgba(31,51,46,.16); animation: glass-slide-right .4s ease both; }
 .checkin-observers > div:nth-child(2) { animation-delay: .15s; }
 .checkin-observers > div:nth-child(3) { animation-delay: .3s; }
-.checkin-observers .avatar { width: 100%; height: 100%; border-radius: 0; font-size: 10px; }
-.checkin-observers span { position: absolute; left: 5px; bottom: 4px; padding: 2px 4px; border-radius: 5px; color: white; background: rgba(29,47,45,.55); font-size: 6px; }
+.checkin-observers .avatar { width: 100%; height: 100%; border-radius: 0; font-size: 20px; }
+.checkin-observers span { position: absolute; left: 8px; bottom: 7px; padding: 3px 6px; border-radius: 7px; color: white; background: rgba(29,47,45,.55); font-size: 10px; }
 .window-progress { position: absolute; z-index: 4; left: 20px; right: 20px; bottom: 14px; height: 3px; overflow: hidden; border-radius: 4px; background: rgba(83,108,101,.12); }
 .window-progress i { display: block; height: 100%; border-radius: inherit; background: #7fcbd4; transition: width 1s linear; }
 .duck-reflection-window > header div i { background: #7fcbd4; }
@@ -486,7 +498,6 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
 @media (min-width: 761px) and (max-height: 780px) {
   .focus-grid { padding-block: 10px; }
   .timer-ring { width: clamp(190px, 27vh, 220px); margin-block: 6px; }
-  .timer-ring strong { font-size: clamp(2.7rem, 6vh, 4rem); }
   .pomodoro-rounds { margin-top: 7px; }
   .pomodoro-console { margin-top: 8px; padding: 10px 12px; }
   .console-role { margin-bottom: 7px; padding-bottom: 7px; }
@@ -517,7 +528,7 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
   .focus-dock { gap: 7px; }
   .dock-detail { gap: 6px; }
   .dock-actions button { font-size: 0; }
-  .dock-actions button.break-button, .dock-actions button.tired-button, .dock-actions button.leave-session-button { width: 36px; padding-inline: 0; }
+  .dock-actions button.break-button, .dock-actions button.tired-button, .dock-actions button.leave-session-button { width: 36px; min-width: 0; padding-inline: 0; }
   .dock-actions svg { width: 15px; height: 15px; }
   .demo-menu { right: 12px; bottom: 12px; }
 }

@@ -154,6 +154,13 @@ export function requireHost(ctx: Ctx) {
 
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
+/** Keeps a client-proposed code when it is well formed and free; otherwise a random one. */
+export function proposedOrRandomCode(ctx: Ctx, proposed: string | undefined, len: number, taken: (code: string) => boolean): string {
+  const code = (proposed ?? '').trim().toUpperCase();
+  const wellFormed = code.length === len && [...code].every(c => CODE_ALPHABET.includes(c));
+  return wellFormed && !taken(code) ? code : randomCode(ctx, len, taken);
+}
+
 export function randomCode(ctx: Ctx, len: number, taken: (code: string) => boolean): string {
   for (let attempt = 0; attempt < 50; attempt++) {
     let code = '';
