@@ -5,7 +5,7 @@ Last updated: 2026-10-25 (session clips + clip compiler). Biggest gap: only the 
 ## Built
 | Part | Path | What works |
 |---|---|---|
-| SpacetimeDB module | `spacetimedb/` | Full schema + 37 reducers: sessions, goals, Pomodoro timers, `ingest_signal`, smoothing, fallback judge, scoring, call/nudge trigger, phone pairing, finalize + awards. Configured for maincloud db `calhacks-13-wyd`. See `components/spacetimedb.md`. |
+| SpacetimeDB module | `spacetimedb/` | Full schema + 40 reducers: sessions, goals, Pomodoro timers, `ingest_signal`, smoothing, fallback judge, scoring, call/nudge trigger, phone pairing, finalize + awards. Configured for maincloud db `calhacks-13-wyd`. See `components/spacetimedb.md`. |
 | Desktop activity tracking | `src/main/activityMonitor.ts` | Polls front app + window title + browser URL (Chrome/Safari/Arc/Brave) every 2 s via `osascript`. macOS only. |
 | Distraction trigger | `vision/facetime_trigger.py`, `vision/detector.py`, `vision/04_screen_monitor.py`, `src/main/facetimeTrigger.ts` | Runs only while a round timer is going. Every 5 s Gemini judges the OCR text (front app and named sites are context, not a block; planning tools count as on task). Off twice in a row, or webcam distracted twice while the screen looks on-task, prints `face time`. See `components/vision.md`. |
 | Desktop `.env` loader | `src/main/env.ts` | Loads root `.env` into `process.env` at startup (no override of shell vars). |
@@ -30,7 +30,7 @@ Last updated: 2026-10-25 (session clips + clip compiler). Biggest gap: only the 
 - Off-task pipeline: local OCR + Gemini classification → `ingest_signal` (`architecture/overview.md#off-task-pipeline`). Replaces desktop `categorize.ts`/`appClassifier.ts`/`claudeJudge.ts` as the verdict source.
 - Pomodoro: in a DB session all clocks/screens derive from the server (`components/spacetimedb.md#behavior`, skew-corrected); the local timer, `finishPomodoro`, break countdown and "Back to focus" exist only in the offline demo flow.
 - Pause: decided against. Host has `take_break` (force a break now, work round only) and `end_session`; the DB-session dock shows Start (lobby) + Take a break only.
-- Session lifecycle (published to maincloud 2026-10-25, additive): resume after restart, ended session → summary with real stats, host End session, 60 s disconnect reaper (`disconnect_timer`), name input (`set_profile`). Module verified via CLI on a scratch db; UI click-through untested.
+- Session lifecycle (published to maincloud, additive): resume after restart, ended session → summary with real stats, host End session, 60 s disconnect reaper (`disconnect_timer`), name input (`set_profile`). Module verified via CLI on a scratch db; UI click-through untested.
 - Worker ↔ SpacetimeDB: no subscription to `worker_pending_signal_events`, no `write_judgment`.
 - Summary screen shows a "Session highlights" card (link to `<clip server>/session/<id>`, copy button) once a compiler has published its address; not click-tested in the app. Needs `set_clip_page_base_url` published to maincloud (not yet) and the compiler running.
 - Phone sensor page (`phone/`, optional), replay clips (local-only replay screen; the old `replay_clip_meta` is unused).
@@ -69,7 +69,7 @@ Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` �
 ## Next up (demo critical path, suggested)
 1. Click-through test of the DB-backed UI (two instances, separate `--user-data-dir`); then `ingest_signal` from `activityMonitor` every 10 s. Feed the `face time` trigger into it (today it only opens the local LiveKit check-in).
 2. Worker subscribes to `worker_pending_signal_events` → `write_judgment`. (DB fallback judge covers the demo meanwhile.)
-3. Wire LiveKit into the new UI's check-in windows; start the call from the DB `CallIncoming` alert instead of the local desktop alert.
+3. Start the LiveKit check-in from the DB `CallIncoming` alert instead of the local `face time` line.
 4. Back summary screen with real stats.
 5. Resolve judge + category mismatches.
 
@@ -82,13 +82,12 @@ Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` �
 - 2026-10-24: module published to maincloud with `--delete-data=on-conflict` (data wiped; `init` re-seeded 12 settings): removed `member.joined_at`, `session.host_identity`; added `active_connection`, `CallEndedReason.Superseded`. Client bindings regenerated.
 - 2026-10-24: db wiped + republished (`--delete-data=on-conflict`) for the binary `AppCategory`; `seed_defaults` re-run. Any old session/token state is gone (identities persist per client token).
 - `set_pomodoro` published to maincloud 2026-10-24 (additive publish, data kept).
-- 2026-10-25: module published to maincloud (additive, data kept): `take_break`, `stop_pomodoro`, unlocked `set_pomodoro`, `disconnect_timer` reaper, `create_session(code?)`. Bindings are generated (no hand-added files).
+- Module published to maincloud (additive, data kept): `take_break`, `stop_pomodoro`, unlocked `set_pomodoro`, `disconnect_timer` reaper, `create_session(code?)`. Bindings are generated (no hand-added files).
 - Desktop DB client: `src/main/db/stdb.ts` (single connection in main; Node 18 needs `undici` for WebSocket). Renderer reads `window.wydDesktop.db` (`snapshot`, `call`, `onState`) via `src/renderer/src/db/useDb.ts`. Offline/not connected → entry screen falls back to the local demo flow (needs a typed code).
 - Regenerate bindings after any module change: `spacetime generate --lang typescript --module-path spacetimedb --out-dir src/main/db/module_bindings -y`.
 - Breaking schema changes need `spacetime publish calhacks-13-wyd --delete-data=on-conflict -y` (wipes data). Fresh db: `init` seeds defaults; existing db: run `seed_defaults`. Consent columns removed; republished 2026-10-24, db identity `c200f3d8…1bc7`.
 - `npm install` fails with `Cannot read properties of null (reading 'edgesOut')` unless `vite` is an explicit devDependency (added). Used `--legacy-peer-deps` to add Tailwind.
-- Renderer CSS imports Google Fonts: needs network. No CSP is set (old UI had none; `ui_to_integrate` CSP omitted because it blocks LiveKit/SpacetimeDB sockets).
-- `ui_to_integrate/` is the untouched UI source; safe to delete once the team confirms.
+- Renderer CSS imports Google Fonts: needs network. No CSP is set (a CSP would block LiveKit/SpacetimeDB sockets).
 - Every laptop needs `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` in `.env`; each signs its own call token.
 - LiveKit tokens are signed by hand in `livekitToken.ts`: `livekit-server-sdk` needs Node 19+, Electron 28 ships Node 18.
 - Worker runs `.ts` directly: needs Node 24 (`node -v`).
@@ -99,7 +98,6 @@ Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` �
 
 Kevin-specific (his machine/setup only):
 - Node v20.19.5 installed; worker needs Node 24, so `npm run fixtures` likely fails until upgraded.
-- Empty untracked `desktop/src/` folder at root; desktop code lives in `src/`.
 
 ## Reorganize procedure
 When asked to "reorganize" (or "update the docs"), Claude:

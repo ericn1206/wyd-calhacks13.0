@@ -8,7 +8,7 @@
 | SpacetimeDB module | `spacetimedb/` | SpacetimeDB TS module (V8) | spacetimedb 2.13.*, typescript ~5.6 |
 | Distraction trigger | `vision/` | Python 3.12 venv `vision/.venv`, spawned by desktop main on Goals submit | `requirements.txt`: mediapipe 0.10.21, opencv-contrib-python 4.11.0.86, numpy 1.26.4, pillow 11.1.0, google-generativeai 0.8.5. OCR is macOS Vision (`macos_vision_ocr.swift`), not a pip package. |
 
-Desktop build: `electron.vite.config.ts` (main/preload externalize deps; renderer uses React + Tailwind plugins). Root `tsconfig.json`: ES2020, CommonJS, strict.
+Desktop build: `electron.vite.config.ts` (main/preload externalize deps; renderer uses React + Tailwind plugins). Root `tsconfig.json`: ES2020, ESNext modules (bundler resolution), strict.
 
 ## Models
 | Use | Model | Where |
@@ -22,7 +22,7 @@ Desktop build: `electron.vite.config.ts` (main/preload externalize deps; rendere
 | Service | Status |
 |---|---|
 | SpacetimeDB maincloud, db `calhacks-13-wyd` | `spacetime.json`, `spacetime.local.json` |
-| LiveKit Cloud | check-in calls + session presence; see `../components/livekit-call.md`. Code kept but not wired into the new UI |
+| LiveKit Cloud | check-in calls + session presence; see `../components/livekit-call.md`. Wired via `overlay/LiveCheckIn.tsx` |
 | Cartesia voice agent | `src/main/cartesiaAgent.ts` + `src/renderer/src/cartesiaCall.ts` (from prod); unrouted while voice is off |
 
 ## Env vars (`.env`, gitignored)
@@ -51,4 +51,4 @@ Desktop build: `electron.vite.config.ts` (main/preload externalize deps; rendere
 | Generate client bindings | `spacetime generate --lang typescript --module-path spacetimedb --out-dir src/main/db/module_bindings -y` |
 
 ## macOS permissions (for the terminal/IDE running dev)
-Accessibility/Automation (System Events via `osascript`) · Screen Recording (window titles) · Camera (webcam, Python `vision/` process). Microphone not needed (voice onboarding archived).
+Accessibility/Automation (System Events via `osascript`) · Screen Recording (window titles) · Camera (webcam, Python `vision/` process). Microphone: requested with the camera (`wyd:media:request`) for LiveKit check-in audio.

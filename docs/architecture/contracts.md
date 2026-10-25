@@ -90,7 +90,7 @@ Recording of the unfocused person at each check-in (their screen, webcam as an i
 - Upload: `src/main/clipUpload.ts`, 240 KiB chunks (module limit 256 KiB); local file deleted afterwards (also all of `userData/clips/` at app start). Reducers + tables: `../components/spacetimedb-schema.md#19b-session_clip`.
 
 ## Desktop IPC (`src/preload/index.ts`)
-`window.wydDesktop` (typings: `src/renderer/src/electron.d.ts`):
+`window.wydDesktop` (typings: `src/renderer/src/electron.d.ts`; `desktop.d.ts` duplicates it, one is dead):
 | Method | Channel | Direction | Payload |
 |---|---|---|---|
 | `getPreferences` / `setPreferences` | `wyd:preferences:get` / `:set` | renderer → main (invoke) | `{checkInCorner}` in userData `preferences.json` |
@@ -103,7 +103,7 @@ Recording of the unfocused person at each check-in (their screen, webcam as an i
 | `onActivityUpdate` | `activity:update` | main → renderer | `ActivityState` (every 2 s); `App.tsx` turns `appName`/`url` into `OverlayState.currentActivity` (dock debug strip App chip: site hostname, else app name) |
 | `onActivityAlert` | `activity:alert` | main → renderer | `ActivityState` when `alertLevel` is `warning`/`alert`; no UI consumer yet |
 
-`window.circleAPI` (LiveKit, unwired; room/identity/attributes below; typings `src/renderer/src/circle.d.ts`): `requestMediaAccess`, `getCallToken` (`call:token`), `setCallMode` (`window:call-mode`).
+`window.circleAPI` (LiveKit, used by `overlay/LiveCheckIn.tsx`; room/identity/attributes below; typings `src/renderer/src/circle.d.ts`): `requestMediaAccess`, `getCallToken` (`call:token`), `setCallMode` (`window:call-mode`).
 
 `wydDesktop.setCaptureHidden(hidden)` → `wyd:window:capture-hidden` (sender window `setContentProtection`; used by `useCircleCall` while sharing the screen). `wydDesktop.onDetectorDebug` ← `wyd:detector-debug` (main → main window, `DetectorDebug` from `src/main/facetimeTrigger.ts`, one per interval) and `getDetectorLog()` → `wyd:detector-log:get` (last 300, kept in main). Preference `dockDebug: boolean` (userData `preferences.json`) toggles the dock strip. `wydDesktop.onDetectorStatus` ← `wyd:detector-status` (main → main window, `boolean` offTask, each trigger interval with a verdict; `App.tsx` sends `ingestSignal` with `appCategory` OnTask/OffTask, `seq` = ms timestamp, other fields neutral). `circleAPI.onFacetime` ← `facetime:start` (main → overlay window, when the trigger prints `face time`). `sessionAPI` (`session:start` / `session:user-response` / `session:phase` / `session:context-ready`) is exposed for the voice intro but unused while voice is off. Removed: `activityAPI`. Type: `ActivityState` in `src/main/activityMonitor.ts`.
 
@@ -120,10 +120,6 @@ Owner: `src/renderer/src/useCircleCall.ts`; token: `src/main/livekitToken.ts`.
 | `inCall` | `'1'` or `''` | media published / left |
 
 Active call = max `callEndsAt` over all participants, if in the future. Everyone in the call copies it, so the call survives the starter leaving.
-
-## Worker functions
-- `judge(topic, events: FocusEvent[], phase='work'|'break') → {status, confidence, reason}` (`worker/judge.ts`)
-- `categorizeUnknown(app, title) → ActivityCategory` (`worker/categorizeUnknown.ts`)
 
 ## Worker functions
 - `judge(topic, events: FocusEvent[], phase='work'|'break') → {status, confidence, reason}` (`worker/judge.ts`)
