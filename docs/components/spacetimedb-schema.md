@@ -93,11 +93,8 @@ mime (`video/mp4`) · size_bytes · chunk_count · received_chunks · complete �
 ### 19c. session_clip_chunk — private, no client view
 id (PK, auto_inc) · clip_id (idx) · seq · data: byte array. File = chunks ordered by `seq`. Chunk ≤ 256 KiB.
 
-### 19d. session_compilation — own session (`my_session_compilations`), written by the clip worker only
+### 19d. session_compilation — own session (`my_session_compilations`), written by the clip compiler (no authorization)
 session_id (PK) · status: CompilationStatus · clip_count (clips in the video at `url`; 0 until Ready) · url? (a path such as `/compilations/session-45-2.mp4`; add `clip_page_base_url`) · error? (a note on Ready, e.g. unreadable clips left out) · updated_at. Flow: `clip-compiler.md`.
-
-### 19e. compiler_lease — private (no client view)
-key (PK, always `clip_compiler`) · lease_id (random per compiler process) · holder_identity · label · url · started_at · heartbeat_at. At most one row: the clip compiler that may run (`../components/clip-compiler.md#one-compiler`).
 
 ### 20. session_summary — owner only
 id (PK, auto_inc) · session_id (idx) · member_id (idx) · total_secs · deep_work_secs ·
@@ -187,11 +184,8 @@ focus_ratio · indexed_at
 | begin_session_clip(clip_key, moment_at_ms, started_at_ms, duration_ms, width, height, fps, mime, size_bytes, chunk_count) | member | Caller's newest member row; allowed up to 600 s after the session ended / member left. Same key again restarts the upload. Limits: 64 MiB, 400 chunks, 60 s, 20 clips per member |
 | upload_clip_chunk(clip_key, seq, data) | clip owner | ≤ 256 KiB; same `seq` again replaces |
 | finish_session_clip(clip_key) | clip owner | Needs every chunk and exact `size_bytes`; sets `complete` |
-| set_session_compilation(session_id, status, clip_count, url?, error?) | worker only | Upsert; `Ready` needs `url` |
-| claim_compiler_lease(lease_id, label, url, takeover) | worker only | Free, stale (heartbeat > 20 s) or same lease id → take/refresh; else error `a clip compiler is already running: …` unless `takeover` |
-| heartbeat_compiler_lease(lease_id) | worker only | Error `lease lost` if someone else holds it |
-| release_compiler_lease(lease_id) | worker only | Frees the lease if it is ours |
-| set_clip_page_base_url(url) | worker only | Upserts `app_setting` `clip_page_base_url` (JSON string, no trailing `/`); http(s), ≤ 200 chars |
+| set_session_compilation(session_id, status, clip_count, url?, error?) | clip compiler (any caller) | Upsert; `Ready` needs `url` |
+| set_clip_page_base_url(url) | clip compiler (any caller) | Upserts `app_setting` `clip_page_base_url` (JSON string, no trailing `/`); http(s), ≤ 200 chars |
 | start_stuck(topic) / post_stuck_message(stuck_id, text) / resolve_stuck(stuck_id) | owner (worker posts as Assistant) | |
 | authorize_worker(identity) | worker | Add another worker identity |
 | report_worker_heartbeat(worker_id, model, queue_depth) | worker | |

@@ -160,14 +160,13 @@ The account that publishes becomes the database's worker (needed for the clip co
 SPACETIME_DB=calhacks-13-wyd-test
 ```
 
-**Step 1, Mac A (the host): start the clip compiler.** Both Macs must be on the same Wi-Fi (a VPN on either one can break the links and Gemini). If A is the Mac that published the database:
+**Step 1, Mac A (the host): start the clip compiler.** Both Macs must be on the same Wi-Fi (a VPN on either one can break the links and Gemini).
 
 ```bash
-export WYD_WORKER_TOKEN=$(grep spacetimedb_token ~/.config/spacetime/cli.toml | cut -d'"' -f2)
 npm run clips:host
 ```
 
-It prints the page address to share (`http://<A's address>:8787/session/<id>`). Allow incoming connections if macOS asks. If you start it on a different Mac than the publisher, start it once without the token and run the `authorize_worker` command it prints, as the publisher. A second compiler is refused (`a clip compiler is already running`); `npm run clips:host -- --takeover` replaces it.
+It prints the page address to share (`http://<A's address>:8787/session/<id>`). Allow incoming connections if macOS asks. Any Mac can run it (no authorization step). Run only one compiler per database.
 
 **Step 2, both Macs: run the app.**
 
@@ -218,11 +217,10 @@ What gets recorded: when the check-in fires, the drifting person's own laptop sa
 The compiler runs from the **repo root** and needs nothing beyond the normal install (section 2). Do **not** run `cd worker && npm install && npm run fixtures` for it: that is the separate AI-judge test (section 7) and has nothing to do with clips.
 
 1. `brew install ffmpeg` (only on the Mac that hosts the compiler).
-2. Set the worker identity (below), or skip it and authorize the identity the compiler prints.
-3. `npm run clips:host`. It should print `connected as worker ...` and the page address to share; `http://localhost:8787/health` answers `ok`.
-4. Leave it running while you use the app (`npm run dev` in another terminal); stop it with Ctrl+C.
+2. `npm run clips:host`. It should print `connected as <identity>; serving ...` and the page address to share; `http://localhost:8787/health` answers `ok`.
+3. Leave it running while you use the app (`npm run dev` in another terminal); stop it with Ctrl+C.
 
-If it will not start: `unknown reducer` means the database does not have this branch's module yet (publish it, see section 5); `a clip compiler is already running` means another one holds the lease (use that one, or add `-- --takeover`). More in Troubleshooting.
+If it will not start: `unknown reducer` means the database does not have this branch's module yet (publish it, see section 5); the module must be the lease-free one from this branch. More in Troubleshooting.
 
 ```bash
 npm run clips:host            # links use this Mac's network address, so other devices can open them
@@ -278,7 +276,7 @@ cd worker && npm install && npm run fixtures && cd ..
 nvm use 20
 ```
 
-The integration tests (database, compiler, lease) are skipped unless pointed at a scratch database, never maincloud: see `tests/session-clips/README.md`.
+The integration tests (database, compiler) are skipped unless pointed at a scratch database, never maincloud: see `tests/session-clips/README.md`.
 
 ## Troubleshooting
 
@@ -293,9 +291,8 @@ The integration tests (database, compiler, lease) are skipped unless pointed at 
 | `npm install` errors about vite | Keep `vite` pinned in `package.json` (`^5.4`); delete `node_modules` and `package-lock.json` only as a last resort |
 | Dock icon missing / odd window behavior | See `docs/status.md` Gotchas (macOS overlay) |
 | Need DB logs | `WYD_DEBUG=1 npm run dev`, or `tail -f ~/Library/Application Support/attentionmaxx/logs/stdb.log` |
-| `a clip compiler is already running: <host>` | Only one compiler per database. Use that one, or `npm run clips:host -- --takeover` |
 | `clips:host` / `worker:compile` fails with an unknown reducer | The database has an older module. Publish this branch's module to the database you use (test database: see "Test with two separate devices") |
-| `could not publish the page url (not an authorized worker?)` | Set `WYD_WORKER_TOKEN` to the publisher's token, or run the `authorize_worker` line the compiler prints |
+| Highlight links point at the wrong Mac, or videos keep re-rendering | Two compilers are running on one database. Stop all but one (nothing enforces it) |
 | Clip shows only the webcam / log says `screen recording off` | Grant Screen Recording to the app that launched `npm run dev`, then quit and reopen it |
 | Highlight page says "waiting" forever | The session has not ended, or the compiler is not running. "No highlights this time" means the check-in never fired in that session (Gemini unreachable? see "Drift never triggers") |
 | Link works on the host but not on the other device | Same Wi-Fi? VPN off? Allow incoming connections for Node in the macOS firewall. Start with `npm run clips:host` (not `worker:compile`) so links use the network address |
