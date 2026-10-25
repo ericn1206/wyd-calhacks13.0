@@ -524,3 +524,8 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
 
 /* Transparent full-screen overlay window (index.html?overlay=1) */
 .overlay-mode, .overlay-mode body { background: transparent; min-width: 0; overflow: hidden; }
+
+/* Invisible window-drag strip across the top of the main window (frameless titlebar). */
+html:not(.overlay-mode) body::before { content: ''; position: fixed; inset: 0 0 auto 0; height: 56px; z-index: 5; -webkit-app-region: drag; }
+html:not(.overlay-mode) nav { -webkit-app-region: drag; }
+nav button, nav a, nav input { -webkit-app-region: no-drag; }
