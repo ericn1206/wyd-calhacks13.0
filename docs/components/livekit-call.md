@@ -19,7 +19,7 @@ Room name, identity, token grants, participant attributes: `../architecture/cont
 Only worked in the old UI (`outdated/`). The new UI does not call `useCircleCall` yet.
 1. Each laptop: `.env` with `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` (`../architecture/stack.md`).
 2. `npm run dev` on both, same session code → each name appears in the other's circle bar.
-3. "Call circle" → both join automatically; call ends after 90 s (`CALL_DURATION_MS`).
+3. "Call circle" → both join automatically; call ends after 30 s (`CALL_DURATION_MS`, matches the check-in countdown).
 Credential check without the app: `POST <https URL>/twirp/livekit.RoomService/ListRooms` with a `roomList` token → 200.
 
 ## Current state

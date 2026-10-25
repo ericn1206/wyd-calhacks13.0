@@ -10,7 +10,7 @@ import {
   VideoPresets,
 } from 'livekit-client'
 
-const CALL_DURATION_MS = 90_000
+const CALL_DURATION_MS = 30_000 // matches the check-in window countdown
 // Call state lives on participant attributes so late joiners see it too.
 // Everyone in a call copies the end time, so it survives the starter leaving.
 const CALL_ENDS_AT = 'callEndsAt'
