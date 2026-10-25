@@ -133,6 +133,43 @@ describe('clip compilation, end to end', { skip }, () => {
     member.disconnect()
   })
 
+  it('the compiler publishes its page address, which every client can read', async () => {
+    const reader = await client()
+    const outDir = mkdtempSync(join(tmpdir(), 'wyd-out-'))
+    dirs.push(outDir)
+    const port = await freePort()
+    const second = await startCompiler({
+      uri: uri!, database: db!, token: workerToken, tokenFile: join(outDir, 'token'), outDir, port,
+      publicUrl: `http://10.1.2.3:${port}/`, quietMs: 60_000, retryMs: 1000, pollMs: 300, ffmpegBin: 'ffmpeg', log: () => {}
+    })
+    const row = await until('clip_page_base_url setting', () => reader.snapshot().tables.settings.find(s => s.key === 'clip_page_base_url' && String(s.valueJson).includes('10.1.2.3')))
+    assert.equal(JSON.parse(row.valueJson as string), `http://10.1.2.3:${port}`, 'trailing slash removed')
+    await second.stop()
+    reader.disconnect()
+  })
+
+  it('only a worker can set the page address', async () => {
+    const stranger = await client()
+    await assert.rejects(stranger.call('setClipPageBaseUrl', { url: 'http://evil:1' }), /only the AI worker/)
+    stranger.disconnect()
+  })
+
+  it('the page address must be an http(s) url', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wyd-it-'))
+    dirs.push(dir)
+    writeFileSync(join(dir, 'stdb-token.json'), JSON.stringify({ token: workerToken }))
+    process.env['WYD_TEST_USERDATA'] = dir
+    process.env['SPACETIME_URI'] = uri
+    process.env['SPACETIME_DB'] = db
+    const asWorker = new StdbClient()
+    await asWorker.connect()
+    await sleep(1500)
+    for (const bad of ['javascript:alert(1)', 'ftp://h/x', 'http://has space', '', `http://h/${'x'.repeat(250)}`]) {
+      await assert.rejects(asWorker.call('setClipPageBaseUrl', { url: bad }), /bad url/, bad)
+    }
+    asWorker.disconnect()
+  })
+
   it('only a worker can write compilation state', async () => {
     const stranger = await client()
     await assert.rejects(

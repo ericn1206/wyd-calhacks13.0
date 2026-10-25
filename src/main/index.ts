@@ -68,7 +68,8 @@ function createWindow(): void {
   mainWindow.on('closed', () => { overlayWindow?.close(); mainWindow = null })
   mainWindow.once('ready-to-show', () => mainWindow?.show())
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('https://')) shell.openExternal(url)
+    // http:// too: the session highlight page is served by the clip compiler on a LAN address.
+    if (url.startsWith('https://') || url.startsWith('http://')) shell.openExternal(url)
     return { action: 'deny' }
   })
 

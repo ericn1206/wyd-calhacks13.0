@@ -1082,6 +1082,19 @@ export const setSessionCompilation = spacetimedb.reducer(
   }
 );
 
+/**
+ * The clip compiler publishes where its pages live (e.g. http://192.168.1.20:8787) in the public `clip_page_base_url`
+ * setting, so every client can link to `<base>/session/<id>` before the compilation exists.
+ */
+export const setClipPageBaseUrl = spacetimedb.reducer({ url: t.string() }, (ctx, { url }) => {
+  requireWorker(ctx);
+  if (!/^https?:\/\/[^\s]+$/.test(url) || url.length > 200) throw new SenderError('bad url');
+  const valueJson = JSON.stringify(url.replace(/\/$/, ''));
+  const row = ctx.db.appSetting.key.find('clip_page_base_url');
+  if (row) ctx.db.appSetting.key.update({ ...row, valueJson });
+  else ctx.db.appSetting.insert({ key: 'clip_page_base_url', valueJson });
+});
+
 /** Ended sessions whose complete clips are not yet in a Ready compilation of the same size, with those clips. */
 function sessionsToCompile(db: ViewDb) {
   const bySession = new Map<bigint, ReturnType<typeof db.sessionClip.iter> extends Iterable<infer C> ? C[] : never>();

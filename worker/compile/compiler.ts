@@ -93,6 +93,9 @@ export async function startCompiler(o: CompilerOptions): Promise<RunningCompiler
   const conn = connection as DbConnection
   o.log(`connected as worker ${identity}; serving ${o.outDir} on :${port}; session page: ${o.publicUrl.replace(/\/$/, '')}/session/<id>`)
 
+  // Tell clients where the session pages live so the summary screen can link to them before the video exists.
+  await conn.reducers.setClipPageBaseUrl({ url: o.publicUrl }).catch(err => o.log(`could not publish the page url (not an authorized worker?): ${err instanceof Error ? err.message : err}`))
+
   async function setState(sessionId: bigint, status: 'Rendering' | 'Ready' | 'Failed', clipCount: number, url?: string, error?: string): Promise<void> {
     await conn.reducers.setSessionCompilation({ sessionId, status: { tag: status }, clipCount, url, error })
   }

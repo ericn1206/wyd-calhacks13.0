@@ -32,7 +32,7 @@ Last updated: 2026-10-25 (session clips + clip compiler). Biggest gap: only the 
 - Pause: decided against. Host has `take_break` (force a break now, work round only) and `end_session`; the DB-session dock shows Start (lobby) + Take a break only.
 - Session lifecycle (published to maincloud 2026-10-25, additive): resume after restart, ended session → summary with real stats, host End session, 60 s disconnect reaper (`disconnect_timer`), name input (`set_profile`). Module verified via CLI on a scratch db; UI click-through untested.
 - Worker ↔ SpacetimeDB: no subscription to `worker_pending_signal_events`, no `write_judgment`.
-- Compilation UI: nothing in the desktop shows `tables.compilations[].url` yet (summary screen).
+- Summary screen shows a "Session highlights" card (link to `<clip server>/session/<id>`, copy button) once a compiler has published its address; not click-tested in the app. Needs `set_clip_page_base_url` published to maincloud (not yet) and the compiler running.
 - Phone sensor page (`phone/`, optional), replay clips (local-only replay screen; the old `replay_clip_meta` is unused).
 - Screens: replay (no consent screen by decision; see `product/privacy.md`).
 - Worker: summary + replay captions.

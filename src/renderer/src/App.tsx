@@ -514,7 +514,7 @@ export default function App() {
 
   if (screen === 'break') return <BreakScreen minutes={upcomingBreakMinutes} seconds={breakSeconds} goals={activeGoals} checked={checked} setChecked={updateChecked} onReturn={dbSession ? undefined : returnFromBreak} onEnd={dbSession?.isHost ? endSession : undefined} />
 
-  if (screen === 'summary') return <SummaryScreen checked={checked} goalCount={activeGoals.length} stats={db.ended} />
+  if (screen === 'summary') return <SummaryScreen checked={checked} goalCount={activeGoals.length} stats={db.ended} clip={db.ended?.clipLink ? { link: db.ended.clipLink, state: db.ended.clipState } : null} />
 
   return <main className="focus-page">
     <div className="demo-menu">

@@ -61,6 +61,7 @@ import RespondTakeoverReducer from "./respond_takeover_reducer";
 import RespondToCallReducer from "./respond_to_call_reducer";
 import SeedDefaultsReducerReducer from "./seed_defaults_reducer_reducer";
 import SetCallRoomUrlReducer from "./set_call_room_url_reducer";
+import SetClipPageBaseUrlReducer from "./set_clip_page_base_url_reducer";
 import SetGoalsReducer from "./set_goals_reducer";
 import SetPomodoroReducer from "./set_pomodoro_reducer";
 import SetProfileReducer from "./set_profile_reducer";
@@ -390,6 +391,7 @@ const reducersSchema = __reducers(
   __reducerSchema("respond_to_call", RespondToCallReducer),
   __reducerSchema("seed_defaults", SeedDefaultsReducerReducer),
   __reducerSchema("set_call_room_url", SetCallRoomUrlReducer),
+  __reducerSchema("set_clip_page_base_url", SetClipPageBaseUrlReducer),
   __reducerSchema("set_goals", SetGoalsReducer),
   __reducerSchema("set_pomodoro", SetPomodoroReducer),
   __reducerSchema("set_profile", SetProfileReducer),

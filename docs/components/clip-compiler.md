@@ -25,6 +25,8 @@ worker: wait COMPILE_QUIET_SECS since the last change (clips of the last 20 s ar
 - `Failed` → error text in the row; retried after 60 s.
 
 ## Shareable link
+Summary screen: the desktop builds `<base>/session/<session.id>` itself. `<base>` = `app_setting` `clip_page_base_url`, which the compiler writes on every start (`set_clip_page_base_url(url)`, worker-only, http(s) only) from `COMPILE_PUBLIC_URL`; the card's state (waiting/rendering/ready/failed) comes from `my_session_compilations`. Code: `useDb.ts` `clipInfo`, `SummaryScreen.tsx` `HighlightCard`. No card until a compiler has published its address (the video `url` itself is in `session_compilation`, but the page link must exist before that row does).
+
 `<COMPILE_PUBLIC_URL>/session/<session id>` works before the session ends: it shows "waiting for the session to end", then "putting your clips together", then the video, without a reload. Status JSON: `{state: waiting|rendering|ready|failed, clipCount?, video?, error?}` (`waiting` also for ids the worker has never heard of). The id is `session.id` (`tables.sessions[].id` in the desktop snapshot). The page is served by this process, so it only loads while it runs.
 
 ## Run

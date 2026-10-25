@@ -185,6 +185,7 @@ focus_ratio · indexed_at
 | upload_clip_chunk(clip_key, seq, data) | clip owner | ≤ 256 KiB; same `seq` again replaces |
 | finish_session_clip(clip_key) | clip owner | Needs every chunk and exact `size_bytes`; sets `complete` |
 | set_session_compilation(session_id, status, clip_count, url?, error?) | worker only | Upsert; `Ready` needs `url` |
+| set_clip_page_base_url(url) | worker only | Upserts `app_setting` `clip_page_base_url` (JSON string, no trailing `/`); http(s), ≤ 200 chars |
 | start_stuck(topic) / post_stuck_message(stuck_id, text) / resolve_stuck(stuck_id) | owner (worker posts as Assistant) | |
 | authorize_worker(identity) | worker | Add another worker identity |
 | report_worker_heartbeat(worker_id, model, queue_depth) | worker | |

@@ -11,7 +11,7 @@ export type DbSnapshot = {
   error: string | null
   /** Local clock minus server clock (ms); null until measured. Server time = Date.now() - clockOffsetMs. */
   clockOffsetMs: number | null
-  tables: Record<'sessions' | 'members' | 'goals' | 'statuses' | 'contexts' | 'scores' | 'calls' | 'callParticipants' | 'alerts' | 'summaries' | 'awards' | 'users', Row[]>
+  tables: Record<'sessions' | 'members' | 'goals' | 'statuses' | 'contexts' | 'scores' | 'calls' | 'callParticipants' | 'alerts' | 'summaries' | 'awards' | 'compilations' | 'settings' | 'users', Row[]>
 }
 
 export type DbSession = {
@@ -28,14 +28,31 @@ export type DbSession = {
   memberId: number
 }
 
-export type DbEnded = { sessionId: number; name: string; totalSecs: number; deepWorkSecs: number; interruptions: number; goalsCompleted: number; goalsTotal: number } | null
+export type DbEnded = {
+  sessionId: number; name: string; totalSecs: number; deepWorkSecs: number; interruptions: number; goalsCompleted: number; goalsTotal: number
+  /** `<clip server>/session/<id>`: opens before the video exists and plays it once ready. null until the clip compiler has published its address. */
+  clipLink: string | null
+  /** The compiler's state for this session; `waiting` until it has written a row. */
+  clipState: 'waiting' | 'rendering' | 'ready' | 'failed'
+} | null
 
 const EMPTY: DbSnapshot = {
   connected: false, identity: null, error: null, clockOffsetMs: null,
-  tables: { sessions: [], members: [], goals: [], statuses: [], contexts: [], scores: [], calls: [], callParticipants: [], alerts: [], summaries: [], awards: [], users: [] }
+  tables: { sessions: [], members: [], goals: [], statuses: [], contexts: [], scores: [], calls: [], callParticipants: [], alerts: [], summaries: [], awards: [], compilations: [], settings: [], users: [] }
 }
 
 const tag = (v: unknown) => (v as Tag | undefined)?.tag ?? ''
+
+/** Link to the session's highlight page and the compiler's progress, from `app_setting` + `session_compilation`. */
+export function clipInfo(tables: DbSnapshot['tables'], sessionId: number): Pick<NonNullable<DbEnded>, 'clipLink' | 'clipState'> {
+  let base = ''
+  try { base = JSON.parse(tables.settings.find((s) => s.key === 'clip_page_base_url')?.valueJson ?? '""') } catch { /* no link */ }
+  const status = tag(tables.compilations.find((c) => c.sessionId === sessionId)?.status).toLowerCase()
+  return {
+    clipLink: typeof base === 'string' && base ? `${base}/session/${sessionId}` : null,
+    clipState: status === 'ready' || status === 'rendering' || status === 'failed' ? status : 'waiting'
+  }
+}
 const initialsOf = (name: string) => name.replace(/[^A-Za-z0-9 ]/g, '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?'
 
 export function useDb() {
@@ -75,7 +92,8 @@ export function useDb() {
     const ended: DbEnded = endedRow ? {
       sessionId: endedRow.id, name: endedRow.name,
       totalSecs: sum?.totalSecs ?? 0, deepWorkSecs: sum?.deepWorkSecs ?? 0, interruptions: sum?.interruptionCount ?? 0,
-      goalsCompleted: sum?.goalsCompleted ?? 0, goalsTotal: sum?.goalsTotal ?? 0
+      goalsCompleted: sum?.goalsCompleted ?? 0, goalsTotal: sum?.goalsTotal ?? 0,
+      ...clipInfo(tables, endedRow.id)
     } : null
 
     const users = new Map(tables.users.map((u) => [u.identity as string, u]))
