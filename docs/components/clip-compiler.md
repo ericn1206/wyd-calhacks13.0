@@ -55,6 +55,7 @@ Not enforced (no lease, no authorization: the compiler reducers/views accept any
 | `COMPILE_OUT_DIR` | `worker/out/compilations` | where videos are written |
 | `COMPILE_QUIET_SECS` | `30` | wait after the last change before rendering |
 | `FFMPEG_BIN` | `ffmpeg` | |
+| `COMPILE_DEBUG` | unset | `1` logs why and after how long each WebSocket closed (`socket closed: code 1006 …`) |
 
 ## Tests
 `tests/session-clips/` (`npm run test:clips`): `compile-plan`, `compile-serve`, `compile-render` (needs ffmpeg), `network`, `compile.integration` (scratch db; full flow incl. late clip, empty session, reconnect, corrupt clip).
@@ -65,5 +66,6 @@ Not enforced (no lease, no authorization: the compiler reducers/views accept any
 - Videos are tied to the machine's folder (`COMPILE_OUT_DIR`), so a new machine or a wiped folder would leave Ready rows without files. The compiler therefore checks every Ready row each poll: if `session-<id>-<n>.mp4` is missing it sets the row back to `Rendering` (the module's views then list that session's clips again, since they hide Ready sessions), and the normal path renders it (up to 5 per poll, no quiet wait). Meanwhile the page says "putting your clips together". Option `rebuildMissing` (default on); several compilers with different folders would keep invalidating each other's videos. A first start on a new machine re-renders every old session, which streams their clips again.
 - `session_compilation.url` holds a path (`/compilations/session-<id>-<n>.mp4`), not an address: a changed IP or host never stales it. Readers add `app_setting` `clip_page_base_url` (desktop: `clipInfo().clipVideo`). Rows written before 2026-10-25 hold a full address; readers keep those as they are.
 - Chunks of every not-yet-compiled ended session are streamed to the worker on connect (large); a `Ready` compilation removes them from the worker's view.
+- Endless `disconnected; reconnecting` / `reconnected` every 5-15 s, with `COMPILE_DEBUG=1` showing `code 1006 … clean false`: the network cuts long-lived connections (seen 2026-10-25: any WebSocket or long HTTPS request from that Mac died after 3-12 s, even to unrelated hosts; not the compiler or SpacetimeDB). It still works between drops (each reconnect re-downloads the snapshot, and a reducer call in flight at the drop times out after 20 s and is retried on the next poll). Fix the network: another Wi-Fi or a phone hotspot, VPN/proxy/firewall off.
 - URLs point at the developer's machine: they stop working when the process stops (files persist in `worker/out/`; restart serves them again). Maincloud cannot call this server and does not need to.
 - No consent/privacy gating: `privacy.md`.

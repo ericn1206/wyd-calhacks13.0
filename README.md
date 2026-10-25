@@ -292,6 +292,7 @@ The integration tests (database, compiler) are skipped unless pointed at a scrat
 | Dock icon missing / odd window behavior | See `docs/status.md` Gotchas (macOS overlay) |
 | Need DB logs | `WYD_DEBUG=1 npm run dev`, or `tail -f ~/Library/Application Support/attentionmaxx/logs/stdb.log` |
 | `clips:host` / `worker:compile` fails with an unknown reducer | The database has an older module. Publish this branch's module to the database you use (test database: see "Test with two separate devices") |
+| Compiler logs `disconnected; reconnecting` every few seconds | The network is cutting long connections (`COMPILE_DEBUG=1 npm run clips:host` shows `code 1006`). Switch Wi-Fi or use a phone hotspot, turn off VPN/proxy. It keeps working between drops |
 | Highlight links point at the wrong Mac, or videos keep re-rendering | Two compilers are running on one database. Stop all but one (nothing enforces it) |
 | Clip shows only the webcam / log says `screen recording off` | Grant Screen Recording to the app that launched `npm run dev`, then quit and reopen it |
 | Highlight page says "waiting" forever | The session has not ended, or the compiler is not running. "No highlights this time" means the check-in never fired in that session (Gemini unreachable? see "Drift never triggers") |

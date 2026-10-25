@@ -45,10 +45,26 @@ export interface RunningCompiler {
 }
 
 // The SDK needs a global WebSocket; Node 20 has none.
-async function ensureWebSocket(): Promise<void> {
-  if (typeof (globalThis as { WebSocket?: unknown }).WebSocket !== 'undefined') return
-  const { WebSocket } = await import('undici')
-  ;(globalThis as { WebSocket?: unknown }).WebSocket = WebSocket
+async function ensureWebSocket(log: (m: string) => void): Promise<void> {
+  const g = globalThis as { WebSocket?: any }
+  if (typeof g.WebSocket === 'undefined') g.WebSocket = (await import('undici')).WebSocket
+  if (!process.env['COMPILE_DEBUG'] || g.WebSocket.__debug) return
+  // COMPILE_DEBUG=1: say why and after how much data each socket closed.
+  const Base = g.WebSocket
+  g.WebSocket = class extends Base {
+    static __debug = true
+    constructor(...args: unknown[]) {
+      super(...args)
+      let bytes = 0
+      const opened = Date.now()
+      this.addEventListener('message', (e: { data?: { byteLength?: number; size?: number; length?: number } | string }) => {
+        const d = e.data
+        bytes += typeof d === 'string' ? d.length : (d?.byteLength ?? d?.size ?? d?.length ?? 0)
+      })
+      this.addEventListener('close', (e: { code: number; reason: string; wasClean: boolean }) => log(`socket closed: code ${e.code} reason "${e.reason}" clean ${e.wasClean} after ${Date.now() - opened} ms, ${bytes} bytes received`))
+      this.addEventListener('error', (e: { message?: string; error?: unknown }) => log(`socket error: ${e.message ?? e.error ?? 'unknown'}`))
+    }
+  }
 }
 
 /** A reducer call on a connection that drops mid-call never settles; give up on it instead of blocking the worker. */
@@ -68,7 +84,7 @@ const EMPTY_GRACE_MS = 20_000
  * Reconnects by itself when the connection drops.
  */
 export async function startCompiler(o: CompilerOptions): Promise<RunningCompiler> {
-  await ensureWebSocket()
+  await ensureWebSocket(o.log)
   mkdirSync(o.outDir, { recursive: true })
   const savedToken = o.token ?? (existsSync(o.tokenFile) ? readFileSync(o.tokenFile, 'utf8').trim() : undefined)
   const pageBase = o.publicUrl.replace(/\/$/, '')
