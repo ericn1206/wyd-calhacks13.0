@@ -22,6 +22,7 @@ stop = threading.Event()
 lock = threading.Lock()
 webcam_distracted = False
 saw_webcam = False
+webcam_last = {}  # latest detector.py JSON line, for the debug output
 
 
 def load_screen():
@@ -35,7 +36,7 @@ def load_screen():
 
 
 def read_webcam(proc):
-    global webcam_distracted, saw_webcam
+    global webcam_distracted, saw_webcam, webcam_last
     if proc.stdout is None:
         return
     for line in proc.stdout:
@@ -49,6 +50,7 @@ def read_webcam(proc):
         with lock:
             saw_webcam = True
             webcam_distracted = bool(msg.get("distracted"))
+            webcam_last = msg
         if stop.is_set():
             break
 
@@ -80,9 +82,7 @@ def main():
     screen = None
     try:
         screen = load_screen()
-        import google.generativeai as genai
-        genai.configure(api_key=screen.gemini_key(), transport="rest")
-        screen.model = genai.GenerativeModel("gemini-3.5-flash-lite")
+        screen.setup_gemini()  # GEMINI_API_KEYS round robin (or the single GEMINI_API_KEY)
         screen.ensure_ocr()
     except SystemExit as err:
         print(f"screen monitor off: {err}", file=sys.stderr)
@@ -107,6 +107,8 @@ def main():
                     vote = "unknown"
             with lock:
                 cam_off = saw_webcam and webcam_distracted
+                cam_seen = saw_webcam
+                cam = dict(webcam_last)
             if vote == "off":
                 screen_streak += 1
                 cam_streak = 0
@@ -117,6 +119,23 @@ def main():
                 screen_streak = 0
                 cam_streak = 0
             hot = screen_streak >= STREAK_TO_FIRE or cam_streak >= STREAK_TO_FIRE
+            # This interval's verdict for the status dots (Electron reports it to SpacetimeDB).
+            status = "off" if vote == "off" or (vote == "ok" and cam_off) else "on" if vote == "ok" else "none"
+            if status != "none":
+                print(f"status {status}", flush=True)
+            # One JSON line per interval for the dock debug strip and the in-app detector log.
+            debug = {
+                "status": status,
+                "screen": vote,
+                "reason": str(screen.ui_state.get("reason", "")) if screen is not None else "screen monitor off",
+                "ocrChars": int(screen.ui_state.get("ocr_chars", 0)) if screen is not None else 0,
+                "webcam": ("distracted" if cam_off else "focused") if cam_seen else "none",
+                "face": bool(cam.get("face", False)),
+                "prob": round(float(cam.get("prob", 0.0)), 3),
+                "screenStreak": screen_streak,
+                "camStreak": cam_streak,
+            }
+            print("debug " + json.dumps(debug), flush=True)
             print(
                 f"interval screen={vote} webcam={cam_off} screen_streak={screen_streak} cam_streak={cam_streak}",
                 file=sys.stderr,
