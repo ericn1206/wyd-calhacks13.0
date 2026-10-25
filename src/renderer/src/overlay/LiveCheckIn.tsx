@@ -56,6 +56,17 @@ function Countdown({ endsAt }: { endsAt: number | null }) {
   return <strong>{mins}:{rest.toString().padStart(2, '0')}</strong>
 }
 
+function CallProgress({ endsAt, totalMs }: { endsAt: number | null; totalMs: number }) {
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 250)
+    return () => window.clearInterval(timer)
+  }, [])
+  const left = endsAt ? Math.max(0, endsAt - now) : 0
+  return <div className="window-progress"><i style={{ width: `${Math.min(100, (left / totalMs) * 100)}%` }} /></div>
+}
+
+const CHECKIN_MS = 30_000 // matches CALL_DURATION_MS in useCircleCall.ts
 const INVITE_SECONDS = 3 // Join prompt for a teammate's check-in; skipped when it runs out
 
 /**
@@ -166,7 +177,7 @@ export function LiveCheckIn({ sessionCode, displayName, corner, onActive, onLoca
       return
     }
     onLocalStart()
-    startRef.current()
+    startRef.current({ shareScreen: true }) // the person who drifted shares their screen
   }, [pulse, sessionCode, displayName, circle.status, circle.error, circle.inCall, circle.joining, circle.callActive, onLocalStart, onAlone])
 
   // Don't wait silently on LiveKit: if the room hasn't connected shortly after a trigger, say why.
@@ -202,6 +213,24 @@ export function LiveCheckIn({ sessionCode, displayName, corner, onActive, onLoca
   }
 
   if (!live && !notice && !circle.callError) return null
+
+  // Joined someone's check-in and they share their screen: their screen big, their webcam bottom-right,
+  // everyone else (and me) bottom-left — the layout of the Demo menu's "Teammate goes off task".
+  const share = live ? circle.screenShare : null
+  if (share) {
+    const sharerCam = circle.remotes.find((remote) => remote.peerId === share.peerId)?.stream ?? null
+    const others = circle.remotes.filter((remote) => remote.peerId !== share.peerId)
+    return <section className="teammate-share-window live-share" style={{ transform: 'translate(-50%, -50%)' }}>
+      <header><div><i /><span>{share.name}’s screen · group check-in</span></div><em><Countdown endsAt={circle.callEndsAt} /></em><button type="button" onClick={() => circle.leaveCall()}><Icon name="x" />Leave</button></header>
+      <div className="shared-screen live-shared-screen"><StreamVideo stream={share.stream} muted /></div>
+      <div className="embedded-webcam">{sharerCam ? <StreamVideo stream={sharerCam} /> : <div className="avatar bg-[#f4ddff]">{initials(share.name)}<i /></div>}<span>{share.name} · webcam</span></div>
+      <div className="checkin-observers">
+        {others.map((remote) => <div key={remote.peerId}>{remote.stream ? <StreamVideo stream={remote.stream} /> : <div className="avatar bg-[#dbe9ff]">{initials(remote.name)}</div>}<span>{remote.name}</span></div>)}
+        <div className="mirror">{circle.localStream && circle.cameraOn ? <StreamVideo stream={circle.localStream} muted /> : <div className="avatar bg-[#d9f2e5]">YO</div>}<span>You</span></div>
+      </div>
+      <CallProgress endsAt={circle.callEndsAt} totalMs={CHECKIN_MS} />
+    </section>
+  }
 
   return <>
     {live && (
