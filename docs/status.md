@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-24. Biggest gap: **activity signals do not reach SpacetimeDB** (`ingest_signal` uncalled), so no judgments, smoothing, scores or check-in triggers. Session create/join, goals, lobby roster, shared Pomodoro timer work against maincloud. Worker runs without the DB.
+Last updated: 2026-10-24. Biggest gap: only the detector's OnTask/OffTask verdict reaches SpacetimeDB (`ingest_signal` from `App.tsx`, every 10 s while Active/Break); webcam/activity fields are sent neutral. Session create/join, goals, lobby roster, shared Pomodoro timer work against maincloud. Worker runs without the DB.
 
 ## Built
 | Part | Path | What works |
@@ -40,7 +40,7 @@ Last updated: 2026-10-24. Biggest gap: **activity signals do not reach Spacetime
 Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` → `start_session` → server clock), teammates list (members + status), goals + `check_goal`, leave.
 | Feature | Needs |
 |---|---|
-| Off-task detection → DB | Call `ingest_signal` from `activityMonitor` (main) every 10 s; contract: `architecture/contracts.md` |
+| Off-task detection → DB | Done for the verdict: detector → `wyd:detector-status` → `ingest_signal` (`App.tsx`). Still to send: real webcam/activity fields (`architecture/contracts.md#signalinput`). |
 | Off-task → check-in | Drive the overlay check-in from `my_alerts` (`CallIncoming`) / `my_session_group_calls` + `respond_to_call`/`end_call`, replacing the Demo menu |
 | Check-in video | Wire LiveKit (`useCircleCall.ts`, `circleAPI`) into placeholder tiles; room from `group_call.room_url`. **Important.** |
 | Screen share in check-in | Hardcoded calculus mock; use `desktopCapturer` source |

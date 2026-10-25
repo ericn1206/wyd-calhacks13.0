@@ -26,6 +26,7 @@ declare global {
         onState(cb: (snapshot: unknown) => void): () => void
       }
       startTracking(context: { subject: string; goals: string[]; sites?: string; notes?: string }): Promise<void>
+      onDetectorStatus(cb: (offTask: boolean) => void): () => void
       onActivityUpdate(cb: (state: ActivityState) => void): void
       onActivityAlert(cb: (state: ActivityState) => void): void
       removeActivityListeners(): void

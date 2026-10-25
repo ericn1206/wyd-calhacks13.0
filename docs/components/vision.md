@@ -19,6 +19,7 @@ On Goals submit, run the webcam detector and the screen monitor. Print `face tim
 | Screen path | `is_off_task` two intervals in a row. Webcam is ignored. |
 | Webcam path | Screen on-task both intervals, and webcam `distracted` both intervals. |
 | Fire | Either path prints `face time` once. Any other interval resets both streaks. |
+| Status | Each interval with a verdict prints `status off` (screen off, or screen ok + webcam distracted) or `status on`; unknown prints nothing. → `wyd:detector-status` → `ingest_signal` → status table, which every status dot reads (own dock via `OverlayState.selfStatus`, partners via `members`). |
 | On fire | Overlay opens the live LiveKit check-in (`LiveCheckIn.tsx`) for the session code. Local trigger; not reported to the DB. |
 
 ## Run

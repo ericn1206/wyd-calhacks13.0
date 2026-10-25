@@ -117,6 +117,11 @@ def main():
                 screen_streak = 0
                 cam_streak = 0
             hot = screen_streak >= STREAK_TO_FIRE or cam_streak >= STREAK_TO_FIRE
+            # This interval's verdict for the status dots (Electron reports it to SpacetimeDB).
+            if vote == "off" or (vote == "ok" and cam_off):
+                print("status off", flush=True)
+            elif vote == "ok":
+                print("status on", flush=True)
             print(
                 f"interval screen={vote} webcam={cam_off} screen_streak={screen_streak} cam_streak={cam_streak}",
                 file=sys.stderr,

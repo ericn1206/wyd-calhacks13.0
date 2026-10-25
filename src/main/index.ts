@@ -208,7 +208,7 @@ function registerDesktopApi(): void {
     monitor?.setSessionContext(context)
     monitor?.start()
     const goal = [context.subject, ...context.goals, context.sites, context.notes].filter((part) => part && part.trim()).join('. ') || 'study'
-    startFacetimeTrigger(goal, publishFacetime)
+    startFacetimeTrigger(goal, publishFacetime, (offTask) => sendToRenderer('wyd:detector-status', offTask))
   })
 
   ipcMain.handle('session:start', async () => {

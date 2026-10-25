@@ -36,6 +36,12 @@ contextBridge.exposeInMainWorld('wydDesktop', {
   },
   // Activity tracking (src/main/activityMonitor.ts); UI does not consume these yet.
   startTracking: (context: { subject: string; goals: string[]; sites?: string; notes?: string }) => ipcRenderer.invoke('wyd:tracking:start', context),
+  // Webcam + screen detector verdict each interval (src/main/facetimeTrigger.ts); true = off task.
+  onDetectorStatus: (cb: (offTask: boolean) => void) => {
+    const handler = (_e: unknown, offTask: boolean) => cb(offTask)
+    ipcRenderer.on('wyd:detector-status', handler)
+    return () => { ipcRenderer.removeListener('wyd:detector-status', handler) }
+  },
   onActivityUpdate: (cb: (state: ActivityState) => void) => {
     ipcRenderer.on('activity:update', (_e, state) => cb(state))
   },

@@ -260,16 +260,33 @@ export default function App() {
     name: person.name, initials: person.initials, status: person.status, hex: person.hex,
   }))
   const membersKey = members.map((person) => `${person.name}:${person.status}:${person.hex ?? ''}`).join('|')
+  // My status exactly as partners see it (status table), so my dock and their screens agree.
+  const selfStatus = dbSession ? ((db.people.find((person) => person.me)?.status as 'focused' | 'drifting' | undefined) ?? 'focused') : null
+
+  // Report each detector verdict (vision/facetime_trigger.py, every 10 s) to SpacetimeDB: the server
+  // applies OnTask/OffTask immediately and every client's status dots read the same row.
+  useEffect(() => {
+    if (!serverActive) return
+    return window.wydDesktop?.onDetectorStatus((offTask) => {
+      void db.call('ingestSignal', { event: {
+        seq: BigInt(Date.now()), facePresent: true, eyesClosed: false, lookingAway: false, headYaw: 0, headPitch: 0,
+        postureSlouchScore: 0, phoneInHand: false, facialExpression: undefined, expressionConfidence: 0,
+        activeApp: 'screen', activeWindowTitle: undefined, activeUrlDomain: undefined,
+        appCategory: { tag: offTask ? 'OffTask' : 'OnTask' }, phoneState: { tag: 'Unknown' },
+        webcamConfidence: 0, idleSecs: 0, clientVersion: 'desktop',
+      } }).then((error) => { if (error) console.warn('[status] ingestSignal failed:', error) })
+    })
+  }, [serverActive])
 
   useEffect(() => {
     const state: OverlayState = {
       host: isHost, serverPhase: dbSession?.state ?? null, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, started: sessionStarted,
       onBreak: screen === 'break', breakSeconds, breakMinutes: upcomingBreakMinutes, checked,
       currentGoal: goals.find((g) => g.trim()) || '', isTired, tiredNotice, checkInCorner,
-      sessionCode: shareCall ? sessionCode : '', displayName: callName, members,
+      sessionCode: shareCall ? sessionCode : '', displayName: callName, members, selfStatus,
     }
     window.wydDesktop?.bridge.send({ type: 'state', state })
-  }, [overlayReady, isHost, dbSession?.state, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, sessionStarted, screen, breakSeconds, upcomingBreakMinutes, checked, goals, isTired, tiredNotice, checkInCorner, shareCall, sessionCode, callName, membersKey])
+  }, [overlayReady, isHost, dbSession?.state, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, sessionStarted, screen, breakSeconds, upcomingBreakMinutes, checked, goals, isTired, tiredNotice, checkInCorner, shareCall, sessionCode, callName, membersKey, selfStatus])
 
   const activeGoals = goals.filter((goal) => goal.trim())
   const finishPomodoro = () => {

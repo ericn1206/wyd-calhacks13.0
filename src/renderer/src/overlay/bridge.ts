@@ -20,6 +20,8 @@ export type OverlayState = {
   isTired: boolean
   tiredNotice: boolean
   checkInCorner: CheckInCorner
+  /** My status as the session sees it (SpacetimeDB); null outside a DB session (demo uses local state). */
+  selfStatus?: 'focused' | 'drifting' | null
   /** Shared by everyone in this study session. LiveKit room is lockin-<code>. */
   sessionCode: string
   displayName: string

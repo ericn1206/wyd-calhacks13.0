@@ -13,8 +13,11 @@ function projectRoot(): string {
   return process.cwd()
 }
 
-/** Run vision/facetime_trigger.py. A stdout line `face time` starts a circle check-in. */
-export function startFacetimeTrigger(goal: string, onTrigger: () => void): void {
+/**
+ * Run vision/facetime_trigger.py. A stdout line `face time` starts a circle check-in;
+ * `status on` / `status off` (every interval with a verdict) drive the status dots.
+ */
+export function startFacetimeTrigger(goal: string, onTrigger: () => void, onStatus: (offTask: boolean) => void): void {
   stopFacetimeTrigger()
   const root = projectRoot()
   const python = join(root, 'vision/.venv/bin/python')
@@ -33,6 +36,7 @@ export function startFacetimeTrigger(goal: string, onTrigger: () => void): void 
       const line = pending.slice(0, nl).trim()
       pending = pending.slice(nl + 1)
       if (line === 'face time') onTrigger()
+      else if (line === 'status on' || line === 'status off') onStatus(line === 'status off')
       else if (line) process.stdout.write(`${line}\n`)
       nl = pending.indexOf('\n')
     }
