@@ -9,7 +9,6 @@ export type OverlayState = {
   serverPhase: string | null
   focusSeconds: number
   pomodoroMinutes: number
-  pomodorosDone: number
   timerRunning: boolean
   /** Session has started (DB: Active/Break; local: timer has run). Stop is shown only then. */
   started: boolean
