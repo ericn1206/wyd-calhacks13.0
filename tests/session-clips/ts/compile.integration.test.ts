@@ -133,6 +133,45 @@ describe('clip compilation, end to end', { skip }, () => {
     member.disconnect()
   })
 
+  it('an ended session with no clips reports empty, and a dropped connection reports offline then recovers', async () => {
+    const member = await client()
+    await member.call('createSession', {
+      name: 'no clips',
+      settings: { pomodoroWorkSecs: none, pomodoroBreakSecs: none, offTaskThresholdSecs: none, callCooldownSecs: none, maxCallSecs: none, scoreboardEnabled: none, groupCallEnabled: none, topicDescription: none, allowedDomains: none, blockedDomains: none },
+      code: none
+    })
+    await sleep(300)
+    const sessionId = member.snapshot().tables.sessions.map(s => Number(s.id)).sort((a, b) => b - a)[0]
+    const outDir = mkdtempSync(join(tmpdir(), 'wyd-out-'))
+    dirs.push(outDir)
+    const port = await freePort()
+    const logs: string[] = []
+    const c = await startCompiler({
+      uri: uri!, database: db!, token: workerToken, tokenFile: join(outDir, 'token'), outDir, port,
+      publicUrl: `http://127.0.0.1:${port}`, quietMs: 0, emptyGraceMs: 1500, reconnectMs: 200, callTimeoutMs: 3000, retryMs: 1000, pollMs: 300, ffmpegBin: 'ffmpeg',
+      log: m => logs.push(m)
+    })
+    const status = async () => (await (await fetch(`http://127.0.0.1:${port}/session/${sessionId}/status`)).json()) as { state: string }
+
+    assert.equal((await status()).state, 'waiting', 'a running session is waiting')
+    await member.call('endSession', {})
+    let state = ''
+    const end = Date.now() + 20_000
+    while (Date.now() < end && state !== 'empty') { state = (await status()).state; if (state !== 'empty') await sleep(300) }
+    assert.equal(state, 'empty', 'ended without any clip')
+
+    c.dropConnection()
+    await sleep(50)
+    assert.equal((await status()).state, 'offline', 'no database connection')
+    const back = Date.now() + 20_000
+    while (Date.now() < back && (await status()).state === 'offline') await sleep(300)
+    assert.notEqual((await status()).state, 'offline', 'reconnected')
+    assert.ok(logs.some(l => l.includes('reconnected')), logs.join(' | '))
+    assert.equal(await (async () => { for (let i = 0; i < 60; i++) { const s = (await status()).state; if (s === 'empty') return s; await sleep(300) } return 'never' })(), 'empty', 'state is correct again after reconnecting')
+    await c.stop()
+    member.disconnect()
+  })
+
   it('the compiler publishes its page address, which every client can read', async () => {
     const reader = await client()
     const outDir = mkdtempSync(join(tmpdir(), 'wyd-out-'))

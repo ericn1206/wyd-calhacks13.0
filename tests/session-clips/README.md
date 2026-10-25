@@ -20,7 +20,7 @@ Feature: `contracts.md#session-clips`. No extra dependencies.
 | `ts/compile-serve.test.ts` | `worker/compile/serve.ts`: Range/206/416, HEAD, CORS, 404 for anything but compiled videos, path tricks; `/session/<id>` page and `/status` JSON for every state, numeric ids only |
 | `ts/compile-render.test.ts` | `worker/compile/render.ts` with real ffmpeg: order, mixed size/codec, no leftovers, errors. Skipped without ffmpeg |
 | `ts/summary-link.test.ts` | `useDb.ts` `clipInfo`: summary-screen link and state from `app_setting` + `session_compilation` |
-| `ts/compile.integration.test.ts` | Full flow on a real db: upload clips, end session, compiler renders + hosts, URL in `compilations`, late clip re-render, non-worker rejected. Needs ffmpeg + `WYD_TEST_WORKER_TOKEN` |
+| `ts/compile.integration.test.ts` | Full flow on a real db: upload clips, end session, compiler renders + hosts, URL in `compilations`, late clip re-render, ended session without clips → `empty`, dropped connection → `offline` then recovers, non-worker rejected. Needs ffmpeg + `WYD_TEST_WORKER_TOKEN` |
 
 Python needs `cv2` + `numpy`: uses `vision/.venv` (`npm run setup:vision`), else `WYD_TEST_PYTHON=/path/to/python`; skipped with a message if missing.
 

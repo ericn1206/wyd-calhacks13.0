@@ -1113,8 +1113,9 @@ function sessionsToCompile(db: ViewDb) {
 
 // Worker-only views (empty for everyone else).
 
+/** Every ended session, with or without clips: lets the compiler tell "no clips were saved" from "session still running". */
 export const workerEndedSessions = spacetimedb.view({ name: 'worker_ended_sessions', public: true }, t.array(session.rowType), ctx =>
-  isWorker(ctx.db, ctx.sender) ? sessionsToCompile(ctx.db).map(x => x.session) : []
+  isWorker(ctx.db, ctx.sender) ? [...ctx.db.session.iter()].filter(s => s.state.tag === 'Ended') : []
 );
 
 export const workerSessionClips = spacetimedb.view({ name: 'worker_session_clips', public: true }, t.array(sessionClip.rowType), ctx =>

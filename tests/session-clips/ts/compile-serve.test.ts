@@ -65,6 +65,20 @@ describe('session page', () => {
     assert.deepEqual(await status(7), { state: 'failed', error: 'ffmpeg exit 1' })
   })
 
+  it('reports an ended session without clips as empty and a lost database connection as offline', async () => {
+    states.set(8n, { state: 'empty' })
+    assert.deepEqual(await status(8), { state: 'empty' })
+    states.set(8n, { state: 'offline' })
+    assert.deepEqual(await status(8), { state: 'offline' })
+  })
+
+  it('the page has a message for every state, including empty and offline', async () => {
+    const html = await (await fetch(`${base}/session/1`)).text()
+    for (const text of ['Waiting for the session to end', 'Putting your clips together', 'Reconnecting to the session database', 'ended without a saved moment', 'Could not build the video']) {
+      assert.ok(html.includes(text), text)
+    }
+  })
+
   it('status is never cached, so the page sees changes', async () => {
     assert.equal((await fetch(`${base}/session/1/status`)).headers.get('cache-control'), 'no-store')
   })

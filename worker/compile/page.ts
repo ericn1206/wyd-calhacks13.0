@@ -1,8 +1,14 @@
 import { videoName } from './plan.ts'
 
-/** What the worker knows about a session's compilation. `waiting` = nothing yet (session still running, or no clips). */
+/**
+ * What the worker knows about a session's compilation.
+ * `waiting` = the session has not ended (or the worker has not seen it yet); `empty` = it ended and no clip was saved;
+ * `offline` = the worker lost its database connection and is reconnecting.
+ */
 export type CompileState =
   | { state: 'waiting' }
+  | { state: 'empty' }
+  | { state: 'offline' }
   | { state: 'rendering' }
   | { state: 'ready'; clipCount: number }
   | { state: 'failed'; error: string }
@@ -72,10 +78,13 @@ export function sessionPage(sessionId: bigint): string {
     }
     el('video').style.display = 'none';
     el('dl').hidden = true;
-    el('spin').style.display = 'block';
+    el('spin').style.display = s.state === 'empty' ? 'none' : 'block';
+    el('title').textContent = s.state === 'empty' ? 'No highlights this time' : 'Session highlights';
     el('msg').textContent =
       s.state === 'rendering' ? 'Putting your clips together…'
       : s.state === 'failed' ? 'Could not build the video yet (' + s.error + '). Trying again soon.'
+      : s.state === 'empty' ? 'This session ended without a saved moment. A clip is recorded when a check-in happens.'
+      : s.state === 'offline' ? 'Reconnecting to the session database. This page updates by itself.'
       : 'Waiting for the session to end. This page updates by itself.';
   }
   function poll() {
