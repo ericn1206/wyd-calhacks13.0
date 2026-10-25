@@ -17,6 +17,9 @@ await build({
   banner: { js: "import{createRequire as __cr}from'module';const require=__cr(import.meta.url);" },
   logLevel: 'error'
 })
-const child = spawn(process.execPath, ['--env-file-if-exists=' + join(here, '..', '..', '.env'), out], { stdio: 'inherit' })
+const child = spawn(process.execPath, ['--env-file-if-exists=' + join(here, '..', '..', '.env'), out], {
+  stdio: 'inherit',
+  env: { ...process.env, COMPILE_ROOT: join(here, '..', '..') }
+})
 child.on('exit', code => process.exit(code ?? 0))
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => child.kill(sig))

@@ -3,8 +3,9 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { startCompiler } from './compiler.ts'
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const env = process.env
+// run.mjs passes the repo root (the bundle lives in worker/compile/.build, one level deeper than this source).
+const root = env['COMPILE_ROOT'] || join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const port = Number(env['COMPILE_PORT'] ?? 8787)
 
 const compiler = await startCompiler({
