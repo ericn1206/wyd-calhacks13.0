@@ -40,6 +40,7 @@ export function startFacetimeTrigger(goal: string, onTrigger: () => void, onStat
     console.error('[facetime] no vision/.venv. Run npm run setup:vision')
     return
   }
+  // Second argument: everything the user mentioned (sites/apps); the trigger allows only apps named there.
   const args = [script, goal]
   if (sites.trim()) args.push(sites)
   const proc = spawn(python, args, { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] })

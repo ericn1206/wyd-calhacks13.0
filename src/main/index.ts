@@ -233,6 +233,8 @@ function registerDesktopApi(): void {
     }
     monitor?.setSessionContext(context)
     monitor?.start()
+    // Gemini judges relevance to the goal (subject + goals + notes); the sites/apps they mentioned feed the
+    // front-app allowlist in vision/facetime_trigger.py.
     const goal = [context.subject, ...context.goals, context.notes].filter((part) => part && part.trim()).join('. ') || 'study'
     const mentioned = [context.subject, ...context.goals, context.sites, context.notes].filter((part) => part && part.trim()).join('. ')
     startFacetimeTrigger(goal, publishFacetime, (offTask) => sendToRenderer('wyd:detector-status', offTask), recordDetectorDebug, mentioned)

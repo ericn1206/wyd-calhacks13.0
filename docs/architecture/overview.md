@@ -43,7 +43,7 @@ SpacetimeDB (same transaction as `ingest_signal`): judgment → status flips to 
 | Summary text, captions | AI worker (Claude) |
 
 ## Current reality
-- Desktop: a running round → `wyd:tracking:start` → `osascript` polling → `categorize.ts` + `claudeJudge.ts` (Gemini) → `activity:update` (dock: current site + `OFF-TASK`/`ON-TASK` reason). Same start runs `vision/facetime_trigger.py` every 5 s (named-app check, then OCR → Gemini). Two off-task intervals, or two on-task intervals with the webcam distracted, print `face time` and open the live check-in. See `../components/vision.md`.
+- Desktop: a running round → `wyd:tracking:start` → `osascript` polling → `categorize.ts` + `claudeJudge.ts` (Gemini) → `activity:update` (current app on the dock debug strip; local alerts). Same start runs `vision/facetime_trigger.py` every 5 s (named-app check, then OCR → Gemini). The dock pill shows that detector reason when it matches the synced status. Two off-task intervals, or two on-task intervals with the webcam distracted, print `face time` and open the live check-in. See `../components/vision.md`.
 - Calls + presence: desktop ↔ LiveKit Cloud directly (`../components/livekit-call.md`); not linked to DB `group_call`.
 - SpacetimeDB client: `src/main/db/stdb.ts` holds the one connection (main process), mirrors `my_*` views to the main window as plain-JSON snapshots (`wyd:db:state`), and executes reducers via `wyd:db:call`. Renderer hook: `src/renderer/src/db/useDb.ts`. The overlay window gets DB-derived state only through `App.tsx` → `OverlayState`. Debug log: `src/main/db/debugLog.ts`. Worker runs only as a fixtures CLI.
 

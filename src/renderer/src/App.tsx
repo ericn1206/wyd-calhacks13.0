@@ -113,6 +113,11 @@ export default function App() {
     return window.wydDesktop?.onDetectorDebug((entry) => setDetectorLog((log) => [...log, entry].slice(-300)))
   }, [])
   const latestDebug = detectorLog[detectorLog.length - 1] ?? null
+  // Dock pill reason (prod's "OFF-TASK: …" style): what the latest detector check said and why.
+  const statusReason = !latestDebug || latestDebug.status === 'none' ? ''
+    : latestDebug.status === 'off' && latestDebug.screen === 'ok' ? 'Looking away from the screen'
+    : latestDebug.reason
+  const statusReasonOff = latestDebug?.status === 'off'
   const toggleDockDebug = () => {
     const next = !dockDebug
     setDockDebug(next)
@@ -296,17 +301,10 @@ export default function App() {
   }))
   const membersKey = members.map((person) => `${person.name}:${person.status}:${person.hex ?? ''}`).join('|')
   // My status exactly as partners see it (status table), so my dock and their screens agree.
-  // What I'm on right now (activityMonitor polls every 2 s once tracking starts); shown on my dock.
-  // The same update carries the activity judge's verdict, shown as the dock status line.
+  // What I'm on right now (activityMonitor polls every 2 s once tracking starts); shown on the dock debug strip.
   const [currentActivity, setCurrentActivity] = useState('')
-  const [judgeOffTask, setJudgeOffTask] = useState(false)
-  const [judgeReason, setJudgeReason] = useState('')
   useEffect(() => {
-    window.wydDesktop?.onActivityUpdate((state) => {
-      setCurrentActivity(activityLabel(state.appName, state.url))
-      setJudgeOffTask(state.category === 'distracted')
-      setJudgeReason(state.reason ?? '')
-    })
+    window.wydDesktop?.onActivityUpdate((state) => setCurrentActivity(activityLabel(state.appName, state.url)))
     return () => window.wydDesktop?.removeActivityListeners()
   }, [])
   const selfStatus = dbSession ? ((db.people.find((person) => person.me)?.status as 'focused' | 'drifting' | undefined) ?? 'focused') : null
@@ -331,10 +329,10 @@ export default function App() {
       host: isHost, serverPhase: dbSession?.state ?? null, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, started: sessionStarted,
       onBreak: screen === 'break', breakSeconds, breakMinutes: upcomingBreakMinutes, checked,
       currentGoal: goals.find((g) => g.trim()) || '', isTired, tiredNotice, checkInCorner,
-      sessionCode: shareCall ? sessionCode : '', displayName: callName, members, selfStatus, currentActivity, judgeOffTask, judgeReason, debugEnabled: dockDebug, debug: latestDebug, tracking,
+      sessionCode: shareCall ? sessionCode : '', displayName: callName, members, selfStatus, currentActivity, debugEnabled: dockDebug, debug: latestDebug, tracking, statusReason, statusReasonOff,
     }
     window.wydDesktop?.bridge.send({ type: 'state', state })
-  }, [overlayReady, isHost, dbSession?.state, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, sessionStarted, screen, breakSeconds, upcomingBreakMinutes, checked, goals, isTired, tiredNotice, checkInCorner, shareCall, sessionCode, callName, membersKey, selfStatus, currentActivity, judgeOffTask, judgeReason, dockDebug, latestDebug, tracking])
+  }, [overlayReady, isHost, dbSession?.state, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, sessionStarted, screen, breakSeconds, upcomingBreakMinutes, checked, goals, isTired, tiredNotice, checkInCorner, shareCall, sessionCode, callName, membersKey, selfStatus, currentActivity, dockDebug, latestDebug, tracking, statusReason, statusReasonOff])
 
   const activeGoals = goals.filter((goal) => goal.trim())
 

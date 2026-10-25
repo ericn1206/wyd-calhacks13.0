@@ -22,13 +22,13 @@ export type OverlayState = {
   isTired: boolean
   tiredNotice: boolean
   checkInCorner: CheckInCorner
-  /** Front site/app from activityMonitor (e.g. `instagram.com`, `Notion`); '' until the first poll. */
+  /** Front site/app from activityMonitor (e.g. `instagram.com`, `Notion`); '' until the first poll. Shown on the debug strip. */
   currentActivity: string
-  /** Desktop activity judge (`claudeJudge.ts`). Empty reason until the first judgment. */
-  judgeOffTask: boolean
-  judgeReason: string
   /** Detector running (a round's timer is going). False → dock shows Idle / Not tracking. */
   tracking: boolean
+  /** Latest detector reason for the dock pill (Gemini / allowlist / webcam); '' when none. `statusReasonOff` = it was an off-task verdict. */
+  statusReason: string
+  statusReasonOff: boolean
   /** Dock debug strip (toggled in the Demo menu); `debug` is the latest detector interval, null until one arrives. */
   debugEnabled: boolean
   debug: DetectorDebug | null
