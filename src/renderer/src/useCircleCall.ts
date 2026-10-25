@@ -39,6 +39,8 @@ export interface CircleCall {
   callError: string
   peers: CirclePeer[]
   callActive: boolean
+  /** Name of the teammate whose call is active (who drifted), null if none or it's ours. */
+  callFrom: string | null
   callEndsAt: number | null
   inCall: boolean
   joining: boolean
@@ -50,6 +52,8 @@ export interface CircleCall {
   joinCall: () => void
   leaveCall: () => void
   dismissCallError: () => void
+  /** Skip the active call (no auto-join for it). */
+  declineCall: () => void
   toggleMute: () => void
   toggleCamera: () => void
 }
@@ -87,7 +91,11 @@ function ipcMessage(err: unknown): string {
   return text.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
 }
 
-export function useCircleCall(room: CircleRoom | null): CircleCall {
+export function useCircleCall(room: CircleRoom | null, options: { autoJoin?: boolean } = {}): CircleCall {
+  // false: a teammate's call only becomes an invite (the UI asks to join); our own startCall still joins.
+  const autoJoinRef = useRef(options.autoJoin ?? true)
+  autoJoinRef.current = options.autoJoin ?? true
+  const [callFrom, setCallFrom] = useState<string | null>(null)
   const selfId = useRef(crypto.randomUUID())
   const roomRef = useRef<Room | null>(null)
   const tracksRef = useRef<LocalTrack[]>([])
@@ -291,7 +299,9 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
 
     const endsAt = activeEndsAt(lk)
     if (endsAt !== callEndsAtRef.current) setCallWindow(endsAt)
-    if (endsAt && !inCallRef.current && !startingRef.current && declinedEndsAt.current !== endsAt) {
+    const starter = endsAt ? participants.find((participant) => endsAtOf(participant) === endsAt) : undefined
+    setCallFrom(starter ? starter.name || 'A teammate' : null)
+    if (autoJoinRef.current && endsAt && !inCallRef.current && !startingRef.current && declinedEndsAt.current !== endsAt) {
       void beginMedia()
     }
   }, [activeEndsAt, beginMedia, setCallWindow])
@@ -428,6 +438,10 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
     void window.circleAPI?.setCallMode(false)
   }, [leaveMedia])
 
+  const declineCall = useCallback(() => {
+    declinedEndsAt.current = callEndsAtRef.current
+  }, [])
+
   const dismissCallError = useCallback(() => {
     declinedEndsAt.current = callEndsAtRef.current
     setCallError('')
@@ -457,6 +471,7 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
     callError,
     peers,
     callActive,
+    callFrom,
     callEndsAt,
     inCall,
     joining,
@@ -467,6 +482,7 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
     startCall,
     joinCall,
     leaveCall,
+    declineCall,
     dismissCallError,
     toggleMute,
     toggleCamera,

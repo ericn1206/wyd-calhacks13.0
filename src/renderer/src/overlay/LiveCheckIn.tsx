@@ -56,11 +56,13 @@ function Countdown({ endsAt }: { endsAt: number | null }) {
   return <strong>{mins}:{rest.toString().padStart(2, '0')}</strong>
 }
 
+const INVITE_SECONDS = 3 // Join prompt for a teammate's check-in; skipped when it runs out
+
 /**
  * Real circle check-in. Joins the LiveKit room for this session code, and turns
  * cameras on when the distraction detector fires — or when someone else in the room does.
  */
-export function LiveCheckIn({ sessionCode, displayName, corner, onActive, onLocalStart, onEnded, onRoster, onAlone }: {
+export function LiveCheckIn({ sessionCode, displayName, corner, onActive, onLocalStart, onEnded, onRoster, onAlone, onInvite, joinInviteRef }: {
   sessionCode: string
   displayName: string
   corner: string
@@ -70,9 +72,14 @@ export function LiveCheckIn({ sessionCode, displayName, corner, onActive, onLoca
   onRoster: (ready: boolean, people: Person[]) => void
   /** The detector fired but nobody else can join (no session room, or alone in it): show the duck window instead. */
   onAlone: () => void
+  /** A teammate drifted: show the Join prompt under the dock (null hides it). */
+  onInvite: (invite: { name: string; seconds: number } | null) => void
+  /** Filled with the Join action for the dock's prompt. */
+  joinInviteRef: { current: () => void }
 }) {
   const room = sessionCode.length >= 4 ? { name: displayName, sessionCode } : null
-  const circle = useCircleCall(room)
+  // Teammates' calls are invites, not auto-joins: Join under the dock, or skip after 3 s.
+  const circle = useCircleCall(room, { autoJoin: false })
   const startRef = useRef(circle.startCall)
   startRef.current = circle.startCall
   const pending = useRef(false)
@@ -81,6 +88,41 @@ export function LiveCheckIn({ sessionCode, displayName, corner, onActive, onLoca
   const wasLive = useRef(false)
 
   const live = circle.inCall || circle.joining
+
+  // One invite per call (keyed by its end time); joined, skipped, or our own call → never prompt again.
+  const handledCall = useRef<number | null>(null)
+  const [invite, setInvite] = useState<{ endsAt: number; name: string; seconds: number } | null>(null)
+  useEffect(() => {
+    if (live && circle.callEndsAt) handledCall.current = circle.callEndsAt
+  }, [live, circle.callEndsAt])
+  useEffect(() => {
+    const endsAt = circle.callEndsAt
+    if (!circle.callActive || !endsAt || live || !circle.callFrom || handledCall.current === endsAt) {
+      setInvite((current) => (current && (!circle.callActive || live || current.endsAt !== endsAt) ? null : current))
+      return
+    }
+    setInvite((current) => (current?.endsAt === endsAt ? current : { endsAt, name: circle.callFrom ?? 'A teammate', seconds: INVITE_SECONDS }))
+  }, [circle.callActive, circle.callEndsAt, circle.callFrom, live])
+  useEffect(() => {
+    if (!invite) return
+    if (invite.seconds <= 0) {
+      handledCall.current = invite.endsAt
+      circle.declineCall()
+      setInvite(null)
+      return
+    }
+    const id = window.setTimeout(() => setInvite((current) => (current ? { ...current, seconds: current.seconds - 1 } : current)), 1000)
+    return () => window.clearTimeout(id)
+  }, [invite])
+  useEffect(() => {
+    onInvite(invite ? { name: invite.name, seconds: invite.seconds } : null)
+  }, [invite?.name, invite?.seconds, invite === null, onInvite])
+  joinInviteRef.current = () => {
+    if (!invite) return
+    handledCall.current = invite.endsAt
+    setInvite(null)
+    circle.joinCall()
+  }
   const rosterKey = circle.peers.map((peer) => `${peer.peerId}:${peer.name}`).join('|')
 
   useEffect(() => {
