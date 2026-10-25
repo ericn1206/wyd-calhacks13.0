@@ -80,6 +80,12 @@ No consent gating: all fields are stored as sent (consent flags and `set_consent
 
 Other reducers: `../components/spacetimedb-schema.md#reducers`.
 
+## Session clips
+Webcam clip of the unfocused person at each check-in, uploaded to SpacetimeDB (supersedes "video never leaves the laptop": `../product/decisions.md`).
+- Capture: `vision/detector.py` keeps 10 s of 320×240 JPEG frames. stdin line `clip <path>` (from Electron via `facetime_trigger.py`) → it adds 20 s, writes `<path>` as constant-fps (8) H.264 mp4 (fallback `mp4v`) and prints `{"clip": path|null, "error"?, "t": moment ms, "startedAt": first frame ms, "durationMs", "width", "height", "fps"}`; `facetime_trigger.py` re-prints it as `clip {json}` (type `ClipInfo`, `src/main/facetimeTrigger.ts`). A request while one is recording → `error: "busy"`.
+- Trigger: Electron `publishFacetime` (same moment the check-in opens, only while a DB session is not Ended) → `requestClip(newClipPath())`.
+- Upload: `src/main/clipUpload.ts`, 192 KiB chunks; local file deleted afterwards (also all of `userData/clips/` at app start). Reducers + tables: `../components/spacetimedb-schema.md#19b-session_clip`.
+
 ## Desktop IPC (`src/preload/index.ts`)
 `window.wydDesktop` (typings: `src/renderer/src/electron.d.ts`):
 | Method | Channel | Direction | Payload |

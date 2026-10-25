@@ -3,7 +3,8 @@ import { promises as fs } from 'fs'
 import { join } from 'path'
 import { ActivityMonitor } from './activityMonitor'
 import { createAgentSession } from './cartesiaAgent'
-import { startFacetimeTrigger, stopFacetimeTrigger, type DetectorDebug } from './facetimeTrigger'
+import { requestClip, startFacetimeTrigger, stopFacetimeTrigger, type ClipInfo, type DetectorDebug } from './facetimeTrigger'
+import { clearClipDir, newClipPath, uploadClip } from './clipUpload'
 import type { SessionContext } from './claudeJudge'
 import { loadEnv } from './env'
 import { createCallToken } from './livekitToken'
@@ -143,6 +144,20 @@ function publishFacetime(): void {
   if (!overlayWanted) return
   if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.showInactive()
   sendTo(overlayWindow, 'facetime:start')
+  recordClip()
+}
+
+// Clip of the off-task moment (10 s before, 20 s after) for the session's compilation. Only in a DB session;
+// the detector skips a request while it is still writing the previous clip.
+function recordClip(): void {
+  const snap = stdb.snapshot()
+  if (!snap.connected || !snap.tables.sessions.some(s => (s.state as { tag: string }).tag !== 'Ended')) return
+  if (!requestClip(newClipPath())) console.warn('[clip] tracking is off; no clip')
+}
+
+function handleClip(info: ClipInfo): void {
+  if (!info.clip) console.warn('[clip] detector could not record:', info.error)
+  else void uploadClip(stdb, info)
 }
 
 function registerDesktopApi(): void {
@@ -234,7 +249,7 @@ function registerDesktopApi(): void {
     monitor?.setSessionContext(context)
     monitor?.start()
     const goal = [context.subject, ...context.goals, context.sites, context.notes].filter((part) => part && part.trim()).join('. ') || 'study'
-    startFacetimeTrigger(goal, publishFacetime, (offTask) => sendToRenderer('wyd:detector-status', offTask), recordDetectorDebug)
+    startFacetimeTrigger(goal, publishFacetime, (offTask) => sendToRenderer('wyd:detector-status', offTask), recordDetectorDebug, handleClip)
   })
 
   ipcMain.handle('session:start', async () => {
@@ -258,6 +273,7 @@ app.whenReady().then(() => {
   // VPN tunnel is up, while macOS resolves them fine. Use the system resolver instead.
   app.configureHostResolver({ enableBuiltInResolver: false })
   configurePermissions()
+  clearClipDir()
   registerDesktopApi()
   createWindow()
 

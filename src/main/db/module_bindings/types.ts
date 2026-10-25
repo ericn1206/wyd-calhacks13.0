@@ -297,6 +297,9 @@ export type MySessionAwards = __Infer<typeof MySessionAwards>;
 export const MySessionCallParticipants = __t.object("MySessionCallParticipants", {});
 export type MySessionCallParticipants = __Infer<typeof MySessionCallParticipants>;
 
+export const MySessionClips = __t.object("MySessionClips", {});
+export type MySessionClips = __Infer<typeof MySessionClips>;
+
 export const MySessionContexts = __t.object("MySessionContexts", {});
 export type MySessionContexts = __Infer<typeof MySessionContexts>;
 
@@ -498,6 +501,35 @@ export const SessionAward = __t.object("SessionAward", {
   note: __t.string(),
 });
 export type SessionAward = __Infer<typeof SessionAward>;
+
+export const SessionClip = __t.object("SessionClip", {
+  id: __t.u64(),
+  clipKey: __t.string(),
+  sessionId: __t.u64(),
+  memberId: __t.u64(),
+  identity: __t.identity(),
+  momentAtMs: __t.u64(),
+  startedAtMs: __t.u64(),
+  durationMs: __t.u32(),
+  width: __t.u16(),
+  height: __t.u16(),
+  fps: __t.u8(),
+  mime: __t.string(),
+  sizeBytes: __t.u32(),
+  chunkCount: __t.u32(),
+  receivedChunks: __t.u32(),
+  complete: __t.bool(),
+  createdAt: __t.timestamp(),
+});
+export type SessionClip = __Infer<typeof SessionClip>;
+
+export const SessionClipChunk = __t.object("SessionClipChunk", {
+  id: __t.u64(),
+  clipId: __t.u64(),
+  seq: __t.u32(),
+  data: __t.byteArray(),
+});
+export type SessionClipChunk = __Infer<typeof SessionClipChunk>;
 
 export const SessionContext = __t.object("SessionContext", {
   sessionId: __t.u64(),

@@ -28,14 +28,15 @@ Subscribe like: `SELECT * FROM my_session_statuses`.
 | Own session | session, member, goal, status, focus_block, group_call, call_participant, takeover_request, session_award, session_context | `my_sessions`, `my_session_*` views |
 | Own session, gated | score | `my_session_scores`: own row always; others only if `scoreboard_enabled` |
 | Targeted member | alert | `my_alerts` |
+| Own session, gated | session_clip | `my_session_clips`: metadata of finished clips of anyone in the session, plus own unfinished uploads. No bytes |
 | Owner only | session_summary, stuck_session, stuck_message, phone_sensor, replay_clip_meta | `my_session_summaries`, `my_stuck_*`, `my_phone_sensor` (also the paired phone), `my_replay_clips` |
-| Private (no client view) | signal_event, judgment, score_event, call_cooldown, call_member_trigger, worker_heartbeat, focus_history_index, authorized_worker, timer tables | reducers only; worker views below |
+| Private (no client view) | signal_event, judgment, score_event, call_cooldown, call_member_trigger, worker_heartbeat, focus_history_index, authorized_worker, session_clip_chunk, timer tables | reducers only; worker views below |
 
 Worker-only views (empty for non-workers): `worker_pending_signal_events`, `worker_recent_judgments`,
 `worker_pending_summaries`, `worker_summary_goals`,
 `worker_session_contexts`, `worker_open_stuck_sessions`, `worker_open_stuck_messages`.
 
-No table stores video, images, or audio. `replay_clip_meta` holds a hash of the local path, and the clip stays on the laptop.
+Video: only `session_clip_chunk.data` (320×240 H.264 mp4 webcam clips, 30 s: 10 s before to 20 s after an off-task check-in). Uploaded by the unfocused member's laptop right after local recording (`begin_session_clip` → `upload_clip_chunk` × n → `finish_session_clip`); chunks are never mirrored to clients (`stdb.ts` VIEWS has no chunk view). The session compilation is not built. `replay_clip_meta` is unused (path hash only).
 
 ## Behavior
 

@@ -85,6 +85,14 @@ last_heartbeat_at? · state: PhoneSensorState · platform: PhonePlatform
 id (PK, auto_inc) · member_id (idx) · session_id (idx) · ts · duration_secs · reason_code ·
 local_path_hash · deleted_after_session
 
+### 19b. session_clip — own session (finished clips of anyone + own uploads in progress, via `my_session_clips`)
+id (PK, auto_inc) · clip_key (unique, client uuid) · session_id (idx) · member_id (idx, who was unfocused) · identity ·
+moment_at_ms (u64, off-task moment) · started_at_ms (u64, first frame ≈ moment − 10 s) · duration_ms · width · height · fps ·
+mime (`video/mp4`) · size_bytes · chunk_count · received_chunks · complete · created_at
+
+### 19c. session_clip_chunk — private, no client view
+id (PK, auto_inc) · clip_id (idx) · seq · data: byte array. File = chunks ordered by `seq`. Chunk ≤ 256 KiB.
+
 ### 20. session_summary — owner only
 id (PK, auto_inc) · session_id (idx) · member_id (idx) · total_secs · deep_work_secs ·
 longest_block_secs · interruption_count · top_distraction_category? · goals_completed · goals_total ·
@@ -169,7 +177,10 @@ focus_ratio · indexed_at
 | start_phone_pairing() | member | Code appears in `my_phone_sensor` |
 | pair_phone(code, platform) | phone page | Links the phone's identity |
 | phone_heartbeat(visible) | paired phone | |
-| add_replay_clip(duration, reason, path_hash) | member | Metadata only |
+| add_replay_clip(duration, reason, path_hash) | member | Metadata only (unused; superseded by `session_clip`) |
+| begin_session_clip(clip_key, moment_at_ms, started_at_ms, duration_ms, width, height, fps, mime, size_bytes, chunk_count) | member | Caller's newest member row; allowed up to 600 s after the session ended / member left. Same key again restarts the upload. Limits: 12 MiB, 64 chunks, 60 s, 20 clips per member |
+| upload_clip_chunk(clip_key, seq, data) | clip owner | ≤ 256 KiB; same `seq` again replaces |
+| finish_session_clip(clip_key) | clip owner | Needs every chunk and exact `size_bytes`; sets `complete` |
 | start_stuck(topic) / post_stuck_message(stuck_id, text) / resolve_stuck(stuck_id) | owner (worker posts as Assistant) | |
 | authorize_worker(identity) | worker | Add another worker identity |
 | report_worker_heartbeat(worker_id, model, queue_depth) | worker | |

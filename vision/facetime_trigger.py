@@ -3,6 +3,9 @@
 An interval is 10 seconds. Print face time when either streak hits 2:
 1. Screen monitor off-task two intervals in a row (webcam is ignored).
 2. Screen monitor on-task both intervals, and the webcam distracted both times.
+
+Electron stdin `clip <path>` is passed to the detector, which records 10 s before to 20 s after
+and writes an mp4. The detector's `{"clip": ...}` reply goes to stdout as `clip {...}`.
 """
 
 import importlib.util
@@ -47,12 +50,28 @@ def read_webcam(proc):
             msg = json.loads(text)
         except json.JSONDecodeError:
             continue
+        if "clip" in msg:
+            print("clip " + json.dumps(msg), flush=True)
+            continue
         with lock:
             saw_webcam = True
             webcam_distracted = bool(msg.get("distracted"))
             webcam_last = msg
         if stop.is_set():
             break
+
+
+def forward_clip_requests(proc):
+    """Pass `clip <path>` lines from Electron on to the detector."""
+    for line in sys.stdin:
+        if not line.startswith("clip ") or stop.is_set():
+            continue
+        try:
+            if proc.stdin is not None:
+                proc.stdin.write(line.encode())
+                proc.stdin.flush()
+        except (BrokenPipeError, ValueError, OSError):
+            return
 
 
 def screen_vote(screen, goal):
@@ -78,6 +97,7 @@ def main():
         stderr=None,
     )
     threading.Thread(target=read_webcam, args=(proc,), daemon=True).start()
+    threading.Thread(target=forward_clip_requests, args=(proc,), daemon=True).start()
 
     screen = None
     try:

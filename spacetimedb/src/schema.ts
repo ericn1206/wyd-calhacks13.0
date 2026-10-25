@@ -330,6 +330,42 @@ export const replayClipMeta = table(
   }
 );
 
+// 19b. session_clip (private; metadata of one 30 s webcam clip of an off-task moment, read via my_session_clips).
+// The bytes live in session_clip_chunk and are not mirrored to clients.
+export const sessionClip = table(
+  { name: 'session_clip' },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    clipKey: t.string().unique(), // client-chosen uuid; reducers can't return ids
+    sessionId: t.u64().index('btree'),
+    memberId: t.u64().index('btree'), // who was unfocused
+    identity: t.identity(),
+    momentAtMs: t.u64(), // the confirmed off-task moment, client epoch ms
+    startedAtMs: t.u64(), // first frame, client epoch ms (≈ moment − 10 s)
+    durationMs: t.u32(),
+    width: t.u16(),
+    height: t.u16(),
+    fps: t.u8(),
+    mime: t.string(),
+    sizeBytes: t.u32(),
+    chunkCount: t.u32(),
+    receivedChunks: t.u32(),
+    complete: t.bool(),
+    createdAt: t.timestamp(),
+  }
+);
+
+// 19c. session_clip_chunk (private; no client view). Concatenate by seq to get the file.
+export const sessionClipChunk = table(
+  { name: 'session_clip_chunk' },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    clipId: t.u64().index('btree'),
+    seq: t.u32(),
+    data: t.byteArray(),
+  }
+);
+
 // 20. session_summary (owner only)
 export const sessionSummary = table(
   { name: 'session_summary' },
@@ -528,6 +564,8 @@ const spacetimedb = schema({
   takeoverRequest,
   phoneSensor,
   replayClipMeta,
+  sessionClip,
+  sessionClipChunk,
   sessionSummary,
   sessionAward,
   stuckSession,

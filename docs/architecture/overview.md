@@ -32,6 +32,14 @@ SpacetimeDB (same transaction as `ingest_signal`): judgment → status flips to 
 - No hold on OffTask: `ingest_signal` judges, flips status and triggers in one call; `off_task_threshold_secs` defaults to 0. Returning to on-task still waits `smoothing_hold_secs` (60 s). Limits that remain: `call_cooldown_secs` 600 (inside cooldown the member gets a `NudgeSelf` instead of a call), one call-or-nudge per off-task episode, ≥2 members for a call.
 - Needs: OCR choice, `GEMINI_API_KEY` (see `stack.md`), capture interval, Screen Recording permission.
 
+## Session clips
+```
+detector.py: rolling 10 s of 320×240 JPEGs (memory only)
+face time → Electron publishFacetime → stdin `clip <path>` → detector adds 20 s → mp4 on disk
+  → `clip {json}` → clipUpload.ts → begin_session_clip / upload_clip_chunk × n / finish_session_clip → SpacetimeDB (session_clip + session_clip_chunk) → local file deleted
+```
+Details: `contracts.md#session-clips`. Only the unfocused person's own laptop records and uploads.
+
 ## Who writes what
 | Data | Writer |
 |---|---|

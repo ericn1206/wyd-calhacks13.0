@@ -37,6 +37,7 @@ import {
 import AddReplayClipReducer from "./add_replay_clip_reducer";
 import ApplySmoothingReducerReducer from "./apply_smoothing_reducer_reducer";
 import AuthorizeWorkerReducer from "./authorize_worker_reducer";
+import BeginSessionClipReducer from "./begin_session_clip_reducer";
 import CheckGoalReducer from "./check_goal_reducer";
 import CompleteTakeoverReducer from "./complete_takeover_reducer";
 import CreateSessionReducer from "./create_session_reducer";
@@ -44,6 +45,7 @@ import DeleteReplayMetaOnEndReducer from "./delete_replay_meta_on_end_reducer";
 import EndCallReducerReducer from "./end_call_reducer_reducer";
 import EndSessionReducer from "./end_session_reducer";
 import FinalizeSessionReducerReducer from "./finalize_session_reducer_reducer";
+import FinishSessionClipReducer from "./finish_session_clip_reducer";
 import IngestSignalReducer from "./ingest_signal_reducer";
 import JoinSessionReducer from "./join_session_reducer";
 import LeaveSessionReducer from "./leave_session_reducer";
@@ -69,6 +71,7 @@ import StartStuckReducer from "./start_stuck_reducer";
 import StopPomodoroReducer from "./stop_pomodoro_reducer";
 import TakeBreakReducer from "./take_break_reducer";
 import UpdateSessionContextReducer from "./update_session_context_reducer";
+import UploadClipChunkReducer from "./upload_clip_chunk_reducer";
 import WriteJudgmentReducer from "./write_judgment_reducer";
 
 // Import all procedure arg schemas
@@ -81,6 +84,7 @@ import MyPhoneSensorRow from "./my_phone_sensor_table";
 import MyReplayClipsRow from "./my_replay_clips_table";
 import MySessionAwardsRow from "./my_session_awards_table";
 import MySessionCallParticipantsRow from "./my_session_call_participants_table";
+import MySessionClipsRow from "./my_session_clips_table";
 import MySessionContextsRow from "./my_session_contexts_table";
 import MySessionFocusBlocksRow from "./my_session_focus_blocks_table";
 import MySessionGoalsRow from "./my_session_goals_table";
@@ -174,6 +178,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MySessionCallParticipantsRow),
+  mySessionClips: __table({
+    name: 'my_session_clips',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MySessionClipsRow),
   mySessionContexts: __table({
     name: 'my_session_contexts',
     indexes: [
@@ -314,6 +325,7 @@ const reducersSchema = __reducers(
   __reducerSchema("add_replay_clip", AddReplayClipReducer),
   __reducerSchema("apply_smoothing", ApplySmoothingReducerReducer),
   __reducerSchema("authorize_worker", AuthorizeWorkerReducer),
+  __reducerSchema("begin_session_clip", BeginSessionClipReducer),
   __reducerSchema("check_goal", CheckGoalReducer),
   __reducerSchema("complete_takeover", CompleteTakeoverReducer),
   __reducerSchema("create_session", CreateSessionReducer),
@@ -321,6 +333,7 @@ const reducersSchema = __reducers(
   __reducerSchema("end_call", EndCallReducerReducer),
   __reducerSchema("end_session", EndSessionReducer),
   __reducerSchema("finalize_session", FinalizeSessionReducerReducer),
+  __reducerSchema("finish_session_clip", FinishSessionClipReducer),
   __reducerSchema("ingest_signal", IngestSignalReducer),
   __reducerSchema("join_session", JoinSessionReducer),
   __reducerSchema("leave_session", LeaveSessionReducer),
@@ -346,6 +359,7 @@ const reducersSchema = __reducers(
   __reducerSchema("stop_pomodoro", StopPomodoroReducer),
   __reducerSchema("take_break", TakeBreakReducer),
   __reducerSchema("update_session_context", UpdateSessionContextReducer),
+  __reducerSchema("upload_clip_chunk", UploadClipChunkReducer),
   __reducerSchema("write_judgment", WriteJudgmentReducer),
 );
 

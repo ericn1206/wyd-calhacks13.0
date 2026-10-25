@@ -31,4 +31,5 @@ On Goals submit, run the webcam detector and the screen monitor. Print `face tim
 ## Gotchas
 - Camera permission for the Python process. Screen Recording for OCR.
 - `detector.py` resizes frames to 640×480 for `distraction_model.json`.
+- `detector.py` also records clips on request (`ClipRecorder`; protocol: `../architecture/contracts.md#session-clips`). Needs no new packages. Expect ~1–3 MB per 30 s clip.
 - Do not merge `webcam-activity-detection`'s root `04_screen_monitor.py` (Windows `winocr`, hardcoded key).

@@ -19,7 +19,7 @@ const logFile = (): string | null => {
 export const logPath = (): string | null => logFile()
 
 const show = (v: unknown): string =>
-  JSON.stringify(v, (_k, x) => (typeof x === 'bigint' ? `${x}n` : x === undefined ? '∅' : x))
+  JSON.stringify(v, (_k, x) => (typeof x === 'bigint' ? `${x}n` : x === undefined ? '∅' : x instanceof Uint8Array ? `<${x.length} bytes>` : x))
 
 /** `[stdb 12:00:00.123] tag message {data}` → terminal and `userData/logs/stdb.log`. */
 export function dbLog(tag: string, message: string, data?: unknown): void {

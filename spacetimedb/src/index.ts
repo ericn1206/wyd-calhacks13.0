@@ -19,6 +19,8 @@ import spacetimedb, {
   phoneSensor,
   pomodoroTimer,
   replayClipMeta,
+  sessionClip,
+  sessionClipChunk,
   score,
   scoreTickTimer,
   callTimeoutTimer,
@@ -938,6 +940,121 @@ export const myPhoneSensor = spacetimedb.view({ name: 'my_phone_sensor', public:
 export const myReplayClips = spacetimedb.view({ name: 'my_replay_clips', public: true }, t.array(replayClipMeta.rowType), ctx =>
   [...myMemberIds(ctx.db, ctx.sender)].flatMap(id => [...ctx.db.replayClipMeta.memberId.filter(id)])
 );
+
+/** Clip metadata for every session the caller may read: finished clips of anyone, plus the caller's own uploads in progress. No bytes. */
+export const mySessionClips = spacetimedb.view({ name: 'my_session_clips', public: true }, t.array(sessionClip.rowType), ctx =>
+  mySessionIds(ctx.db, ctx.sender).flatMap(id =>
+    [...ctx.db.sessionClip.sessionId.filter(id)].filter(c => c.complete || c.identity.equals(ctx.sender))
+  )
+);
+
+// ── Session clips: 30 s webcam clip of an off-task moment (10 s before, 20 s after) ──
+// Flow: begin_session_clip → upload_clip_chunk × chunkCount → finish_session_clip. The clip is
+// finished locally before upload starts, so it may arrive after the session ended or the member left.
+
+const CLIP_MIME = 'video/mp4';
+const CLIP_MAX_BYTES = 12 * 1024 * 1024;
+const CLIP_CHUNK_MAX_BYTES = 256 * 1024;
+const CLIP_MAX_CHUNKS = 64;
+const CLIP_MAX_MS = 60_000;
+const CLIPS_PER_MEMBER = 20;
+const CLIP_GRACE_SECS = 600;
+
+/** The caller's newest member row, as long as its session is live or ended/left within the grace window. */
+function clipMember(ctx: Ctx) {
+  let latest: ReturnType<typeof ctx.db.member.id.find> = null;
+  for (const m of ctx.db.member.identity.filter(ctx.sender)) if (!latest || m.id > latest.id) latest = m;
+  const s = latest && ctx.db.session.id.find(latest.sessionId);
+  if (!latest || !s) throw new SenderError('you are not in a session');
+  const over = s.state.tag === 'Ended' ? s.endedAt : latest.leftAt;
+  if (over && secsBetween(over, ctx.timestamp) > CLIP_GRACE_SECS) throw new SenderError('session is over; clip too late');
+  return latest;
+}
+
+function ownClip(ctx: Ctx, clipKey: string) {
+  const clip = ctx.db.sessionClip.clipKey.find(clipKey);
+  if (!clip || !clip.identity.equals(ctx.sender)) throw new SenderError('unknown clip');
+  return clip;
+}
+
+export const beginSessionClip = spacetimedb.reducer(
+  {
+    clipKey: t.string(),
+    momentAtMs: t.u64(),
+    startedAtMs: t.u64(),
+    durationMs: t.u32(),
+    width: t.u16(),
+    height: t.u16(),
+    fps: t.u8(),
+    mime: t.string(),
+    sizeBytes: t.u32(),
+    chunkCount: t.u32(),
+  },
+  (ctx, a) => {
+    if (a.clipKey.length < 8 || a.clipKey.length > 64) throw new SenderError('bad clip key');
+    if (a.mime !== CLIP_MIME) throw new SenderError(`clip must be ${CLIP_MIME}`);
+    if (a.sizeBytes === 0 || a.sizeBytes > CLIP_MAX_BYTES) throw new SenderError('clip too large');
+    if (a.chunkCount === 0 || a.chunkCount > CLIP_MAX_CHUNKS) throw new SenderError('bad chunk count');
+    if (a.durationMs === 0 || a.durationMs > CLIP_MAX_MS) throw new SenderError('bad clip duration');
+    const m = clipMember(ctx);
+    // A retry of the same key restarts the upload from scratch.
+    const existing = ctx.db.sessionClip.clipKey.find(a.clipKey);
+    if (existing) {
+      if (!existing.identity.equals(ctx.sender)) throw new SenderError('clip key taken');
+      for (const c of [...ctx.db.sessionClipChunk.clipId.filter(existing.id)]) ctx.db.sessionClipChunk.id.delete(c.id);
+      ctx.db.sessionClip.id.delete(existing.id);
+    } else if ([...ctx.db.sessionClip.memberId.filter(m.id)].length >= CLIPS_PER_MEMBER) {
+      throw new SenderError('clip limit reached for this session');
+    }
+    ctx.db.sessionClip.insert({
+      id: 0n,
+      clipKey: a.clipKey,
+      sessionId: m.sessionId,
+      memberId: m.id,
+      identity: ctx.sender,
+      momentAtMs: a.momentAtMs,
+      startedAtMs: a.startedAtMs,
+      durationMs: a.durationMs,
+      width: a.width,
+      height: a.height,
+      fps: a.fps,
+      mime: a.mime,
+      sizeBytes: a.sizeBytes,
+      chunkCount: a.chunkCount,
+      receivedChunks: 0,
+      complete: false,
+      createdAt: ctx.timestamp,
+    });
+  }
+);
+
+export const uploadClipChunk = spacetimedb.reducer(
+  { clipKey: t.string(), seq: t.u32(), data: t.byteArray() },
+  (ctx, { clipKey, seq, data }) => {
+    const clip = ownClip(ctx, clipKey);
+    if (clip.complete) throw new SenderError('clip already finished');
+    if (seq >= clip.chunkCount) throw new SenderError('chunk out of range');
+    if (data.length === 0 || data.length > CLIP_CHUNK_MAX_BYTES) throw new SenderError('bad chunk size');
+    const dup = [...ctx.db.sessionClipChunk.clipId.filter(clip.id)].find(c => c.seq === seq);
+    if (dup) {
+      ctx.db.sessionClipChunk.id.update({ ...dup, data });
+      return;
+    }
+    ctx.db.sessionClipChunk.insert({ id: 0n, clipId: clip.id, seq, data });
+    ctx.db.sessionClip.id.update({ ...clip, receivedChunks: clip.receivedChunks + 1 });
+  }
+);
+
+export const finishSessionClip = spacetimedb.reducer({ clipKey: t.string() }, (ctx, { clipKey }) => {
+  const clip = ownClip(ctx, clipKey);
+  if (clip.complete) return;
+  const chunks = [...ctx.db.sessionClipChunk.clipId.filter(clip.id)];
+  const bytes = chunks.reduce((n, c) => n + c.data.length, 0);
+  if (chunks.length !== clip.chunkCount || bytes !== clip.sizeBytes) {
+    throw new SenderError(`clip incomplete: ${chunks.length}/${clip.chunkCount} chunks, ${bytes}/${clip.sizeBytes} bytes`);
+  }
+  ctx.db.sessionClip.id.update({ ...clip, complete: true });
+});
 
 // Worker-only views (empty for everyone else).
 
