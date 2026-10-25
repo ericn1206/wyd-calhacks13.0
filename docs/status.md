@@ -28,7 +28,7 @@ Last updated: 2026-10-25 (session clips + clip compiler). Biggest gap: only the 
 ## Missing
 - UI wiring still open: see table below (activity fields → DB, check-in from alerts). `activity:update` feeds the dock debug strip's current app. `activity:alert` is not consumed.
 - Off-task pipeline: local OCR + Gemini classification → `ingest_signal` (`architecture/overview.md#off-task-pipeline`). Replaces desktop `categorize.ts`/`appClassifier.ts`/`claudeJudge.ts` as the verdict source.
-- Pomodoro: in a DB session all clocks/screens derive from the server (`components/spacetimedb.md#behavior`, skew-corrected); the local timer, `finishPomodoro`, break countdown and "Back to focus" exist only in the offline demo flow. Long (20 min) break / "of 4" rounds: demo flow only.
+- Pomodoro: in a DB session all clocks/screens derive from the server (`components/spacetimedb.md#behavior`, skew-corrected); the local timer, `finishPomodoro`, break countdown and "Back to focus" exist only in the offline demo flow.
 - Pause: decided against. Host has `take_break` (force a break now, work round only) and `end_session`; the DB-session dock shows Start (lobby) + Take a break only.
 - Session lifecycle (published to maincloud 2026-10-25, additive): resume after restart, ended session → summary with real stats, host End session, 60 s disconnect reaper (`disconnect_timer`), name input (`set_profile`). Module verified via CLI on a scratch db; UI click-through untested.
 - Worker ↔ SpacetimeDB: no subscription to `worker_pending_signal_events`, no `write_judgment`.
@@ -47,7 +47,7 @@ Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` �
 | Off-task → check-in | Drive the overlay check-in from `my_alerts` (`CallIncoming`) / `my_session_group_calls` + `respond_to_call`/`end_call`, replacing the Demo menu |
 | "I'm tired" signal | Local only; no matching reducer (new contract item) |
 | Avatar | Name input done (`set_profile`); avatar color fixed `#7C8CF8` |
-| Break / goal check-in | Show `GoalCheckin` alerts + `mark_alert_delivered`; long (20 min) break not supported by module (one `pomodoro_break_secs`) |
+| Break / goal check-in | Show `GoalCheckin` alerts + `mark_alert_delivered` |
 | Summary extras | Summary shows real stats from `my_session_summaries`; awards, scores, Claude recap (worker `set_summary_text`) not shown |
 | Host leave | Module moves `is_host` to the lowest-id active member; UI shows no notice |
 | Overlay direct DB feed | Currently relayed through `App.tsx` |
