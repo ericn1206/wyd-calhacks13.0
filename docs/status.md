@@ -26,7 +26,7 @@ Last updated: 2026-10-24. Biggest gap: **activity signals do not reach Spacetime
 - UI wiring still open: see table below (activity → DB, check-in from alerts, LiveKit video). `activity:update`/`activity:alert` not consumed (UI uses Demo-menu triggers).
 - Off-task pipeline: local OCR + Gemini classification → `ingest_signal` (`architecture/overview.md#off-task-pipeline`). Replaces desktop `categorize.ts`/`appClassifier.ts`/`claudeJudge.ts` as the verdict source.
 - Pause: decided against. Host has `take_break` (force a break now, work round only) and `end_session`; the DB-session dock shows Start (lobby) + Take a break only.
-- Session lifecycle (module not yet published to maincloud: needs additive `spacetime publish`): resume after restart, ended session → summary with real stats, host End session, 60 s disconnect reaper (`disconnect_timer`), name input (`set_profile`). Module verified via CLI on a scratch db; UI click-through untested.
+- Session lifecycle (published to maincloud 2026-10-25, additive): resume after restart, ended session → summary with real stats, host End session, 60 s disconnect reaper (`disconnect_timer`), name input (`set_profile`). Module verified via CLI on a scratch db; UI click-through untested.
 - Worker ↔ SpacetimeDB: no subscription to `worker_pending_signal_events`, no `write_judgment`.
 - Vision (MediaPipe), phone sensor page (`phone/`, optional), replay clips.
 - Screens: replay (no consent screen by decision; see `product/privacy.md`).
@@ -73,7 +73,7 @@ Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` �
 ## Gotchas
 - 2026-10-24: db wiped + republished (`--delete-data=on-conflict`) for the binary `AppCategory`; `seed_defaults` re-run. Any old session/token state is gone (identities persist per client token).
 - `set_pomodoro` published to maincloud 2026-10-24 (additive publish, data kept).
-- `stop_pomodoro` + unlocked `set_pomodoro` (host Stop / length change while running): in `spacetimedb/src/index.ts`, binding hand-added (`stop_pomodoro_reducer.ts`, matches generator output). **Not published yet**: run `spacetime publish calhacks-13-wyd` (additive, no data loss); until then Stop/length errors with "unknown reducer"/"timer is locked".
+- 2026-10-25: module published to maincloud (additive, data kept): `take_break`, `stop_pomodoro`, unlocked `set_pomodoro`, `disconnect_timer` reaper, `create_session(code?)`. Bindings are generated (no hand-added files).
 - Desktop DB client: `src/main/db/stdb.ts` (single connection in main; Node 18 needs `undici` for WebSocket). Renderer reads `window.wydDesktop.db` (`snapshot`, `call`, `onState`) via `src/renderer/src/db/useDb.ts`. Offline/not connected → entry screen falls back to the local demo flow (needs a typed code).
 - Regenerate bindings after any module change: `spacetime generate --lang typescript --module-path spacetimedb --out-dir src/main/db/module_bindings -y`.
 - Breaking schema changes need `spacetime publish calhacks-13-wyd --delete-data=on-conflict -y` (wipes data). Fresh db: `init` seeds defaults; existing db: run `seed_defaults`. Consent columns removed; republished 2026-10-24, db identity `c200f3d8…1bc7`.
