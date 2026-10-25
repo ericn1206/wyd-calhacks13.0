@@ -42,9 +42,22 @@ function configurePermissions(): void {
   const sesh = electronSession.defaultSession
   sesh.setPermissionCheckHandler((_wc, permission) => allowed.has(permission))
   sesh.setPermissionRequestHandler((_wc, permission, callback) => callback(allowed.has(permission)))
+  // Check-in screen share: share the front-most window that isn't ours (the app the person drifted to),
+  // not the whole screen. Our own windows (overlay with camera tiles, main window) are skipped by their
+  // exact capture ids; macOS 15+ ScreenCaptureKit ignores setContentProtection, so this is what keeps the
+  // camera tiles out of the shared stream. Falls back to the whole screen if no window is found.
   sesh.setDisplayMediaRequestHandler(async (_request, callback) => {
-    const sources = await desktopCapturer.getSources({ types: ['screen', 'window'] })
-    callback({ video: sources[0] })
+    const own = new Set(BrowserWindow.getAllWindows().map((win) => win.getMediaSourceId()))
+    const windows = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 0, height: 0 } })
+    const target = windows.find((source) => !own.has(source.id) && source.name.trim() !== '')
+    if (target) {
+      console.log(`[share] sharing window: ${target.name}`)
+      callback({ video: target })
+      return
+    }
+    const screens = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 0, height: 0 } })
+    console.log('[share] no window found, sharing the whole screen')
+    callback({ video: screens[0] })
   })
 }
 
