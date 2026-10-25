@@ -199,6 +199,13 @@ export default function OverlayApp() {
     if (checkInTarget === 'me') setReturnPrompt(true)
     else setCheckInTarget(null)
   }
+  // Alone (duck window): end the reflection and its timer early and go straight back to work.
+  const resumeFromDuck = () => {
+    closeCall()
+    setReturnPrompt(false)
+    setSelfOffTask(false)
+    setCheckInTarget(null)
+  }
   const closeVideo = (name: string) => {
     const next = new Set(closedVideos).add(name)
     setClosedVideos(next)
@@ -292,7 +299,7 @@ export default function OverlayApp() {
     </section>}
     {!liveCall && callOpen && checkInTarget === 'me' && selfJoinScenario === 'people' && <div className="checkin-timer-pop"><Icon name="clock" /><strong>00:{String(callSeconds).padStart(2, '0')}</strong></div>}
     {!liveCall && callOpen && checkInTarget === 'me' && selfJoinScenario === 'none' && <section className="teammate-share-window duck-reflection-window" style={{ transform: `translate(calc(-50% + ${teammateWindowOffset.x}px), calc(-50% + ${teammateWindowOffset.y}px))` }}>
-      <header onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); teammateWindowDrag.current = { x: teammateWindowOffset.x, y: teammateWindowOffset.y, startX: event.clientX, startY: event.clientY } }} onPointerMove={(event) => { if (!teammateWindowDrag.current) return; setTeammateWindowOffset({ x: teammateWindowDrag.current.x + event.clientX - teammateWindowDrag.current.startX, y: teammateWindowDrag.current.y + event.clientY - teammateWindowDrag.current.startY }) }} onPointerUp={() => { teammateWindowDrag.current = null }}><div><i /><span>Quiet accountability · reflection</span></div><em>{callSeconds}s</em></header>
+      <header onPointerDown={(event) => { if ((event.target as HTMLElement).closest('button')) return; event.currentTarget.setPointerCapture(event.pointerId); teammateWindowDrag.current = { x: teammateWindowOffset.x, y: teammateWindowOffset.y, startX: event.clientX, startY: event.clientY } }} onPointerMove={(event) => { if (!teammateWindowDrag.current) return; setTeammateWindowOffset({ x: teammateWindowDrag.current.x + event.clientX - teammateWindowDrag.current.startX, y: teammateWindowDrag.current.y + event.clientY - teammateWindowDrag.current.startY }) }} onPointerUp={() => { teammateWindowDrag.current = null }}><div><i /><span>Quiet accountability · reflection</span></div><em>{callSeconds}s</em><button type="button" onClick={resumeFromDuck} aria-label="Resume focusing"><Icon name="arrow" />Resume</button></header>
       <div className="duck-reflection-body"><svg className="studying-duck" viewBox="0 0 420 260" role="img" aria-label="A duck studying at a desk"><rect width="420" height="260" rx="24" fill="#edf7f3" /><rect x="54" y="181" width="318" height="16" rx="8" fill="#8e6953" /><rect x="75" y="194" width="15" height="55" rx="7" fill="#765642" /><rect x="338" y="194" width="15" height="55" rx="7" fill="#765642" /><g className="duck-body"><ellipse cx="210" cy="164" rx="66" ry="50" fill="#f4d872" /><ellipse cx="215" cy="101" rx="48" ry="45" fill="#f7dd7c" /><circle cx="231" cy="91" r="4" fill="#344943" /><path d="M251 104c19-8 33-3 38 5-8 10-24 13-39 6Z" fill="#e99b57" /><path d="M164 153c-18 5-25 18-21 35 17-2 28-9 35-23Z" fill="#e6c65f" /></g><g className="duck-pencil"><rect x="250" y="151" width="47" height="6" rx="3" fill="#659d98" transform="rotate(-26 250 151)" /><path d="m291 133 9-1-6 7Z" fill="#544a43" /></g><path d="M130 167c31-18 60-17 82 1v23c-26-12-53-12-82 0Z" fill="#fff" stroke="#b8d7cf" strokeWidth="3" /><path d="M290 167c-31-18-60-17-78 1v23c23-12 49-12 78 0Z" fill="#fff" stroke="#b8d7cf" strokeWidth="3" /><path d="M210 169v22" stroke="#b8d7cf" strokeWidth="3" /></svg><p>No one is here to keep you accountable. Use this time to reflect on your productivity so far.</p></div>
       <div className="window-progress"><i style={{ width: `${(callSeconds / 30) * 100}%` }} /></div>
     </section>}
