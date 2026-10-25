@@ -10,6 +10,8 @@ Module: `spacetimedb/` (`spacetime.json` → `module-path: ./spacetimedb`, datab
 - `src/logic.ts`: smoothing, scoring, call/nudge triggers, finalize
 - `src/index.ts`: reducers, lifecycle hooks, views
 
+Desktop client (not part of the module): `src/main/db/` (`stdb.ts` connection + IPC, `debugLog.ts`, `module_bindings/` generated, never edit). Wiring: `../architecture/overview.md`. Regenerate bindings after any module change: command in `../architecture/stack.md`.
+
 ## Visibility model
 
 Only `user`, `app_category_rule`, `app_setting` are public tables.
@@ -37,16 +39,14 @@ No table stores video, images, or audio. `replay_clip_meta` holds a hash of the 
 
 ## Behavior
 
-**Smoothing (every 10 s per member).** Judgments with confidence < `low_confidence_threshold` or
-label Unknown are neutral and skipped. The status label changes only once the newest confident label
-has held for `smoothing_hold_secs` with no contradicting confident label. `since` is backdated to when
+**Smoothing (every 10 s per member and on every event).** Judgments with confidence < `low_confidence_threshold` or
+label Unknown are neutral and skipped. A confident OffTask applies immediately; any other change waits until the newest confident label
+has held for `smoothing_hold_secs` with no contradicting confident label. Also runs inside `ingest_signal` and `write_judgment`. `since` is backdated to when
 that streak began, so `smoothed_off_task_secs` counts from the first off-task event. During Break
 the label is Break. No events for a full hold window → Away (Left_Seat). Each change closes the open
 focus_block and opens a new one (Focused → DeepWork, OffTask/Away → Interruption, Break → Break).
 
-**Fallback judging.** If no worker heartbeat in the last `worker_stale_secs`, `ingest_signal` judges
-immediately with simple rules (model `Fallback`). The tick also judges any event the worker hasn't
-labelled after `fallback_judge_after_secs`. The demo works with no worker running.
+**Rule judging.** `ingest_signal` always judges the event itself (model `Fallback`): idle/phone/blocked-domain/eyes/looking checks first, then `app_category` `OffTask` → OffTask/`Distracting_App` 0.8, else Focused 0.8. A later worker `write_judgment` for the same event replaces it. The tick also judges any event still unlabelled after `fallback_judge_after_secs`. The demo works with no worker running.
 
 **Scoring (Work phase only).** Focused: +1 per tick (Tick), +5 each 5-minute streak (StreakBonus).
 OffTask: −2 per tick (Penalty). Returning to Focused within `quick_recovery_window_secs` of a

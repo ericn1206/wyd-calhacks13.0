@@ -38,14 +38,8 @@ export type AlertKind = __Infer<typeof AlertKind>;
 
 // The tagged union or sum type for the algebraic type `AppCategory`.
 export const AppCategory = __t.enum("AppCategory", {
-  Work: __t.unit(),
-  Study: __t.unit(),
-  Communication: __t.unit(),
-  Social: __t.unit(),
-  Entertainment: __t.unit(),
-  Games: __t.unit(),
-  News: __t.unit(),
-  Other: __t.unit(),
+  OnTask: __t.unit(),
+  OffTask: __t.unit(),
 });
 export type AppCategory = __Infer<typeof AppCategory>;
 

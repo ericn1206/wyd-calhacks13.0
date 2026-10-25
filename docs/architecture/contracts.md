@@ -32,7 +32,7 @@ Wire format: in module code / TS bindings a value is `{ tag: 'Focused' }`. Raw J
 | SessionState | Lobby, Active, Break, Ended |
 | PomodoroPhase | Work, Break |
 | DeviceStatus | Connected, Disconnected |
-| AppCategory | Work, Study, Communication, Social, Entertainment, Games, News, Other |
+| AppCategory | OnTask, OffTask (binary; set by the desktop's Gemini classification, see `overview.md#off-task-pipeline`) |
 | PhoneState | Unknown, Locked_In_Page_Visible, Phone_In_Use |
 | StatusLabel | Focused, OffTask, Away, Break, Unknown |
 | ReasonCode | Eyes_Closed, Looking_Away, Phone, Distracting_App, Idle, Left_Seat, Slouching, Unknown |
@@ -67,7 +67,7 @@ Wire format: in module code / TS bindings a value is `{ tag: 'Focused' }`. Raw J
 | active_app | string | desktop | |
 | active_window_title | option string | desktop | |
 | active_url_domain | option string | desktop | lowercased server-side |
-| app_category | AppCategory | desktop | `Other` → server rules classify |
+| app_category | AppCategory | desktop | Gemini verdict on screen text; server does not re-classify |
 | phone_state | PhoneState | desktop | overridden by fresh phone heartbeat |
 | webcam_confidence | f32 | vision | 0 = no reading |
 | idle_secs | u32 | desktop | |
