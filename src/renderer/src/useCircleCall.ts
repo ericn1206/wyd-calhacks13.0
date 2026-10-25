@@ -258,10 +258,15 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
     const live = new Set<string>()
     if (inCallRef.current) {
       for (const participant of participants) {
-        const tracks = [...participant.trackPublications.values()]
-          .filter((pub) => pub.track && (pub.kind === Track.Kind.Video || pub.kind === Track.Kind.Audio))
-          .map((pub) => pub.track!.mediaStreamTrack)
-        if (participant.attributes[IN_CALL] !== '1' && tracks.length === 0) continue
+        const pubs = [...participant.trackPublications.values()]
+        for (const pub of pubs) {
+          if (pub.kind !== Track.Kind.Video && pub.kind !== Track.Kind.Audio) continue
+          if (!pub.isSubscribed && 'setSubscribed' in pub) pub.setSubscribed(true)
+        }
+        const tracks = pubs
+          .filter((pub) => pub.kind === Track.Kind.Video || pub.kind === Track.Kind.Audio)
+          .map((pub) => pub.track?.mediaStreamTrack)
+          .filter((track): track is MediaStreamTrack => track instanceof MediaStreamTrack && track.readyState !== 'ended')
         live.add(participant.identity)
         // Reuse the MediaStream until the tracks change so <video> does not reload.
         const key = tracks.map((track) => track.id).sort().join(',')
@@ -270,11 +275,12 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
           cached = { key, stream: tracks.length ? new MediaStream(tracks) : null }
           streams.current.set(participant.identity, cached)
         }
+        const hasVideo = tracks.some((track) => track.kind === 'video')
         tiles.push({
           peerId: participant.identity,
           name: participant.name || 'Friend',
           stream: cached.stream,
-          connection: reconnecting ? 'disconnected' : cached.stream ? 'connected' : 'connecting',
+          connection: reconnecting ? 'disconnected' : hasVideo ? 'connected' : 'connecting',
         })
       }
     }
@@ -314,7 +320,8 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
     let retry: ReturnType<typeof setTimeout> | null = null
     let attempts = 0
     // adaptiveStream pauses video that is not attached through LiveKit; we render raw MediaStreams.
-    const lk = new Room({ adaptiveStream: false, dynacast: true })
+    // dynacast would also stop sending those frames, so leave it off.
+    const lk = new Room({ adaptiveStream: false, dynacast: false })
     roomRef.current = lk
 
     const refreshNow = () => handlers.current.refresh()
@@ -330,8 +337,11 @@ export function useCircleCall(room: CircleRoom | null): CircleCall {
       .on(RoomEvent.ParticipantDisconnected, refreshNow)
       .on(RoomEvent.ParticipantAttributesChanged, refreshNow)
       .on(RoomEvent.ParticipantNameChanged, refreshNow)
+      .on(RoomEvent.TrackPublished, refreshNow)
       .on(RoomEvent.TrackSubscribed, refreshNow)
       .on(RoomEvent.TrackUnsubscribed, refreshNow)
+      .on(RoomEvent.TrackMuted, refreshNow)
+      .on(RoomEvent.TrackUnmuted, refreshNow)
       .on(RoomEvent.Reconnecting, () => {
         setStatus('connecting')
         refreshNow()

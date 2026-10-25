@@ -136,6 +136,22 @@ input:focus { border-color: var(--purple); }
 .goal-input > span { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; flex: none; color: var(--blue-ink); background: var(--purple-soft); font-size: 12px; font-weight: 700; }
 .goal-input input { width: 100%; }
 .goals-card .tip { margin-bottom: 22px; }
+.voice-card { text-align: center; }
+.voice-card .icon-bubble { margin-left: auto; margin-right: auto; }
+.voice-wave { height: 64px; margin: 28px 0 8px; display: flex; align-items: center; justify-content: center; gap: 7px; }
+.voice-wave span { width: 6px; height: 14px; border-radius: 99px; background: #7fcbd4; transform-origin: center; }
+.voice-wave.listening span, .voice-wave.speaking span { animation: voice-bar 1s ease-in-out infinite; }
+.voice-wave.speaking span { background: #61c795; }
+.voice-wave span:nth-child(2), .voice-wave span:nth-child(6) { animation-delay: .12s; }
+.voice-wave span:nth-child(3), .voice-wave span:nth-child(5) { animation-delay: .24s; }
+.voice-wave span:nth-child(4) { animation-delay: .36s; }
+@keyframes voice-bar { 0%, 100% { height: 14px; } 50% { height: 42px; } }
+.voice-status { color: var(--muted); font-size: 14px; line-height: 1.45; min-height: 2.9em; }
+.voice-transcript { max-height: 180px; margin: 8px 0 18px; overflow: auto; display: grid; gap: 8px; text-align: left; }
+.voice-transcript p { margin: 0; padding: 10px 12px; border-radius: 12px; background: #f7f7f2; font-size: 13px; line-height: 1.4; }
+.voice-transcript strong { display: block; margin-bottom: 2px; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.voice-transcript .user { background: #e6f4f0; }
+.voice-card .secondary { width: 100%; margin-top: 8px; }
 
 .focus-grid { width: min(1180px, calc(100% - clamp(28px, 4vw, 64px))); height: 100dvh; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, .8fr); gap: clamp(24px, 4vw, 52px); align-items: center; padding: clamp(18px, 3vh, 34px) 0; }
 .timer-panel { text-align: center; }
@@ -366,7 +382,7 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
 .corner-setting > div { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
 .corner-setting button { padding: 6px 0; text-align: center; border: 1px solid var(--line); }
 .corner-setting button.active { color: #315f64; background: #dff3ee; border-color: #bcded8; }
-.glass-checkin { position: fixed; z-index: 18; display: flex; align-items: flex-start; gap: 9px; pointer-events: none; }
+.glass-checkin { position: fixed; z-index: 18; display: flex; align-items: flex-start; flex-wrap: wrap; gap: 9px; max-width: calc(100vw - 48px); pointer-events: none; }
 .glass-checkin.corner-top-right { top: 128px; right: 24px; }
 .glass-checkin.corner-top-left { top: 128px; left: 24px; }
 .glass-checkin.corner-bottom-right { right: 24px; bottom: 24px; }
@@ -376,6 +392,11 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
 .glass-video:after { content: ''; position: absolute; inset: 1px 1px auto; height: 42%; border-radius: 20px 20px 50% 50%; background: linear-gradient(rgba(255,255,255,.32), transparent); pointer-events: none; }
 .glass-video:hover { transform: translateY(-2px) scale(1.035); box-shadow: 0 16px 40px rgba(36,57,52,.2), inset 0 1px 0 rgba(255,255,255,.9); }
 .glass-video .avatar { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: inherit; font-size: clamp(18px, 2vw, 28px); }
+.glass-video > video { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; object-fit: cover; background: #243934; }
+.glass-video.mirror > video { transform: scaleX(-1); }
+.glass-video.call-error { width: auto; min-width: 240px; max-width: 360px; height: auto; min-height: 96px; max-height: none; }
+.glass-video.call-error .call-message { position: relative; z-index: 2; display: block; padding: 16px 14px 28px; color: #315f64; font-size: 13px; font-weight: 700; line-height: 1.4; }
+.checkin-timer-pop button { border: 0; background: transparent; color: #315f64; font: 700 12px 'Manrope', sans-serif; cursor: pointer; padding: 0 0 0 4px; }
 .glass-video > span { position: absolute; z-index: 2; left: 10px; bottom: 9px; padding: 4px 8px; border-radius: 8px; color: white; background: rgba(29,47,45,.58); font-size: 10px; font-weight: 700; backdrop-filter: blur(5px); }
 .glass-video > em { position: absolute; z-index: 2; right: 8px; top: 7px; padding: 3px 6px; border-radius: 8px; color: #315f64; background: rgba(241,251,248,.78); font: 700 9px 'Manrope'; font-style: normal; }
 .glass-video .close-video { position: absolute; z-index: 4; top: 7px; right: 7px; width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.65); border-radius: 50%; color: #40534e; background: rgba(255,255,255,.62); opacity: 0; transform: scale(.85); backdrop-filter: blur(8px); transition: opacity .15s, transform .15s; }

@@ -19,7 +19,7 @@ Last updated: 2026-10-24. Biggest gap: **activity signals do not reach Spacetime
 | Worker fixtures | `worker/runFixtures.ts` | 15 scenarios, `npm run fixtures`. |
 
 ## Stubbed
-- Voice AI onboarding: archived in `outdated/` (see `outdated/README.md`); goals now come from the Goals screen.
+- Voice AI onboarding: prod's `VoiceScreen.tsx` / `cartesiaCall.ts` / `session:*` IPC are merged but unrouted (voice off for now, `product/decisions.md`); goals come from the Goals screen.
 - LiveKit calls: `circleAPI` preload + `useCircleCall.ts` exist but nothing in the new UI uses them. **Important next step:** replace the UI's placeholder check-in tiles with real LiveKit video (see `components/livekit-call.md`).
 - Call room: `call_room_base_url` setting is `""`; no provider chosen.
 
@@ -66,7 +66,7 @@ Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` â†
 | SDK | `@anthropic-ai/sdk ^0.27` (old); worker casts around missing `output_config` type. |
 
 ## Next up (demo critical path, suggested)
-1. Click-through test of the DB-backed UI (two instances, separate `--user-data-dir`); then `ingest_signal` from `activityMonitor` every 10 s.
+1. Click-through test of the DB-backed UI (two instances, separate `--user-data-dir`); then `ingest_signal` from `activityMonitor` every 10 s. Feed the `face time` trigger into it (today it only opens the local LiveKit check-in).
 2. Worker subscribes to `worker_pending_signal_events` â†’ `write_judgment`. (DB fallback judge covers the demo meanwhile.)
 3. Wire LiveKit into the new UI's check-in windows; start the call from the DB `CallIncoming` alert instead of the local desktop alert.
 4. Back summary screen with real stats.
@@ -86,6 +86,7 @@ Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` â†
 - LiveKit tokens are signed by hand in `livekitToken.ts`: `livekit-server-sdk` needs Node 19+, Electron 28 ships Node 18.
 - Worker runs `.ts` directly: needs Node 24 (`node -v`).
 - `osascript` needs Accessibility/Automation permission for System Events; window titles need Screen Recording. Screen monitor OCR also needs Screen Recording. `GEMINI_API_KEY` for `vision/04_screen_monitor.py`.
+- A Gemini key was hardcoded on `origin/prod` and `origin/webcam-activity-detection`; removed (prod `eebfad3`), replaced in `.env`, but still in git history. Never commit keys.
 - Facetime trigger: `npm run setup:vision` once so `vision/.venv` exists. Prints `face time` when the screen is off-task twice in a row, or when the screen is on-task both times and the webcam is distracted both times. Video check-in popups stay on the Demo menu (`OverlayApp.tsx`: `.glass-video`, `.checkin-timer-pop`, `.teammate-share-window`).
 - SpacetimeDB `init` seeds only on first publish; after a schema publish run `seed_defaults`.
 

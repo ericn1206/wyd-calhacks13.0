@@ -20,6 +20,11 @@ export type OverlayState = {
   isTired: boolean
   tiredNotice: boolean
   checkInCorner: CheckInCorner
+  /** Shared by everyone in this study session. LiveKit room is lockin-<code>. */
+  sessionCode: string
+  displayName: string
+  /** Real session members. Empty when nobody else has joined. */
+  members: { name: string; initials: string; status: string; hex?: string }[]
 }
 
 /** Dock buttons the overlay cannot handle itself; the main window owns this state. */

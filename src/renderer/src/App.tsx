@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { EntryScreen } from './components/onboarding/EntryScreen'
 import { GoalsScreen } from './components/onboarding/GoalsScreen'
 import { IntroductionScreen } from './components/onboarding/IntroductionScreen'
+import { VoiceScreen } from './components/onboarding/VoiceScreen'
 import { BreakScreen } from './components/session/BreakScreen'
 import { SessionSidebar } from './components/session/SessionSidebar'
 import { SummaryScreen } from './components/session/SummaryScreen'
@@ -10,7 +11,20 @@ import { Icon } from './components/ui/Icon'
 import { people } from './data/people'
 import { useDb } from './db/useDb'
 
-type Screen = 'join' | 'consent' | 'goals' | 'focus' | 'break' | 'summary'
+type Screen = 'join' | 'consent' | 'voice' | 'goals' | 'focus' | 'break' | 'summary'
+type VoicePhase = 'idle' | 'speaking' | 'listening' | 'processing' | 'done'
+type VoiceContext = { subject: string; goals: string[]; sites: string; notes: string }
+
+function cleanCode(value: string): string {
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)
+}
+
+function makeSessionCode(): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  const bytes = new Uint8Array(4)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join('')
+}
 
 // Same alphabet as spacetimedb/src/logic.ts CODE_ALPHABET (no 0/O, 1/I/L).
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
@@ -43,6 +57,14 @@ export default function App() {
   const [demoOpen, setDemoOpen] = useState(false)
   const [entryBusy, setEntryBusy] = useState(false)
   const [entryError, setEntryError] = useState('')
+  const [voicePhase, setVoicePhase] = useState<VoicePhase>('idle')
+  const [voiceCreds, setVoiceCreds] = useState<{ token: string; agentId: string } | null>(null)
+  const [voiceStream, setVoiceStream] = useState<MediaStream | null>(null)
+  const [voiceError, setVoiceError] = useState('')
+  const [voiceContext, setVoiceContext] = useState<VoiceContext | null>(null)
+  const [voiceSettled, setVoiceSettled] = useState(false)
+  const focusStarted = useRef(false)
+  const beginFocusRef = useRef<(subject: string, nextGoals: string[], sites?: string, notes?: string) => Promise<void>>(async () => {})
   const [now, setNow] = useState(Date.now())
   const [displayName, setDisplayName] = useState(() => { try { return localStorage.getItem('wyd:name') ?? '' } catch { return '' } })
   const entryStarted = useRef(false)
@@ -63,6 +85,43 @@ export default function App() {
       if (preferences.checkInCorner) setCheckInCorner(preferences.checkInCorner)
     })
   }, [])
+
+  useEffect(() => {
+    window.sessionAPI?.onPhase(setVoicePhase)
+    window.sessionAPI?.onContextReady(setVoiceContext)
+    return () => window.sessionAPI?.removeAllListeners()
+  }, [])
+
+  useEffect(() => {
+    if (screen !== 'voice') return
+    let cancelled = false
+    void (async () => {
+      try {
+        if (!window.sessionAPI) throw new Error('The voice interview runs in the desktop app. Type your goals instead.')
+        const creds = await window.sessionAPI.start()
+        if (cancelled) return
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        })
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop())
+          return
+        }
+        setVoiceCreds(creds)
+        setVoiceStream(stream)
+      } catch (err) {
+        if (!cancelled) setVoiceError(err instanceof Error ? err.message : 'Could not start the voice interview.')
+      }
+    })()
+    return () => { cancelled = true }
+  }, [screen])
+
+  useEffect(() => {
+    if (screen !== 'voice' || !voiceContext || !voiceSettled) return
+    const nextGoals = voiceContext.goals.map((goal) => goal.trim()).filter(Boolean).slice(0, 3)
+    const subject = voiceContext.subject.trim() || sessionName
+    void beginFocusRef.current(subject, nextGoals.length ? nextGoals : [subject || 'Study'], voiceContext.sites, voiceContext.notes)
+  }, [screen, voiceContext, voiceSettled, sessionName])
 
 
   useEffect(() => {
@@ -192,10 +251,25 @@ export default function App() {
     window.wydDesktop?.setOverlayVisible(visible).then(() => { if (appearing) window.wydDesktop?.bridge.send({ type: 'reset' }) })
   }, [screen])
 
+  const meName = db.people.find((person) => person.me)?.name
+  // Name shown on the LiveKit check-in (the server profile; `displayName` is the entry-screen field).
+  const callName = meName && meName !== 'guest' ? meName : (displayName.trim() || 'Friend')
+  const sessionCode = cleanCode(dbSession?.code || code)
+  const shareCall = screen === 'focus' || screen === 'break'
+  const members = db.people.filter((person) => !person.me).map((person) => ({
+    name: person.name, initials: person.initials, status: person.status, hex: person.hex,
+  }))
+  const membersKey = members.map((person) => `${person.name}:${person.status}:${person.hex ?? ''}`).join('|')
+
   useEffect(() => {
-    const state: OverlayState = { host: isHost, serverPhase: dbSession?.state ?? null, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, started: sessionStarted, onBreak: screen === 'break', breakSeconds, breakMinutes: upcomingBreakMinutes, checked, currentGoal: goals.find((g) => g.trim()) || '', isTired, tiredNotice, checkInCorner }
+    const state: OverlayState = {
+      host: isHost, serverPhase: dbSession?.state ?? null, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, started: sessionStarted,
+      onBreak: screen === 'break', breakSeconds, breakMinutes: upcomingBreakMinutes, checked,
+      currentGoal: goals.find((g) => g.trim()) || '', isTired, tiredNotice, checkInCorner,
+      sessionCode: shareCall ? sessionCode : '', displayName: callName, members,
+    }
     window.wydDesktop?.bridge.send({ type: 'state', state })
-  }, [overlayReady, isHost, dbSession?.state, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, sessionStarted, screen, breakSeconds, upcomingBreakMinutes, checked, goals, isTired, tiredNotice, checkInCorner])
+  }, [overlayReady, isHost, dbSession?.state, focusSeconds, pomodoroMinutes, pomodorosDone, timerRunning, sessionStarted, screen, breakSeconds, upcomingBreakMinutes, checked, goals, isTired, tiredNotice, checkInCorner, shareCall, sessionCode, callName, membersKey])
 
   const activeGoals = goals.filter((goal) => goal.trim())
   const finishPomodoro = () => {
@@ -308,6 +382,7 @@ export default function App() {
       if (error) return setEntryError(error)
     }
     try {
+      // Voice intro is off for now (decision 2026-10-24): typed goals only.
       setScreen(localStorage.getItem('wyd:tutorial-complete') === 'true' ? 'goals' : 'consent')
     } catch {
       setScreen('consent')
@@ -319,6 +394,33 @@ export default function App() {
     } catch {
       // The tutorial still works when storage is unavailable.
     }
+    setScreen('goals') // voice intro off for now
+  }
+  const beginFocus = async (subject: string, nextGoals: string[], sites = '', notes = '') => {
+    if (focusStarted.current) return
+    focusStarted.current = true
+    const active = nextGoals.map((goal) => goal.trim()).filter(Boolean)
+    setGoals([...active, '', '', ''].slice(0, 3))
+    setChecked([false, false, false])
+    if (subject.trim()) setSessionName(subject.trim())
+    if (dbSession && active.length) {
+      const error = await db.call('setGoals', { goals: active })
+      if (error) {
+        focusStarted.current = false
+        window.alert(error)
+        return
+      }
+    }
+    if (!dbSession && cleanCode(code).length < 4) setCode(makeSessionCode())
+    window.wydDesktop?.startTracking({ subject: subject.trim() || sessionName, goals: active, sites, notes })
+    if (!dbSession && entryMode === 'join') setTimerRunning(true)
+    voiceStream?.getTracks().forEach((track) => track.stop())
+    setScreen('focus')
+  }
+  beginFocusRef.current = beginFocus
+  const skipVoice = () => {
+    voiceStream?.getTracks().forEach((track) => track.stop())
+    setVoiceStream(null)
     setScreen('goals')
   }
   handlers.current = { signalTired, takeBreak, endBreak: returnFromBreak, leaveSession, resetPomodoro, setRunning, setChecked: updateChecked }

@@ -9,7 +9,8 @@ On Goals submit, run the webcam detector and the screen monitor. Print `face tim
 | `vision/detector.py` | Webcam. One JSON line/s. `distracted` is the webcam vote. From `webcam-activity`. |
 | `vision/04_screen_monitor.py` | Screenshot → macOS Vision (`macos_vision_ocr.swift`) → Gemini. `ui_state["is_off_task"]` is the screen vote. |
 | `vision/facetime_trigger.py` | Spawns `detector.py`, calls `check_once` each interval, prints `face time`. |
-| `src/main/facetimeTrigger.ts` | Spawns the trigger on `wyd:tracking:start`. Stops on quit. |
+| `src/main/facetimeTrigger.ts` | Spawns the trigger on `wyd:tracking:start`; a `face time` line → `publishFacetime()` (`src/main/index.ts`) shows the overlay and sends `facetime:start`. Stops on quit. |
+| `src/renderer/src/overlay/LiveCheckIn.tsx` | `circleAPI.onFacetime` → joins the session's LiveKit room and shows the live check-in; the mock check-in is hidden while it runs. |
 
 ## Rule
 | Key | Value |
@@ -18,7 +19,7 @@ On Goals submit, run the webcam detector and the screen monitor. Print `face tim
 | Screen path | `is_off_task` two intervals in a row. Webcam is ignored. |
 | Webcam path | Screen on-task both intervals, and webcam `distracted` both intervals. |
 | Fire | Either path prints `face time` once. Any other interval resets both streaks. |
-| Not done | Does not open `.glass-video` / check-in popups. Those stay on the Demo menu. |
+| On fire | Overlay opens the live LiveKit check-in (`LiveCheckIn.tsx`) for the session code. Local trigger; not reported to the DB. |
 
 ## Run
 1. `npm run setup:vision`

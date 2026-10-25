@@ -2,10 +2,12 @@ import { app, BrowserWindow, desktopCapturer, ipcMain, screen, session as electr
 import { promises as fs } from 'fs'
 import { join } from 'path'
 import { ActivityMonitor } from './activityMonitor'
+import { createAgentSession } from './cartesiaAgent'
 import { startFacetimeTrigger, stopFacetimeTrigger } from './facetimeTrigger'
 import type { SessionContext } from './claudeJudge'
 import { loadEnv } from './env'
 import { createCallToken } from './livekitToken'
+import { SessionManager } from './sessionManager'
 import { StdbClient } from './db/stdb'
 
 loadEnv()
@@ -14,6 +16,7 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 let mainWindow: BrowserWindow | null = null
 let overlayWindow: BrowserWindow | null = null
 let monitor: ActivityMonitor | null = null
+const session = new SessionManager()
 
 type CheckInCorner = 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left'
 const preferencesPath = () => join(app.getPath('userData'), 'preferences.json')
@@ -109,14 +112,23 @@ function createOverlayWindow(): BrowserWindow {
   return win
 }
 
-function sendToRenderer(channel: string, payload?: unknown): void {
-  const contents = mainWindow?.webContents
+function sendTo(window: BrowserWindow | null, channel: string, payload?: unknown): void {
+  const contents = window?.webContents
   if (!contents || contents.isDestroyed()) return
   try {
     contents.send(channel, payload)
   } catch (err) {
     console.error('[ipc] dropped', channel, err)
   }
+}
+
+function sendToRenderer(channel: string, payload?: unknown): void {
+  sendTo(mainWindow, channel, payload)
+}
+
+function publishFacetime(): void {
+  if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.showInactive()
+  sendTo(overlayWindow, 'facetime:start')
 }
 
 function registerDesktopApi(): void {
@@ -165,9 +177,11 @@ function registerDesktopApi(): void {
     if (target && !target.webContents.isDestroyed()) target.webContents.send('wyd:bridge:message', message)
   })
 
-  // LiveKit call plumbing for src/renderer/src/useCircleCall.ts (not wired into the UI yet).
+  // LiveKit call plumbing for the overlay check-in (src/renderer/src/overlay/LiveCheckIn.tsx).
   ipcMain.handle('call:token', (_e, code: string, identity: string, name: string) => createCallToken(code, identity, name))
   ipcMain.handle('window:call-mode', (_e, on: boolean) => {
+    // The check-in cameras live on the overlay, which is already above every app.
+    if (overlayWindow && !overlayWindow.isDestroyed() && overlayWindow.isVisible()) return
     if (!mainWindow) return
     mainWindow.setAlwaysOnTop(Boolean(on))
     if (on) {
@@ -183,13 +197,31 @@ function registerDesktopApi(): void {
     try { await stdb.call(name, args); return { ok: true } } catch (err) { return { ok: false, error: err instanceof Error ? err.message : String(err) } }
   })
 
-  // Goals screen submit → give the judge its context and start polling.
-  ipcMain.handle('wyd:tracking:start', (_e, ctx: { subject: string; goals: string[] }) => {
-    const context: SessionContext = { subject: ctx.subject, goals: ctx.goals, sites: '', notes: '' }
+  // Goals or the voice interview → give the judge its context and start polling.
+  ipcMain.handle('wyd:tracking:start', (_e, ctx: { subject: string; goals: string[]; sites?: string; notes?: string }) => {
+    const context: SessionContext = {
+      subject: ctx.subject,
+      goals: ctx.goals ?? [],
+      sites: ctx.sites ?? '',
+      notes: ctx.notes ?? '',
+    }
     monitor?.setSessionContext(context)
     monitor?.start()
-    const goal = [ctx?.subject, ...(ctx?.goals ?? [])].filter((part) => part && part.trim()).join('. ') || 'study'
-    startFacetimeTrigger(goal)
+    const goal = [context.subject, ...context.goals, context.sites, context.notes].filter((part) => part && part.trim()).join('. ') || 'study'
+    startFacetimeTrigger(goal, publishFacetime)
+  })
+
+  ipcMain.handle('session:start', async () => {
+    if (process.platform === 'darwin') {
+      const granted = await systemPreferences.askForMediaAccess('microphone')
+      if (!granted) throw new Error('Microphone access is off. Turn it on for Electron in System Settings, then try the voice intro again.')
+    }
+    const creds = await createAgentSession()
+    session.beginListening()
+    return creds
+  })
+  ipcMain.handle('session:user-response', async (_e, transcript: string) => {
+    await session.handleUserResponse(transcript)
   })
 }
 
@@ -204,6 +236,8 @@ app.whenReady().then(() => {
   stdb.connect().catch(err => console.error('[stdb] connect failed', err))
 
   monitor = new ActivityMonitor()
+  session.onPhase(phase => sendToRenderer('session:phase', phase))
+  session.onReady(ctx => sendToRenderer('session:context-ready', ctx))
   monitor.onUpdate(state => {
     sendToRenderer('activity:update', state)
     if (state.alertLevel === 'warning' || state.alertLevel === 'alert') {

@@ -95,7 +95,7 @@ Other reducers: `../components/spacetimedb-schema.md#reducers`.
 
 `window.circleAPI` (LiveKit, unwired; room/identity/attributes below; typings `src/renderer/src/circle.d.ts`): `requestMediaAccess`, `getCallToken` (`call:token`), `setCallMode` (`window:call-mode`).
 
-Removed: `activityAPI`, `sessionAPI` (voice onboarding, archived in `outdated/`). Type: `ActivityState` in `src/main/activityMonitor.ts`.
+`circleAPI.onFacetime` ← `facetime:start` (main → overlay window, when the trigger prints `face time`). `sessionAPI` (`session:start` / `session:user-response` / `session:phase` / `session:context-ready`) is exposed for the voice intro but unused while voice is off. Removed: `activityAPI`. Type: `ActivityState` in `src/main/activityMonitor.ts`.
 
 ## LiveKit room
 Owner: `src/renderer/src/useCircleCall.ts`; token: `src/main/livekitToken.ts`.

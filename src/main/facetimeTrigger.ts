@@ -13,8 +13,8 @@ function projectRoot(): string {
   return process.cwd()
 }
 
-/** Run vision/facetime_trigger.py. Its stdout line `face time` is the only trigger output. */
-export function startFacetimeTrigger(goal: string): void {
+/** Run vision/facetime_trigger.py. A stdout line `face time` starts a circle check-in. */
+export function startFacetimeTrigger(goal: string, onTrigger: () => void): void {
   stopFacetimeTrigger()
   const root = projectRoot()
   const python = join(root, 'vision/.venv/bin/python')
@@ -25,7 +25,18 @@ export function startFacetimeTrigger(goal: string): void {
   }
   const proc = spawn(python, [script, goal], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] })
   child = proc
-  proc.stdout?.on('data', (buf: Buffer) => process.stdout.write(buf))
+  let pending = ''
+  proc.stdout?.on('data', (buf: Buffer) => {
+    pending += buf.toString()
+    let nl = pending.indexOf('\n')
+    while (nl !== -1) {
+      const line = pending.slice(0, nl).trim()
+      pending = pending.slice(nl + 1)
+      if (line === 'face time') onTrigger()
+      else if (line) process.stdout.write(`${line}\n`)
+      nl = pending.indexOf('\n')
+    }
+  })
   proc.stderr?.on('data', (buf: Buffer) => process.stderr.write(buf))
   proc.on('exit', (code) => {
     if (child === proc) child = null

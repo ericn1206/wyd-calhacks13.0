@@ -22,7 +22,7 @@ Desktop build: `electron.vite.config.ts` (main/preload externalize deps; rendere
 |---|---|
 | SpacetimeDB maincloud, db `calhacks-13-wyd` | `spacetime.json`, `spacetime.local.json` |
 | LiveKit Cloud | check-in calls + session presence; see `../components/livekit-call.md`. Code kept but not wired into the new UI |
-| Cartesia voice agent / TTS | archived in `outdated/` (decided: typed goals, no AI voice) |
+| Cartesia voice agent | `src/main/cartesiaAgent.ts` + `src/renderer/src/cartesiaCall.ts` (from prod); unrouted while voice is off |
 
 ## Env vars (`.env`, gitignored)
 | Var | Used by |
@@ -31,9 +31,8 @@ Desktop build: `electron.vite.config.ts` (main/preload externalize deps; rendere
 | `LIVEKIT_URL` (`wss://…`), `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | desktop main, `livekitToken.ts`; secret never reaches the renderer |
 | `SPACETIME_URI` (default `wss://maincloud.spacetimedb.com`), `SPACETIME_DB` (default `calhacks-13-wyd`) | desktop main, `src/main/db/stdb.ts` (optional overrides) |
 | `WYD_DEBUG` (`1`/`0`; default on unless packaged) | desktop main, `src/main/db/debugLog.ts`: logs DB connect/subscribe/reducer calls/state changes to the terminal and `~/Library/Application Support/attentionmaxx/logs/stdb.log` |
-| `GEMINI_API_KEY` (planned, not read by any code yet) | desktop main, off-task classification (see `overview.md#off-task-pipeline`) |
-| `CARTESIA_API_KEY`, `CARTESIA_AGENT_ID`, `CARTESIA_VOICE_ID` | used only by archived `outdated/` voice code |
-| `GEMINI_API_KEY` | `vision/04_screen_monitor.py` (screen text → Gemini). Not read by the renderer. |
+| `CARTESIA_API_KEY`, `CARTESIA_AGENT_ID` | `cartesiaAgent.ts` (voice intro; unrouted for now) · `CARTESIA_VOICE_ID` unused |
+| `GEMINI_API_KEY` | `vision/04_screen_monitor.py` (screen text → Gemini; env first, then `.env`). Planned: desktop main off-task pipeline (`overview.md#off-task-pipeline`). Not read by the renderer. |
 
 ## Commands
 | Do | Run |
@@ -48,4 +47,4 @@ Desktop build: `electron.vite.config.ts` (main/preload externalize deps; rendere
 | Generate client bindings | `spacetime generate --lang typescript --module-path spacetimedb --out-dir src/main/db/module_bindings -y` |
 
 ## macOS permissions (for the terminal/IDE running dev)
-Accessibility/Automation (System Events via `osascript`) · Screen Recording (window titles) · Camera (webcam) · Microphone (speech onboarding).
+Accessibility/Automation (System Events via `osascript`) · Screen Recording (window titles) · Camera (webcam, Python `vision/` process). Microphone not needed (voice onboarding archived).
