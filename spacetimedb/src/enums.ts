@@ -87,3 +87,6 @@ export type StuckRole = (typeof StuckRole)[number];
 
 export const MatchType = ['App', 'Domain', 'TitleRegex'] as const;
 export type MatchType = (typeof MatchType)[number];
+
+export const CompilationStatus = ['Rendering', 'Ready', 'Failed'] as const;
+export type CompilationStatus = (typeof CompilationStatus)[number];

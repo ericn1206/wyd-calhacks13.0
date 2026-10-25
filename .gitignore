@@ -72,3 +72,8 @@ distraction_dataset.csv
 # session-clips test build output
 tests/session-clips/.build/
 __pycache__/
+
+# clip compiler
+worker/compile/.build/
+worker/out/
+worker/.state/

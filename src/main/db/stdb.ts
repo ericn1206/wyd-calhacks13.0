@@ -28,6 +28,7 @@ const VIEWS = {
   alerts: 'myAlerts',
   summaries: 'mySessionSummaries',
   awards: 'mySessionAwards',
+  compilations: 'mySessionCompilations',
   users: 'user'
 } as const
 

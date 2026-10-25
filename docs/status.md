@@ -16,6 +16,7 @@ Last updated: 2026-10-24 (session clips). Biggest gap: only the detector's OnTas
 | Desktop UI | `src/renderer/src/` (+ `docs/ui_integration.md`) · dock + check-ins in full-screen overlay window (`overlay/OverlayApp.tsx`) | New Figma-Make UI: entry, intro, goals, focus workspace, dock, check-in windows, break, summary. All data hardcoded/local; Demo menu simulates events. Goals submit calls `wyd:tracking:start`. |
 | Desktop DB client | `src/main/db/stdb.ts`, `src/renderer/src/db/useDb.ts` | Single main-process connection; token persisted; create/join session, `set_pomodoro`, `start_session`, shared timer + phase flip to break, goals + `check_goal`, roster, `leave_session`. Verified headless with 2 clients 2026-10-24; UI click-through untested. Debug log: see `architecture/stack.md` (`WYD_DEBUG`). |
 | Session clips | `vision/detector.py` (`ClipRecorder`), `src/main/clipUpload.ts`, `session_clip*` in `spacetimedb/` | Check-in (`face time`, DB session live) → 30 s webcam clip (10 s before, 20 s after) → chunked upload as soon as recorded, tied to session + unfocused member. Verified 2026-10-24: encoder on synthetic frames, 2.4 MB upload on a local db, bytes identical. Not run with a real camera / Electron click-through. Tests: `npm run test:clips` (`tests/session-clips/README.md`). See `architecture/contracts.md#session-clips`. |
+| Clip compiler | `worker/compile/`, `session_compilation` | Local Node process (`npm run worker:compile`): subscribes as a worker identity, joins an ended session's clips with ffmpeg, hosts the mp4 itself, writes the URL to the db. Late clips re-render. Verified 2026-10-25 end to end on a local db (`tests/session-clips`). Docs: `components/clip-compiler.md`. |
 | Worker judge | `worker/judge.ts` | Text-only judge over 2-min window → `{status, confidence, reason}`; failure → confidence 0 (neutral). |
 | Worker categorizer | `worker/categorizeUnknown.ts` | Model categorization for `unknown` titles, cached. |
 | Worker fixtures | `worker/runFixtures.ts` | 15 scenarios, `npm run fixtures`. |
@@ -31,7 +32,7 @@ Last updated: 2026-10-24 (session clips). Biggest gap: only the detector's OnTas
 - Pause: decided against. Host has `take_break` (force a break now, work round only) and `end_session`; the DB-session dock shows Start (lobby) + Take a break only.
 - Session lifecycle (published to maincloud 2026-10-25, additive): resume after restart, ended session → summary with real stats, host End session, 60 s disconnect reaper (`disconnect_timer`), name input (`set_profile`). Module verified via CLI on a scratch db; UI click-through untested.
 - Worker ↔ SpacetimeDB: no subscription to `worker_pending_signal_events`, no `write_judgment`.
-- Session compilation: no code joins a session's clips into one video or produces links. Plan: worker reads complete `session_clip` rows + chunks at session end, `ffmpeg -f concat -c copy` (clips share codec/size/fps), uploads to object storage, writes the URL back via a new worker-only reducer/table (e.g. `set_session_compilation_url`). Needs a worker view over `session_clip_chunk` and a hosting choice (`product/decisions.md`).
+- Compilation UI: nothing in the desktop shows `tables.compilations[].url` yet (summary screen).
 - Phone sensor page (`phone/`, optional), replay clips (local-only replay screen; the old `replay_clip_meta` is unused).
 - Screens: replay (no consent screen by decision; see `product/privacy.md`).
 - Worker: summary + replay captions.
@@ -73,6 +74,7 @@ Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` �
 5. Resolve judge + category mismatches.
 
 ## Gotchas
+- 2026-10-25: `session_compilation`, `set_session_compilation` and the clip/compilation views are **not published to maincloud yet**, with the clip tables below. The compiler's identity must be an authorized worker (`components/clip-compiler.md#run`). Compilation URLs default to `localhost`: set `COMPILE_PUBLIC_URL` to the LAN IP for other laptops.
 - 2026-10-24: `session_clip` / `session_clip_chunk` / clip reducers are **not published to maincloud yet** (additive publish, data kept; bindings already regenerated). Until then clip uploads fail with an "unknown reducer" error and are dropped (logged `[clip] upload failed`).- 2026-10-24: module published to maincloud with `--delete-data=on-conflict` (data wiped; `init` re-seeded 12 settings): removed `member.joined_at`, `session.host_identity`; added `active_connection`, `CallEndedReason.Superseded`. Client bindings regenerated.
 - 2026-10-24: db wiped + republished (`--delete-data=on-conflict`) for the binary `AppCategory`; `seed_defaults` re-run. Any old session/token state is gone (identities persist per client token).
 - `set_pomodoro` published to maincloud 2026-10-24 (additive publish, data kept).

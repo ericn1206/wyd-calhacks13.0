@@ -51,6 +51,7 @@ Wire format: in module code / TS bindings a value is `{ tag: 'Focused' }`. Raw J
 | StuckState | Open, Resolved |
 | StuckRole | User, Assistant |
 | MatchType | App, Domain, TitleRegex |
+| CompilationStatus | Rendering, Ready, Failed |
 
 ## SignalInput
 `ingest_signal(event: SignalInput)`, sent by desktop every `event_interval_secs` (10). Server adds `id`, `session_id`, `member_id`, `ts`.
@@ -84,6 +85,7 @@ Other reducers: `../components/spacetimedb-schema.md#reducers`.
 Webcam clip of the unfocused person at each check-in, uploaded to SpacetimeDB.
 - Capture: `vision/detector.py` keeps 10 s of 320×240 JPEG frames. stdin line `clip <path>` (from Electron via `facetime_trigger.py`) → it adds 20 s, writes `<path>` as constant-fps (8) H.264 mp4 (fallback `mp4v`) and prints `{"clip": path|null, "error"?, "t": moment ms, "startedAt": first frame ms, "durationMs", "width", "height", "fps"}`; `facetime_trigger.py` re-prints it as `clip {json}` (type `ClipInfo`, `src/main/facetimeTrigger.ts`). A request while one is recording → `error: "busy"`.
 - Trigger: Electron `publishFacetime` (same moment the check-in opens, only while a DB session is not Ended) → `requestClip(newClipPath())`.
+- Compilation: after the session ends the Node clip compiler joins the clips and writes `session_compilation.url` (`../components/clip-compiler.md`); the desktop snapshot exposes it as `tables.compilations`.
 - Upload: `src/main/clipUpload.ts`, 192 KiB chunks; local file deleted afterwards (also all of `userData/clips/` at app start). Reducers + tables: `../components/spacetimedb-schema.md#19b-session_clip`.
 
 ## Desktop IPC (`src/preload/index.ts`)

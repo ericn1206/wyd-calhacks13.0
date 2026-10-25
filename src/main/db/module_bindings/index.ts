@@ -64,6 +64,7 @@ import SetCallRoomUrlReducer from "./set_call_room_url_reducer";
 import SetGoalsReducer from "./set_goals_reducer";
 import SetPomodoroReducer from "./set_pomodoro_reducer";
 import SetProfileReducer from "./set_profile_reducer";
+import SetSessionCompilationReducer from "./set_session_compilation_reducer";
 import SetSummaryTextReducer from "./set_summary_text_reducer";
 import StartPhonePairingReducer from "./start_phone_pairing_reducer";
 import StartSessionReducer from "./start_session_reducer";
@@ -85,6 +86,7 @@ import MyReplayClipsRow from "./my_replay_clips_table";
 import MySessionAwardsRow from "./my_session_awards_table";
 import MySessionCallParticipantsRow from "./my_session_call_participants_table";
 import MySessionClipsRow from "./my_session_clips_table";
+import MySessionCompilationsRow from "./my_session_compilations_table";
 import MySessionContextsRow from "./my_session_contexts_table";
 import MySessionFocusBlocksRow from "./my_session_focus_blocks_table";
 import MySessionGoalsRow from "./my_session_goals_table";
@@ -98,11 +100,15 @@ import MySessionsRow from "./my_sessions_table";
 import MyStuckMessagesRow from "./my_stuck_messages_table";
 import MyStuckSessionsRow from "./my_stuck_sessions_table";
 import UserRow from "./user_table";
+import WorkerEndedSessionsRow from "./worker_ended_sessions_table";
 import WorkerOpenStuckMessagesRow from "./worker_open_stuck_messages_table";
 import WorkerOpenStuckSessionsRow from "./worker_open_stuck_sessions_table";
 import WorkerPendingSignalEventsRow from "./worker_pending_signal_events_table";
 import WorkerPendingSummariesRow from "./worker_pending_summaries_table";
 import WorkerRecentJudgmentsRow from "./worker_recent_judgments_table";
+import WorkerSessionClipChunksRow from "./worker_session_clip_chunks_table";
+import WorkerSessionClipsRow from "./worker_session_clips_table";
+import WorkerSessionCompilationsRow from "./worker_session_compilations_table";
 import WorkerSessionContextsRow from "./worker_session_contexts_table";
 import WorkerSummaryGoalsRow from "./worker_summary_goals_table";
 
@@ -185,6 +191,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MySessionClipsRow),
+  mySessionCompilations: __table({
+    name: 'my_session_compilations',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MySessionCompilationsRow),
   mySessionContexts: __table({
     name: 'my_session_contexts',
     indexes: [
@@ -269,6 +282,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyStuckSessionsRow),
+  workerEndedSessions: __table({
+    name: 'worker_ended_sessions',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, WorkerEndedSessionsRow),
   workerOpenStuckMessages: __table({
     name: 'worker_open_stuck_messages',
     indexes: [
@@ -304,6 +324,27 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, WorkerRecentJudgmentsRow),
+  workerSessionClipChunks: __table({
+    name: 'worker_session_clip_chunks',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, WorkerSessionClipChunksRow),
+  workerSessionClips: __table({
+    name: 'worker_session_clips',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, WorkerSessionClipsRow),
+  workerSessionCompilations: __table({
+    name: 'worker_session_compilations',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, WorkerSessionCompilationsRow),
   workerSessionContexts: __table({
     name: 'worker_session_contexts',
     indexes: [
@@ -352,6 +393,7 @@ const reducersSchema = __reducers(
   __reducerSchema("set_goals", SetGoalsReducer),
   __reducerSchema("set_pomodoro", SetPomodoroReducer),
   __reducerSchema("set_profile", SetProfileReducer),
+  __reducerSchema("set_session_compilation", SetSessionCompilationReducer),
   __reducerSchema("set_summary_text", SetSummaryTextReducer),
   __reducerSchema("start_phone_pairing", StartPhonePairingReducer),
   __reducerSchema("start_session", StartSessionReducer),

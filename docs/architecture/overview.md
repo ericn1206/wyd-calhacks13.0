@@ -39,6 +39,7 @@ face time → Electron publishFacetime → stdin `clip <path>` → detector adds
   → `clip {json}` → clipUpload.ts → begin_session_clip / upload_clip_chunk × n / finish_session_clip → SpacetimeDB (session_clip + session_clip_chunk) → local file deleted
 ```
 Details: `contracts.md#session-clips`. Only the unfocused person's own laptop records and uploads.
+After `end_session`: `worker/compile` (Node, local) subscribes to the worker-only clip views → ffmpeg join → hosts `http://<host>:8787/compilations/session-<id>-<n>.mp4` → `set_session_compilation(url)` → members read `my_session_compilations`. See `../components/clip-compiler.md`.
 
 ## Who writes what
 | Data | Writer |

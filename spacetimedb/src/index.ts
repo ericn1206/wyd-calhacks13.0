@@ -21,6 +21,8 @@ import spacetimedb, {
   replayClipMeta,
   sessionClip,
   sessionClipChunk,
+  sessionCompilation,
+  CompilationStatus,
   score,
   scoreTickTimer,
   callTimeoutTimer,
@@ -1056,7 +1058,71 @@ export const finishSessionClip = spacetimedb.reducer({ clipKey: t.string() }, (c
   ctx.db.sessionClip.id.update({ ...clip, complete: true });
 });
 
+/** Compilation of the session's clips, for every session the caller may read. */
+export const mySessionCompilations = spacetimedb.view(
+  { name: 'my_session_compilations', public: true },
+  t.array(sessionCompilation.rowType),
+  ctx =>
+    mySessionIds(ctx.db, ctx.sender).flatMap(id => {
+      const c = ctx.db.sessionCompilation.sessionId.find(id);
+      return c ? [c] : [];
+    })
+);
+
+/** Clip worker writes the state of a session's compilation. `clipCount` = clips in the video at `url`. */
+export const setSessionCompilation = spacetimedb.reducer(
+  { sessionId: t.u64(), status: CompilationStatus, clipCount: t.u32(), url: t.option(t.string()), error: t.option(t.string()) },
+  (ctx, { sessionId, status, clipCount, url, error }) => {
+    requireWorker(ctx);
+    if (!ctx.db.session.id.find(sessionId)) throw new SenderError('unknown session');
+    if (status.tag === 'Ready' && !url) throw new SenderError('a Ready compilation needs a url');
+    const row = { sessionId, status, clipCount, url, error: error?.slice(0, 300), updatedAt: ctx.timestamp };
+    if (ctx.db.sessionCompilation.sessionId.find(sessionId)) ctx.db.sessionCompilation.sessionId.update(row);
+    else ctx.db.sessionCompilation.insert(row);
+  }
+);
+
+/** Ended sessions whose complete clips are not yet in a Ready compilation of the same size, with those clips. */
+function sessionsToCompile(db: ViewDb) {
+  const bySession = new Map<bigint, ReturnType<typeof db.sessionClip.iter> extends Iterable<infer C> ? C[] : never>();
+  for (const c of db.sessionClip.iter()) {
+    if (!c.complete) continue;
+    bySession.set(c.sessionId, [...(bySession.get(c.sessionId) ?? []), c]);
+  }
+  return [...bySession].flatMap(([sessionId, clips]) => {
+    const s = db.session.id.find(sessionId);
+    if (!s || s.state.tag !== 'Ended') return [];
+    const done = db.sessionCompilation.sessionId.find(sessionId);
+    if (done && done.status.tag === 'Ready' && done.clipCount === clips.length) return [];
+    return [{ session: s, clips }];
+  });
+}
+
 // Worker-only views (empty for everyone else).
+
+export const workerEndedSessions = spacetimedb.view({ name: 'worker_ended_sessions', public: true }, t.array(session.rowType), ctx =>
+  isWorker(ctx.db, ctx.sender) ? sessionsToCompile(ctx.db).map(x => x.session) : []
+);
+
+export const workerSessionClips = spacetimedb.view({ name: 'worker_session_clips', public: true }, t.array(sessionClip.rowType), ctx =>
+  isWorker(ctx.db, ctx.sender) ? sessionsToCompile(ctx.db).flatMap(x => x.clips) : []
+);
+
+/** Video bytes of the clips above (large: only the clip compiler subscribes). */
+export const workerSessionClipChunks = spacetimedb.view(
+  { name: 'worker_session_clip_chunks', public: true },
+  t.array(sessionClipChunk.rowType),
+  ctx =>
+    isWorker(ctx.db, ctx.sender)
+      ? sessionsToCompile(ctx.db).flatMap(x => x.clips.flatMap(c => [...ctx.db.sessionClipChunk.clipId.filter(c.id)]))
+      : []
+);
+
+export const workerSessionCompilations = spacetimedb.view(
+  { name: 'worker_session_compilations', public: true },
+  t.array(sessionCompilation.rowType),
+  ctx => (isWorker(ctx.db, ctx.sender) ? [...ctx.db.sessionCompilation.iter()] : [])
+);
 
 function liveSessionIds(db: ViewDb): bigint[] {
   return [...db.session.iter()].filter(s => s.state.tag !== 'Ended').map(s => s.id);

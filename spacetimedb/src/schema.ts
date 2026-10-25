@@ -25,6 +25,7 @@ export const AwardKind = t.enum('AwardKind', E.AwardKind);
 export const StuckState = t.enum('StuckState', E.StuckState);
 export const StuckRole = t.enum('StuckRole', E.StuckRole);
 export const MatchType = t.enum('MatchType', E.MatchType);
+export const CompilationStatus = t.enum('CompilationStatus', E.CompilationStatus);
 
 // ── Tables ──
 // All session-scoped tables are private; clients read them through the
@@ -366,6 +367,20 @@ export const sessionClipChunk = table(
   }
 );
 
+// 19d. session_compilation (own session via my_session_compilations; written only by the clip worker).
+// One row per session: all its clips joined into one video that the worker hosts at `url`.
+export const sessionCompilation = table(
+  { name: 'session_compilation' },
+  {
+    sessionId: t.u64().primaryKey(),
+    status: CompilationStatus,
+    clipCount: t.u32(), // clips in the video at `url`; 0 until Ready
+    url: t.option(t.string()),
+    error: t.option(t.string()),
+    updatedAt: t.timestamp(),
+  }
+);
+
 // 20. session_summary (owner only)
 export const sessionSummary = table(
   { name: 'session_summary' },
@@ -566,6 +581,7 @@ const spacetimedb = schema({
   replayClipMeta,
   sessionClip,
   sessionClipChunk,
+  sessionCompilation,
   sessionSummary,
   sessionAward,
   stuckSession,

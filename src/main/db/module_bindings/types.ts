@@ -145,6 +145,14 @@ export const CallTimeoutTimer = __t.object("CallTimeoutTimer", {
 });
 export type CallTimeoutTimer = __Infer<typeof CallTimeoutTimer>;
 
+// The tagged union or sum type for the algebraic type `CompilationStatus`.
+export const CompilationStatus = __t.enum("CompilationStatus", {
+  Rendering: __t.unit(),
+  Ready: __t.unit(),
+  Failed: __t.unit(),
+});
+export type CompilationStatus = __Infer<typeof CompilationStatus>;
+
 // The tagged union or sum type for the algebraic type `DeviceStatus`.
 export const DeviceStatus = __t.enum("DeviceStatus", {
   Connected: __t.unit(),
@@ -299,6 +307,9 @@ export type MySessionCallParticipants = __Infer<typeof MySessionCallParticipants
 
 export const MySessionClips = __t.object("MySessionClips", {});
 export type MySessionClips = __Infer<typeof MySessionClips>;
+
+export const MySessionCompilations = __t.object("MySessionCompilations", {});
+export type MySessionCompilations = __Infer<typeof MySessionCompilations>;
 
 export const MySessionContexts = __t.object("MySessionContexts", {});
 export type MySessionContexts = __Infer<typeof MySessionContexts>;
@@ -531,6 +542,18 @@ export const SessionClipChunk = __t.object("SessionClipChunk", {
 });
 export type SessionClipChunk = __Infer<typeof SessionClipChunk>;
 
+export const SessionCompilation = __t.object("SessionCompilation", {
+  sessionId: __t.u64(),
+  get status() {
+    return CompilationStatus;
+  },
+  clipCount: __t.u32(),
+  url: __t.option(__t.string()),
+  error: __t.option(__t.string()),
+  updatedAt: __t.timestamp(),
+});
+export type SessionCompilation = __Infer<typeof SessionCompilation>;
+
 export const SessionContext = __t.object("SessionContext", {
   sessionId: __t.u64(),
   topicDescription: __t.string(),
@@ -746,6 +769,9 @@ export const User = __t.object("User", {
 });
 export type User = __Infer<typeof User>;
 
+export const WorkerEndedSessions = __t.object("WorkerEndedSessions", {});
+export type WorkerEndedSessions = __Infer<typeof WorkerEndedSessions>;
+
 export const WorkerHeartbeat = __t.object("WorkerHeartbeat", {
   workerId: __t.string(),
   lastSeenAt: __t.timestamp(),
@@ -768,6 +794,15 @@ export type WorkerPendingSummaries = __Infer<typeof WorkerPendingSummaries>;
 
 export const WorkerRecentJudgments = __t.object("WorkerRecentJudgments", {});
 export type WorkerRecentJudgments = __Infer<typeof WorkerRecentJudgments>;
+
+export const WorkerSessionClipChunks = __t.object("WorkerSessionClipChunks", {});
+export type WorkerSessionClipChunks = __Infer<typeof WorkerSessionClipChunks>;
+
+export const WorkerSessionClips = __t.object("WorkerSessionClips", {});
+export type WorkerSessionClips = __Infer<typeof WorkerSessionClips>;
+
+export const WorkerSessionCompilations = __t.object("WorkerSessionCompilations", {});
+export type WorkerSessionCompilations = __Infer<typeof WorkerSessionCompilations>;
 
 export const WorkerSessionContexts = __t.object("WorkerSessionContexts", {});
 export type WorkerSessionContexts = __Infer<typeof WorkerSessionContexts>;
