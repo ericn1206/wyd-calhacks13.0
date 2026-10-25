@@ -21,7 +21,7 @@ export type AppCategory = (typeof AppCategory)[number];
 export const PhoneState = ['Unknown', 'Locked_In_Page_Visible', 'Phone_In_Use'] as const;
 export type PhoneState = (typeof PhoneState)[number];
 
-export const StatusLabel = ['Focused', 'OffTask', 'Away', 'Break', 'Unknown'] as const;
+export const StatusLabel = ['Focused', 'OffTask', 'Away', 'Break', 'Idle'] as const;
 export type StatusLabel = (typeof StatusLabel)[number];
 
 export const ReasonCode = [

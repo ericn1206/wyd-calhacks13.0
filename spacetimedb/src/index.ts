@@ -330,12 +330,12 @@ export const advancePomodoro = spacetimedb.reducer(
     for (const m of activeMembersOf(ctx.db, s.id)) {
       insertAlert(ctx, s.id, m.id, 'PomodoroPhaseChange', { phase: updated.currentPhase.tag, cycle: updated.cycleNumber, secs });
       if (toBreak) insertAlert(ctx, s.id, m.id, 'GoalCheckin', { cycle: updated.cycleNumber });
-      // Back from break: start fresh; the 60 s hold re-establishes the label.
+      // Back from rest: start fresh as Idle; the hold re-establishes the label.
       if (!toBreak) {
         const st = ctx.db.status.memberId.find(m.id);
         if (st) {
           stopTracking(ctx, m.id);
-          ctx.db.status.memberId.update({ ...st, label: tag('Unknown'), reasonCode: tag('Unknown'), since: ctx.timestamp, smoothedOffTaskSecs: 0, updatedAt: ctx.timestamp });
+          ctx.db.status.memberId.update({ ...st, label: tag('Idle'), reasonCode: tag('Unknown'), since: ctx.timestamp, smoothedOffTaskSecs: 0, updatedAt: ctx.timestamp });
           ensureTracking(ctx, m, updated);
         }
       } else {

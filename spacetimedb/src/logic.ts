@@ -190,7 +190,7 @@ export function ensureTracking(ctx: Ctx, m: Member, s: Session) {
     ctx.db.status.insert({
       memberId: m.id,
       sessionId: s.id,
-      label: tag(s.currentPhase.tag === 'Break' ? 'Break' : 'Unknown'),
+      label: tag(s.currentPhase.tag === 'Break' ? 'Break' : 'Idle'),
       reasonCode: tag('Unknown'),
       confidence: 0,
       since: ctx.timestamp,
@@ -392,7 +392,7 @@ type Candidate = { label: E.StatusLabel; reason: E.ReasonCode; confidence: numbe
 
 /**
  * Finds the newest confident label and how long it has held without a
- * contradicting confident label. Low-confidence/Unknown judgments are neutral.
+ * contradicting confident label. Low-confidence/Idle judgments are neutral.
  */
 function currentCandidate(ctx: Ctx, memberId: bigint, notBefore: Timestamp | undefined): Candidate | undefined {
   const lowConf = settingNum(ctx.db, 'low_confidence_threshold');
@@ -403,7 +403,7 @@ function currentCandidate(ctx: Ctx, memberId: bigint, notBefore: Timestamp | und
     const ev = ctx.db.signalEvent.id.find(j.eventId);
     if (!ev || secsBetween(ev.ts, ctx.timestamp) > window) continue;
     if (notBefore && ev.ts.microsSinceUnixEpoch < notBefore.microsSinceUnixEpoch) continue;
-    if (j.rawLabel.tag === 'Unknown' || j.rawConfidence < lowConf) continue;
+    if (j.rawLabel.tag === 'Idle' || j.rawConfidence < lowConf) continue;
     judged.push({ ts: ev.ts, label: j.rawLabel.tag, reason: j.reasonCode.tag, confidence: j.rawConfidence, eventId: ev.id });
   }
   if (judged.length === 0) return undefined;

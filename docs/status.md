@@ -25,6 +25,7 @@ Last updated: 2026-10-24. Biggest gap: **activity signals do not reach Spacetime
 ## Missing
 - UI wiring still open: see table below (activity → DB, check-in from alerts, LiveKit video, summary). `activity:update`/`activity:alert` not consumed (UI uses Demo-menu triggers).
 - Off-task pipeline: local OCR + Gemini classification → `ingest_signal` (`architecture/overview.md#off-task-pipeline`). Replaces desktop `categorize.ts`/`appClassifier.ts`/`claudeJudge.ts` as the verdict source.
+- Resting phase on the client: `ActivityMonitor` must stop off-task checks/signals while the session is in Break (`product/spec.md#session-phases`). TODO markers in `src/main/activityMonitor.ts` and `src/main/index.ts`.
 - Worker ↔ SpacetimeDB: no subscription to `worker_pending_signal_events`, no `write_judgment`.
 - Vision (MediaPipe), phone sensor page (`phone/`, optional), replay clips.
 - Screens: replay (no consent screen by decision; see `product/privacy.md`).
@@ -53,7 +54,7 @@ Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` �
 ## Mismatches (unresolved; decisions tracked in `product/decisions.md`)
 | Area | Variants in code |
 |---|---|
-| Judge | `src/main/claudeJudge.ts`: `claude-haiku-4-5-20251001`, labels `productive`/`distracted`/`neutral` · `worker/judge.ts`: `claude-haiku-5-5`, `on_task`/`off_task`/`break` · DB `StatusLabel`: `Focused`/`OffTask`/`Away`/`Break`/`Unknown` |
+| Judge | `src/main/claudeJudge.ts`: `claude-haiku-4-5-20251001`, labels `productive`/`distracted`/`neutral` · `worker/judge.ts`: `claude-haiku-5-5`, `on_task`/`off_task`/`break` · DB `StatusLabel`: `Focused`/`OffTask`/`Away`/`Break`/`Idle` |
 | Categories | `categorize.ts`: contract lowercase 9 · `appClassifier.ts`: `productive`/`distracted`/`neutral`/`unknown` (drives alerts) · DB `AppCategory`: `OnTask`/`OffTask` (published 2026-10-24). Desktop sets still to be replaced by the OCR + Gemini verdict (`architecture/overview.md#off-task-pipeline`). |
 | Event format | Contract JSON (`worker/types.ts`) vs DB `SignalInput`. See `architecture/contracts.md`. |
 | Timing | Spec: drift 2 min, call cooldown 30 min, call ~60 s · DB: call immediately on OffTask (`off_task_threshold_secs` 0), cooldown 600 s, max call 90 s · Desktop: alerts at 30/60 s, auto-call cooldown 5 min, LiveKit call 90 s |
@@ -70,6 +71,7 @@ Done against the DB: session create/join, Pomodoro sync (lobby `set_pomodoro` �
 5. Resolve judge + category mismatches.
 
 ## Gotchas
+- `StatusLabel.Unknown` → `Idle` (enum change): module not yet republished. Run `spacetime publish calhacks-13-wyd --delete-data=on-conflict -y` (wipes data) then `seed_defaults`, and regenerate bindings (`types.ts` was hand-edited to match). Tell the team.
 - 2026-10-24: db wiped + republished (`--delete-data=on-conflict`) for the binary `AppCategory`; `seed_defaults` re-run. Any old session/token state is gone (identities persist per client token).
 - `set_pomodoro` published to maincloud 2026-10-24 (additive publish, data kept).
 - Desktop DB client: `src/main/db/stdb.ts` (single connection in main; Node 18 needs `undici` for WebSocket). Renderer reads `window.wydDesktop.db` (`snapshot`, `call`, `onState`) via `src/renderer/src/db/useDb.ts`. Offline/not connected → entry screen falls back to the local demo flow (needs a typed code).

@@ -34,7 +34,7 @@ Wire format: in module code / TS bindings a value is `{ tag: 'Focused' }`. Raw J
 | DeviceStatus | Connected, Disconnected |
 | AppCategory | OnTask, OffTask (binary; set by the desktop's Gemini classification, see `overview.md#off-task-pipeline`) |
 | PhoneState | Unknown, Locked_In_Page_Visible, Phone_In_Use |
-| StatusLabel | Focused, OffTask, Away, Break, Unknown |
+| StatusLabel | Focused, OffTask, Away, Break, Idle (no verdict yet: on join and after a rest ends; neutral in smoothing; was `Unknown`) |
 | ReasonCode | Eyes_Closed, Looking_Away, Phone, Distracting_App, Idle, Left_Seat, Slouching, Unknown |
 | ModelName | Haiku, Inferentia, Fallback |
 | FocusBlockKind | DeepWork, Interruption, Break |

@@ -40,7 +40,7 @@ No table stores video, images, or audio. `replay_clip_meta` holds a hash of the 
 ## Behavior
 
 **Smoothing (every 10 s per member and on every event).** Judgments with confidence < `low_confidence_threshold` or
-label Unknown are neutral and skipped. A confident OffTask applies immediately; any other change waits until the newest confident label
+label Idle are neutral and skipped. A confident OffTask applies immediately; any other change waits until the newest confident label
 has held for `smoothing_hold_secs` with no contradicting confident label. Also runs inside `ingest_signal` and `write_judgment`. `since` is backdated to when
 that streak began, so `smoothed_off_task_secs` counts from the first off-task event. During Break
 the label is Break. No events for a full hold window → Away (Left_Seat). Each change closes the open
