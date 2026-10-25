@@ -60,7 +60,7 @@ function Countdown({ endsAt }: { endsAt: number | null }) {
  * Real circle check-in. Joins the LiveKit room for this session code, and turns
  * cameras on when the distraction detector fires — or when someone else in the room does.
  */
-export function LiveCheckIn({ sessionCode, displayName, corner, onActive, onLocalStart, onEnded, onRoster, onNoRoom }: {
+export function LiveCheckIn({ sessionCode, displayName, corner, onActive, onLocalStart, onEnded, onRoster, onAlone }: {
   sessionCode: string
   displayName: string
   corner: string
@@ -68,8 +68,8 @@ export function LiveCheckIn({ sessionCode, displayName, corner, onActive, onLoca
   onLocalStart: () => void
   onEnded: () => void
   onRoster: (ready: boolean, people: Person[]) => void
-  /** The detector fired but there is no session room to call (no DB session): show the local check-in instead. */
-  onNoRoom: () => void
+  /** The detector fired but nobody else can join (no session room, or alone in it): show the duck window instead. */
+  onAlone: () => void
 }) {
   const room = sessionCode.length >= 4 ? { name: displayName, sessionCode } : null
   const circle = useCircleCall(room)
@@ -109,7 +109,7 @@ export function LiveCheckIn({ sessionCode, displayName, corner, onActive, onLoca
     }
     if (!room) {
       pending.current = false
-      onNoRoom()
+      onAlone()
       return
     }
     if (circle.status === 'error') {
@@ -119,9 +119,13 @@ export function LiveCheckIn({ sessionCode, displayName, corner, onActive, onLoca
     }
     if (circle.status !== 'connected') return
     pending.current = false
+    if (circle.peers.length === 0) {
+      onAlone() // nobody to call: duck window, no camera
+      return
+    }
     onLocalStart()
     startRef.current()
-  }, [pulse, sessionCode, displayName, circle.status, circle.error, circle.inCall, circle.joining, circle.callActive, onLocalStart, onNoRoom])
+  }, [pulse, sessionCode, displayName, circle.status, circle.error, circle.inCall, circle.joining, circle.callActive, onLocalStart, onAlone])
 
   // Don't wait silently on LiveKit: if the room hasn't connected shortly after a trigger, say why.
   useEffect(() => {
