@@ -348,6 +348,7 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
 .dock-goal { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; font-size: 11px; cursor: pointer; }
 .dock-goal input { display: none; }
 .dock-activity { cursor: default; }
+.team-empty { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .dock-activity > svg { width: 15px; height: 15px; flex: none; color: #9fb5b1; }
 .dock-goal .fake-check { border-color: rgba(255,255,255,.4); flex: none; }
 .dock-goal > span:last-child { display: grid; }
