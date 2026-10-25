@@ -28,6 +28,7 @@ const compiler = await startCompiler({
   retryMs: 60_000,
   pollMs: 2000,
   ffmpegBin: env['FFMPEG_BIN'] || 'ffmpeg',
+  audioPath: env['COMPILE_AUDIO'] || join(root, 'worker', 'compile', 'audio', 'background.mp3'),
   lease: { label: `${hostname()} (${publicUrl})`, takeover: flags.has('--takeover') },
   onLeaseLost: () => process.exit(0),
   log: m => console.log(`[compile ${new Date().toTimeString().slice(0, 8)}] ${m}`)

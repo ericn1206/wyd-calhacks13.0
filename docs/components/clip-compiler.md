@@ -8,7 +8,8 @@ Purpose: after a session ends, join its clips (`session_clip`, `contracts.md#ses
 | `worker/compile/main.ts` | Entry: env → `startCompiler` |
 | `worker/compile/compiler.ts` | Subscribes as a worker identity, decides, renders, reports (`setSessionCompilation`) |
 | `worker/compile/plan.ts` | Pure: `orderClips`, `dueSessions`, `videoName`, `staleVideos` |
-| `worker/compile/render.ts` | ffmpeg join (`ffmpegArgs`, `renderCompilation`) |
+| `worker/compile/render.ts` | ffmpeg join + soundtrack (`ffmpegArgs`, `renderCompilation`) |
+| `worker/compile/audio/background.mp3` | Soundtrack; you supply it (committed so every host has it) |
 | `worker/compile/serve.ts` | HTTP: `GET /compilations/session-<id>-<n>.mp4` (Range, CORS `*`), `GET /session/<id>` (shareable page), `GET /session/<id>/status` (JSON), `GET /health` |
 | `worker/compile/network.ts` | `lanAddress()`: the laptop's address for shareable links |
 | `worker/compile/page.ts` | The `/session/<id>` HTML (polls `/status` every 3 s: waiting → rendering → video) and the status JSON shape |
@@ -22,7 +23,7 @@ worker: wait COMPILE_QUIET_SECS since the last change (clips of the last 20 s ar
   → setSessionCompilation(Ready, clipCount n, url) → members read it from my_session_compilations (desktop snapshot key `compilations`)
 ```
 - Views list only sessions whose complete clips are not already in a `Ready` compilation of the same `clipCount`: a late clip makes the session reappear, it is re-rendered to a new file name (`-<n>`), and older files of that session are deleted.
-- Order: `momentAtMs`, then clip id. Output: 1280×720, 10 fps, H.264 (crf 20), faststart, no audio. Each input is fitted into the frame (letterboxed, never stretched) and joined with ffmpeg's concat filter (older 320×240 webcam-only clips, mixed size/codec are fine).
+- Order: `momentAtMs`, then clip id. Output: 1280×720, 10 fps, H.264 (crf 20), faststart. Audio: `worker/compile/audio/background.mp3` (or `COMPILE_AUDIO`) is laid over the whole video, looped if shorter, cut at the video's end (AAC 160k); file absent = silent video. Checked on every render, no restart needed; the clips' own audio is not used. Each input is fitted into the frame (letterboxed, never stretched) and joined with ffmpeg's concat filter (older 320×240 webcam-only clips, mixed size/codec are fine).
 - `Failed` → error text in the row; retried after 60 s.
 - Connection: drops are logged (`disconnected; reconnecting`) and retried with backoff 2 s → 30 s; the page reports `offline` meanwhile. Every database call has a 20 s timeout (a call on a dropped connection never answers and would otherwise block the worker).
 - `worker_ended_sessions` lists **every** ended session (not only ones needing a render), so `empty` can be told apart from `waiting`. Needs the module published to maincloud (2026-10-25 change); before that, sessions with no clips stay `waiting`.
@@ -60,6 +61,7 @@ Two compilers would write different URLs into the same rows. A compiler therefor
 | `COMPILE_PUBLIC_URL` | `http://localhost:<port>` | base of the URL written to the db. **Teammates on other laptops can't open `localhost`**: set the host's LAN IP, e.g. `http://192.168.1.20:8787` |
 | `COMPILE_OUT_DIR` | `worker/out/compilations` | where videos are written |
 | `COMPILE_QUIET_SECS` | `30` | wait after the last change before rendering |
+| `COMPILE_AUDIO` | `worker/compile/audio/background.mp3` | soundtrack path (any format ffmpeg reads) |
 | `FFMPEG_BIN` | `ffmpeg` | |
 
 ## Tests

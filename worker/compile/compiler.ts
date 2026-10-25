@@ -22,6 +22,8 @@ export interface CompilerOptions {
   retryMs: number
   pollMs: number
   ffmpegBin: string
+  /** Track laid over every video (looped to its length). Missing file = no audio. */
+  audioPath?: string
   /** First wait before reconnecting after the connection drops; doubles up to 30 s. Default 2000. */
   reconnectMs?: number
   /**
@@ -250,7 +252,7 @@ export async function startCompiler(o: CompilerOptions): Promise<RunningCompiler
       })
       const name = videoName(sessionId, clips.length)
       const started = Date.now()
-      const { skipped } = await renderCompilation(files, join(o.outDir, name), o.ffmpegBin)
+      const { skipped } = await renderCompilation(files, join(o.outDir, name), o.ffmpegBin, o.audioPath)
       for (const old of staleVideos(readdirSync(o.outDir), sessionId, name)) rmSync(join(o.outDir, old), { force: true })
       // clipCount stays the number of clips the session has (what the module compares), even when some were unreadable.
       const note = skipped.length ? `${skipped.length} unreadable clip(s) left out (ids ${skipped.map(i => clips[i].id).join(', ')})` : undefined

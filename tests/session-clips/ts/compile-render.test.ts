@@ -46,6 +46,20 @@ describe('ffprobeBin', () => {
   })
 })
 
+describe('ffmpegArgs audio', () => {
+  it('loops the track as the last input and stops at the end of the video', () => {
+    const args = ffmpegArgs(['/t/a.mp4', '/t/b.mp4'], '/o/out.mp4', '/t/song.mp3')
+    const i = args.indexOf('-stream_loop')
+    assert.deepEqual(args.slice(i, i + 4), ['-stream_loop', '-1', '-i', '/t/song.mp3'])
+    assert.ok(args.includes('2:a:0') && args.includes('-shortest'))
+  })
+
+  it('adds no audio options without a track', () => {
+    const args = ffmpegArgs(['/t/a.mp4'], '/o/out.mp4')
+    assert.ok(!args.includes('-stream_loop') && !args.includes('-shortest'))
+  })
+})
+
 describe('renderCompilation', { skip }, () => {
   let dir: string
   before(() => { dir = mkdtempSync(join(tmpdir(), 'wyd-render-')) })

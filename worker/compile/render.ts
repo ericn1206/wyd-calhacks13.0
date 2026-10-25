@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 
@@ -13,16 +13,20 @@ export const OUT_FPS = 10
  * ffmpeg arguments that join the clips (already in order) into one 1280x720, 10 fps H.264 mp4. Each input is
  * fitted into the frame (letterboxed, never stretched) and joined with the concat filter, so older low-res webcam
  * clips, the `mp4v` fallback or any other size/rate cannot break the join.
+ * With `audioPath` the audio is looped endlessly and cut where the video ends (`-shortest`), so a short track
+ * repeats under a long video and a long track is trimmed.
  */
-export function ffmpegArgs(clipPaths: readonly string[], outPath: string): string[] {
+export function ffmpegArgs(clipPaths: readonly string[], outPath: string, audioPath?: string): string[] {
   const fit = `scale=${OUT_W}:${OUT_H}:force_original_aspect_ratio=decrease,pad=${OUT_W}:${OUT_H}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${OUT_FPS},format=yuv420p`
   const normalised = clipPaths.map((_, i) => `[${i}:v]${fit}[v${i}]`)
   const inputs = clipPaths.map((_, i) => `[v${i}]`).join('')
   return [
     '-v', 'error', '-y',
     ...clipPaths.flatMap(p => ['-i', p]),
+    ...(audioPath ? ['-stream_loop', '-1', '-i', audioPath] : []),
     '-filter_complex', `${normalised.join(';')};${inputs}concat=n=${clipPaths.length}:v=1:a=0[out]`,
     '-map', '[out]',
+    ...(audioPath ? ['-map', `${clipPaths.length}:a:0`, '-c:a', 'aac', '-b:a', '160k', '-shortest'] : []),
     '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p',
     '-movflags', '+faststart',
     outPath
@@ -56,7 +60,7 @@ async function hasVideo(file: string, probe: string): Promise<boolean | 'unknown
   })
 }
 
-export async function renderCompilation(clips: readonly Uint8Array[], outPath: string, ffmpegBin = 'ffmpeg'): Promise<RenderResult> {
+export async function renderCompilation(clips: readonly Uint8Array[], outPath: string, ffmpegBin = 'ffmpeg', audioPath?: string): Promise<RenderResult> {
   if (clips.length === 0) throw new Error('no clips to render')
   const dir = mkdtempSync(join(tmpdir(), 'wyd-compile-'))
   const part = `${outPath}.part.mp4`
@@ -72,7 +76,8 @@ export async function renderCompilation(clips: readonly Uint8Array[], outPath: s
     const skipped = verdicts.flatMap((ok, i) => (ok === false ? [i] : []))
     const readable = paths.filter((_, i) => !skipped.includes(i))
     if (readable.length === 0) throw new Error(`no readable clips (${skipped.length} unreadable)`)
-    await run(ffmpegBin, ffmpegArgs(readable, part))
+    // Checked per render, so dropping the file in takes effect without a restart; no file = silent video.
+    await run(ffmpegBin, ffmpegArgs(readable, part, audioPath && existsSync(audioPath) ? audioPath : undefined))
     renameSync(part, outPath)
     return { skipped }
   } finally {
