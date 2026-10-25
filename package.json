@@ -8,7 +8,8 @@
     "build": "electron-vite build",
     "start": "electron-vite dev",
     "dev:two": "bash scripts/dev-two.sh",
-    "setup:vision": "bash scripts/setup-vision.sh"
+    "setup:vision": "bash scripts/setup-vision.sh",
+    "test:clips": "node tests/session-clips/run.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.27.0",

@@ -42,6 +42,7 @@ Desktop build: `electron.vite.config.ts` (main/preload externalize deps; rendere
 | Distraction trigger alone | `vision/.venv/bin/python vision/facetime_trigger.py "circuits"` (prints `face time`) |
 | Desktop build | `npm run build` |
 | 2 isolated clients (separate identity/localStorage via `--user-data-dir ~/.wyd-test/client-<i>`; builds once, runs `electron-vite preview`, no HMR) | `npm run dev:two [-- -n 3] [--no-build] [--fresh]` (`scripts/dev-two.sh`; `WYD_TEST_DIR` overrides dir). Same webcam/screen is shared. |
+| Session-clips tests (`tests/session-clips/README.md`) | `npm run test:clips [-- ts\|py]` |
 | Worker fixtures | `cd worker && npm run fixtures` |
 | Build / publish module | `cd spacetimedb && spacetime build` / `spacetime publish` |
 | Re-seed after publish | `spacetime call calhacks-13-wyd seed_defaults` |

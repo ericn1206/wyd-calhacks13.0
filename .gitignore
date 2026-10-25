@@ -68,3 +68,7 @@ __pycache__/
 distraction_dataset.csv
 
 .claude/settings.local.json
+
+# session-clips test build output
+tests/session-clips/.build/
+__pycache__/
