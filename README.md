@@ -12,7 +12,7 @@ The app is a **macOS-only Electron desktop app**. It talks to a hosted Spacetime
 | Vision detector (webcam + screen OCR, Python) | `vision/` | **Yes** (drift detection; spawned by the app) | Your Mac, in `vision/.venv` |
 | SpacetimeDB module (session state, rules) | `spacetimedb/` | Already published to maincloud (db `calhacks-13-wyd`). Only republish if you changed it | SpacetimeDB maincloud |
 | Clip compiler (joins session clips into one video and hosts it) | `worker/compile/` | Optional: needed for the highlight video link. **One per database** | One Mac, Node + ffmpeg |
-| AI worker fixtures | `worker/` | Optional (dev only) | Your Mac, Node 24 |
+| AI worker fixtures (judge test scenarios; **not** the clip compiler) | `worker/` | Optional (dev only) | Your Mac, Node 24 |
 
 ## 1. Prerequisites
 
@@ -213,6 +213,17 @@ Breaking schema changes need `--delete-data=on-conflict` on publish and wipe the
 
 What gets recorded: when the check-in fires, the drifting person's own laptop saves 10 s before and 20 s after as one 1280x720 clip (their screen, with their webcam in the corner), recorded locally and uploaded straight from that laptop, not taken from the video call. After the session ends, the compiler joins every clip of the session into one video and hosts it. The clips themselves stay in the database.
 
+### First run
+
+The compiler runs from the **repo root** and needs nothing beyond the normal install (section 2). Do **not** run `cd worker && npm install && npm run fixtures` for it: that is the separate AI-judge test (section 7) and has nothing to do with clips.
+
+1. `brew install ffmpeg` (only on the Mac that hosts the compiler).
+2. Set the worker identity (below), or skip it and authorize the identity the compiler prints.
+3. `npm run clips:host`. It should print `connected as worker ...` and the page address to share; `http://localhost:8787/health` answers `ok`.
+4. Leave it running while you use the app (`npm run dev` in another terminal); stop it with Ctrl+C.
+
+If it will not start: `unknown reducer` means the database does not have this branch's module yet (publish it, see section 5); `a clip compiler is already running` means another one holds the lease (use that one, or add `-- --takeover`). More in Troubleshooting.
+
 ```bash
 # worker identity: the token of the account that published the database...
 export WYD_WORKER_TOKEN=$(grep spacetimedb_token ~/.config/spacetime/cli.toml | cut -d'"' -f2)
@@ -236,7 +247,7 @@ npm run test:clips -- ts           # TS tests only
 npm run test:clips -- py           # Python tests only
 npm run build                      # production build into out/
 
-# AI worker fixtures (Node 24, needs GEMINI_API_KEY in .env)
+# AI worker fixtures: judge test scenarios, optional, NOT needed for the clip compiler (Node 24, needs GEMINI_API_KEY in .env)
 nvm use 24
 cd worker && npm install && npm run fixtures && cd ..
 nvm use 20
