@@ -52,7 +52,8 @@ export function startFacetimeTrigger(
   onStatus: (offTask: boolean) => void,
   onDebug: (entry: DetectorDebug) => void,
   onClip: (info: ClipInfo) => void,
-  sites = ''
+  sites = '',
+  cameraLabel = ''
 ): void {
   stopFacetimeTrigger()
   const root = projectRoot()
@@ -66,8 +67,9 @@ export function startFacetimeTrigger(
   const args = [script, goal]
   if (sites.trim()) args.push(sites)
   // stdin stays open: `clip <path>` lines request a session clip (see requestClip).
+  // WYD_CAMERA_LABEL: the camera the check-in call uses; the detector (and so the clips) opens the same one.
   // WYD_APP_PID: the detector leaves this app's windows (overlay with the check-in tiles) out of the screen clip.
-  const proc = spawn(python, args, { cwd: root, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, WYD_APP_PID: String(process.pid) } })
+  const proc = spawn(python, args, { cwd: root, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, WYD_APP_PID: String(process.pid), WYD_CAMERA_LABEL: cameraLabel } })
   child = proc
   let pending = ''
   proc.stdout?.on('data', (buf: Buffer) => {

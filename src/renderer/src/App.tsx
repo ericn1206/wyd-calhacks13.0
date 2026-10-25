@@ -372,7 +372,18 @@ export default function App() {
       return
     }
     const task = activeGoals[0] || 'study'
-    void window.wydDesktop?.startTracking({ subject: task, goals: activeGoals.length ? activeGoals : [task], sites: '', notes: '' })
+    let cancelled = false
+    void (async () => {
+      // The camera the check-in call picks (same constraints as useCircleCall); the clip recorder opens that one too.
+      let camera = ''
+      try {
+        const probe = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
+        camera = probe.getVideoTracks()[0]?.label ?? ''
+        probe.getTracks().forEach((track) => track.stop())
+      } catch { /* no camera access yet: the detector falls back to camera 0 */ }
+      if (!cancelled) void window.wydDesktop?.startTracking({ subject: task, goals: activeGoals.length ? activeGoals : [task], sites: '', notes: '', camera })
+    })()
+    return () => { cancelled = true }
   }, [tracking, activeGoals.join('\n')])
   const finishPomodoro = () => {
     setTimerRunning(false)
