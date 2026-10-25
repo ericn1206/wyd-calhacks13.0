@@ -323,7 +323,8 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
 .focus-dock-wrap.dock-hidden { transform: translate(-50%, calc(-100% - 8px)); }
 .focus-dock-wrap.dock-hidden:after { content: ''; position: absolute; width: 84px; height: 5px; border-radius: 0 0 6px 6px; background: rgba(49,75,73,.48); left: 50%; bottom: -13px; transform: translateX(-50%); }
 .focus-dock { width: 100%; min-height: 58px; color: #f7fbfa; border: 1px solid rgba(255,255,255,.18); border-radius: 20px; padding: 8px 12px; background: rgba(29,47,45,.88); box-shadow: 0 10px 35px rgba(22,34,32,.22); backdrop-filter: blur(18px) saturate(130%); display: flex; align-items: center; gap: 13px; overflow: hidden; }
-.dock-main { display: flex; align-items: center; gap: 11px; flex: none; }
+/* dock-main grows (the status pill takes the slack) so camera + actions stay anchored right. */
+.dock-main { display: flex; align-items: center; gap: 11px; flex: 1; min-width: 0; }
 .dock-time { display: flex; align-items: center; gap: 7px; }
 .dock-time strong { font: 700 18px 'Manrope'; letter-spacing: -.03em; }
 .dock-time small { color: #9fb5b1; font-size: 8px; white-space: nowrap; }
@@ -352,7 +353,7 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
 .dock-divider { width: 1px; height: 20px; background: rgba(255,255,255,.14); }
 .camera-live { display: flex; align-items: center; gap: 6px; color: #bfe3dc; font-size: 10px; white-space: nowrap; }
 .camera-live svg { width: 17px; }
-.dock-detail { display: flex; align-items: center; gap: 9px; min-width: 0; flex: 1; }
+.dock-detail { display: flex; align-items: center; justify-content: flex-end; gap: 9px; flex: none; margin-left: 11px; }
 .dock-goal { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; font-size: 11px; cursor: pointer; }
 .dock-goal input { display: none; }
 .dock-activity { cursor: default; }
