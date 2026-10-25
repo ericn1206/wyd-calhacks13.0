@@ -19,7 +19,9 @@ import json
 import math
 import os
 import queue
+import re
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -59,6 +61,34 @@ def pump(seconds):
         lib.CFRunLoopRunInMode(mode, float(seconds), False)
     except Exception:
         time.sleep(seconds)
+
+
+def camera_index_for(label):
+    """OpenCV (AVFoundation) index of the camera named `label`, as Chromium reports it; None if it can't be found."""
+    if not label:
+        return None
+    try:
+        out = subprocess.run(
+            ['ffmpeg', '-hide_banner', '-f', 'avfoundation', '-list_devices', 'true', '-i', ''],
+            capture_output=True, text=True, timeout=10,
+        ).stderr
+    except Exception:
+        return None
+    names = {}
+    for line in out.splitlines():
+        if 'AVFoundation audio devices' in line:
+            break
+        m = re.search(r'\[(\d+)\] (.+)$', line)
+        if m:
+            names[int(m.group(1))] = m.group(2).strip()
+    want = label.strip().lower()
+    for index, name in names.items():
+        if name.lower() == want:
+            return index
+    for index, name in names.items():
+        if name.lower() in want or want in name.lower():
+            return index
+    return None
 
 
 def open_camera(index):
@@ -209,7 +239,7 @@ def main():
     here = os.path.dirname(os.path.abspath(__file__))
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', default=os.path.join(here, 'distraction_model.json'))
-    parser.add_argument('--camera', type=int, default=0)
+    parser.add_argument('--camera', type=int, default=None)
     parser.add_argument('--fps', type=float, default=10)
     args = parser.parse_args()
 
@@ -220,7 +250,14 @@ def main():
     face_mesh = mp.solutions.face_mesh.FaceMesh(max_num_faces=1, refine_landmarks=True)
     pose = mp.solutions.pose.Pose()
 
-    cap = open_camera(args.camera)
+    # Same camera the check-in call (LiveKit) uses: the renderer passes its name in WYD_CAMERA_LABEL.
+    label = os.environ.get('WYD_CAMERA_LABEL', '')
+    index = args.camera
+    if index is None:
+        index = camera_index_for(label)
+        print(f'camera "{label}" -> index {index}' if index is not None else f'camera "{label}" not found, using 0', file=sys.stderr)
+        index = index or 0
+    cap = open_camera(index)
     if cap is None:
         return 2
 

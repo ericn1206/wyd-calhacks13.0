@@ -243,7 +243,7 @@ function registerDesktopApi(): void {
   })
 
   // LiveKit call plumbing for the overlay check-in (src/renderer/src/overlay/LiveCheckIn.tsx).
-  ipcMain.handle('call:token', (_e, code: string, identity: string, name: string) => createCallToken(code, identity, name))
+  ipcMain.handle('call:token', (_e, code: string, identity: string, name: string, kind?: string) => createCallToken(code, identity, name, kind))
   ipcMain.handle('window:call-mode', (_e, on: boolean) => {
     // The check-in cameras live on the overlay, which is already above every app.
     if (overlayWindow && !overlayWindow.isDestroyed() && overlayWindow.isVisible()) return
@@ -269,7 +269,7 @@ function registerDesktopApi(): void {
     stopFacetimeTrigger()
     monitor?.stop()
   })
-  ipcMain.handle('wyd:tracking:start', (_e, ctx: { subject: string; goals: string[]; sites?: string; notes?: string }) => {
+  ipcMain.handle('wyd:tracking:start', (_e, ctx: { subject: string; goals: string[]; sites?: string; notes?: string; camera?: string }) => {
     const context: SessionContext = {
       subject: ctx.subject,
       goals: ctx.goals ?? [],
@@ -282,7 +282,7 @@ function registerDesktopApi(): void {
     const goalParts = [context.subject, ...context.goals, context.notes].map((part) => part.trim()).filter(Boolean)
     const goal = goalParts.filter((part, index) => goalParts.findIndex((item) => item.toLowerCase() === part.toLowerCase()) === index).join('. ') || 'study'
     const mentioned = [context.sites, context.notes].map((part) => part.trim()).filter(Boolean).join('. ')
-    startFacetimeTrigger(goal, publishFacetime, (offTask) => sendToRenderer('wyd:detector-status', offTask), recordDetectorDebug, handleClip, mentioned)
+    startFacetimeTrigger(goal, publishFacetime, (offTask) => sendToRenderer('wyd:detector-status', offTask), recordDetectorDebug, handleClip, mentioned, ctx.camera ?? '')
   })
 
   ipcMain.handle('session:start', async () => {

@@ -30,6 +30,7 @@ On Goals submit, run the webcam detector and the screen monitor. Print `face tim
 3. `npm run dev`, submit Goals. Or alone: `vision/.venv/bin/python vision/facetime_trigger.py "circuits" "Google Chrome"`. Second arg is the sites/apps phrase.
 
 ## Gotchas
+- Camera choice: `App.tsx` probes the camera Chromium picks for `facingMode: 'user'` (what the LiveKit call uses) and sends its label via `startTracking({ camera })` → env `WYD_CAMERA_LABEL`; `detector.py` maps it to an AVFoundation index with `ffmpeg -f avfoundation -list_devices` (needs `ffmpeg` on PATH; else index 0). `--camera N` overrides.
 - Camera permission for the Python process. Screen Recording for OCR.
 - `detector.py` resizes frames to 640×480 for `distraction_model.json`.
 - `detector.py` also records clips on request: `clip_recorder.py` (buffer + composite) and `screen_capture.py` (CoreGraphics via ctypes, excludes the WYD app's windows). Protocol and format: `../architecture/contracts.md#session-clips`. No new packages; screen frames need the Screen Recording permission. Expect ~1–6 MB per 30 s clip (OpenCV's H.264 writer has no bitrate control; adaptive).
