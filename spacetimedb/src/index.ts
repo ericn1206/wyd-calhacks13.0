@@ -52,6 +52,7 @@ import {
   isWorker,
   logGoalChecked,
   maybeTriggerGroupCall,
+  proposedOrRandomCode,
   randomCode,
   recomputeGoals,
   requireActiveMember,
@@ -155,13 +156,14 @@ const SessionSettings = t.object('SessionSettings', {
 });
 
 export const createSession = spacetimedb.reducer(
-  { name: t.string(), settings: SessionSettings },
-  (ctx, { name, settings }) => {
+  { name: t.string(), settings: SessionSettings, code: t.option(t.string()) },
+  (ctx, { name, settings, code: proposed }) => {
     seedDefaults(ctx);
     const current = activeMember(ctx);
     if (current) leaveMember(ctx, current.member.id);
 
-    const code = randomCode(ctx, 6, c => ctx.db.session.code.find(c) != null);
+    // The app shows its proposed code before creating; keep it unless it is taken.
+    const code = proposedOrRandomCode(ctx, proposed, 6, c => ctx.db.session.code.find(c) != null);
     const s = ctx.db.session.insert({
       id: 0n,
       code,
@@ -299,16 +301,34 @@ export const updateSessionContext = spacetimedb.reducer(
 
 // ── Pomodoro ──
 
+type HostSession = ReturnType<typeof requireHost>['session'];
+
+/** Stops a running timer: back to Lobby with a full work block, same as a fresh session. */
+function stopToLobby(ctx: Ctx, s: HostSession): HostSession {
+  if (s.state.tag !== 'Active' && s.state.tag !== 'Break') return s;
+  stopSessionTimers(ctx, s.id);
+  for (const m of activeMembersOf(ctx.db, s.id)) stopTracking(ctx, m.id);
+  return ctx.db.session.id.update({ ...s, state: tag('Lobby'), currentPhase: tag('Work'), phaseStartedAt: undefined, cycleNumber: 0 });
+}
+
+/** Changing the length while the timer runs stops it (host presses Start again). */
 export const setPomodoro = spacetimedb.reducer(
   { workSecs: t.u32(), breakSecs: t.u32() },
   (ctx, { workSecs, breakSecs }) => {
-    const { session: s } = requireHost(ctx);
-    if (s.state.tag !== 'Lobby') throw new SenderError('timer is locked once the session starts');
+    const { session: host } = requireHost(ctx);
+    if (host.state.tag === 'Ended') throw new SenderError('session has ended');
     if (workSecs < 60 || workSecs > 7200) throw new SenderError('work length must be 1 to 120 minutes');
     if (breakSecs < 60 || breakSecs > 3600) throw new SenderError('break length must be 1 to 60 minutes');
+    const s = stopToLobby(ctx, host);
     ctx.db.session.id.update({ ...s, pomodoroWorkSecs: workSecs, pomodoroBreakSecs: breakSecs });
   }
 );
+
+export const stopPomodoro = spacetimedb.reducer(ctx => {
+  const { session: s } = requireHost(ctx);
+  if (s.state.tag === 'Ended') throw new SenderError('session has ended');
+  stopToLobby(ctx, s);
+});
 
 export const startSession = spacetimedb.reducer(ctx => {
   const { session: s } = requireHost(ctx);

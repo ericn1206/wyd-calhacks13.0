@@ -19,4 +19,5 @@ export default {
   get settings() {
     return SessionSettings;
   },
+  code: __t.option(__t.string()),
 };
