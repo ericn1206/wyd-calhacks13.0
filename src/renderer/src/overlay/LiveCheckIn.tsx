@@ -68,6 +68,7 @@ function CallProgress({ endsAt, totalMs }: { endsAt: number | null; totalMs: num
 
 const CHECKIN_MS = 30_000 // matches CALL_DURATION_MS in useCircleCall.ts
 const INVITE_SECONDS = 3 // Join prompt for a teammate's check-in; skipped when it runs out
+const EMPTY_CALL_GRACE_MS = (INVITE_SECONDS + 2) * 1000 // my own call with nobody else in it is dropped after this
 
 /**
  * Real circle check-in. Joins the LiveKit room for this session code, and turns
@@ -134,6 +135,13 @@ export function LiveCheckIn({ sessionCode, displayName, corner, onActive, onLoca
     setInvite(null)
     circle.joinCall()
   }
+  // I started this call and nobody accepted the invite: close it instead of showing a video overlay for 30 s.
+  const hasOthers = circle.remotes.length > 0
+  useEffect(() => {
+    if (!circle.inCall || circle.callFrom || hasOthers) return
+    const id = window.setTimeout(() => circle.leaveCall(), EMPTY_CALL_GRACE_MS)
+    return () => window.clearTimeout(id)
+  }, [circle.inCall, circle.callFrom, hasOthers])
   const rosterKey = circle.peers.map((peer) => `${peer.peerId}:${peer.name}`).join('|')
 
   useEffect(() => {
