@@ -5,6 +5,7 @@ Set GEMINI_API_KEY. Grant Screen Recording if OCR comes back empty. Press q to c
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -27,7 +28,7 @@ ui_state = {"is_off_task": False, "reason": "Initializing screen check...", "che
 
 
 GEMINI_MODEL = "gemini-3.5-flash-lite"
-RATE_LIMIT_COOLDOWN_SEC = 60   # a 429'd key sits out this long
+RATE_LIMIT_COOLDOWN_SEC = 10   # a 429'd key sits out this long, unless Google names a retry delay
 BAD_KEY_COOLDOWN_SEC = 600     # an invalid/forbidden key sits out longer
 
 _keys = []
@@ -93,13 +94,16 @@ def _generate(prompt):
                 generation_config={"response_mime_type": "application/json"},
                 request_options={"timeout": 20},
             )
-        except (gexc.TooManyRequests, gexc.ResourceExhausted):
-            _cooldown_until[key] = time.monotonic() + RATE_LIMIT_COOLDOWN_SEC
+        except (gexc.TooManyRequests, gexc.ResourceExhausted) as e:
+            # Google's message names the quota hit (per-minute, tokens, per-day) and may carry a retry delay.
+            m = re.search(r"retry_delay\s*\{\s*seconds:\s*(\d+)|retry in ([\d.]+)s", str(e))
+            wait = float(m.group(1) or m.group(2)) if m else RATE_LIMIT_COOLDOWN_SEC
+            _cooldown_until[key] = time.monotonic() + wait
             limited += 1
-            print(f"gemini: key …{key[-4:]} rate-limited, trying the next", file=sys.stderr)
-        except (gexc.Unauthorized, gexc.PermissionDenied):
+            print(f"gemini: key …{key[-4:]} rate-limited, sitting out {wait:.0f}s: {e}", file=sys.stderr)
+        except (gexc.Unauthorized, gexc.PermissionDenied) as e:
             _cooldown_until[key] = time.monotonic() + BAD_KEY_COOLDOWN_SEC
-            print(f"gemini: key …{key[-4:]} rejected, skipping it for {BAD_KEY_COOLDOWN_SEC}s", file=sys.stderr)
+            print(f"gemini: key …{key[-4:]} rejected, skipping it for {BAD_KEY_COOLDOWN_SEC}s: {e}", file=sys.stderr)
     raise RuntimeError(f"TooManyRequests: all {len(_keys)} Gemini key(s) rate-limited or rejected ({limited} limited)")
 
 
