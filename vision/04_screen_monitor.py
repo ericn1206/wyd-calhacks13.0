@@ -96,7 +96,7 @@ def _generate(prompt):
             )
         except (gexc.TooManyRequests, gexc.ResourceExhausted) as e:
             # Google's message names the quota hit (per-minute, tokens, per-day) and may carry a retry delay.
-            m = re.search(r"retry_delay\s*\{\s*seconds:\s*(\d+)|retry in ([\d.]+)s", str(e))
+            m = re.search(r"retryDelay'?:\s*'(\d+)s|retry_delay\s*\{\s*seconds:\s*(\d+)", str(e))
             wait = float(m.group(1) or m.group(2)) if m else RATE_LIMIT_COOLDOWN_SEC
             _cooldown_until[key] = time.monotonic() + wait
             limited += 1
