@@ -1,7 +1,7 @@
 """Start the webcam detector and the screen monitor, then print face time.
 
 An interval is 5 seconds. Print face time when either streak hits 2:
-1. Gemini says the OCR text is off the study goal, twice in a row (webcam is ignored). The front app and named sites are context, not a hard block.
+1. The classifier (Ollama tev1 by default, or Gemini) says the OCR text is off the study goal, twice in a row (webcam is ignored). The front app and named sites are context, not a hard block.
 2. Screen looks on-task both intervals, and the webcam distracted both times.
 
 Electron stdin `clip <path>` is passed to the detector, which records 10 s before to 20 s after
@@ -23,6 +23,7 @@ STREAK_TO_FIRE = 2
 
 stop = threading.Event()
 STOP_GRACE_SEC = 4.0
+screen_module = None  # the loaded 04_screen_monitor, so a `classifier <name>` stdin line can switch it
 detector_proc = None  # the webcam detector child, so the watchdog can kill it
 _stopping = False
 _hard_exit = os._exit  # patched in tests
@@ -116,6 +117,9 @@ def install_signal_handlers():
 def forward_clip_requests(proc):
     """Pass `clip <path>` lines from Electron on to the detector. stdin closing means Electron is gone: stop."""
     for line in sys.stdin:
+        if line.startswith("classifier ") and screen_module is not None:
+            screen_module.set_classifier(line.split(None, 1)[1].strip())  # Demo menu switch, no restart
+            continue
         if not line.startswith(("clip ", "clip-cam ")) or stop.is_set():
             dbg(f'dropped stdin line (stopping={stop.is_set()}): {line.strip()[:80]}')
             continue
@@ -134,7 +138,7 @@ def forward_clip_requests(proc):
 def screen_vote(screen, goal, sites):
     """'off' is a screen hit. 'ok' is on-task. 'unknown' is blank or an error.
 
-    Gemini decides from the OCR text. The front app and the sites/apps the user mentioned are
+    The selected classifier (Ollama tev1 or Gemini) decides from the OCR text. The front app and the sites/apps the user mentioned are
     passed as context only (not a strict allowlist), so e.g. Google Calendar can still be on task.
     """
     if screen is None:
@@ -172,10 +176,11 @@ def main():
     threading.Thread(target=read_webcam, args=(proc,), daemon=True).start()
     threading.Thread(target=forward_clip_requests, args=(proc,), daemon=True).start()
 
+    global screen_module
     screen = None
     try:
-        screen = load_screen()
-        screen.setup_gemini()  # GEMINI_API_KEYS round robin (or the single GEMINI_API_KEY)
+        screen = screen_module = load_screen()
+        screen.set_classifier(os.environ.get("WYD_CLASSIFIER", "ollama"))
         screen.ensure_ocr()
     except SystemExit as err:
         print(f"screen monitor off: {err}", file=sys.stderr)

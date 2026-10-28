@@ -3,7 +3,7 @@ import { promises as fs } from 'fs'
 import { join } from 'path'
 import { ActivityMonitor } from './activityMonitor'
 import { createAgentSession } from './cartesiaAgent'
-import { requestClip, startFacetimeTrigger, stopFacetimeTrigger, type ClipInfo, type DetectorDebug } from './facetimeTrigger'
+import { requestClip, setClassifier, startFacetimeTrigger, stopFacetimeTrigger, type Classifier, type ClipInfo, type DetectorDebug } from './facetimeTrigger'
 import { clearClipDir, newClipPath, uploadClip } from './clipUpload'
 import type { SessionContext } from './claudeJudge'
 import { loadEnv } from './env'
@@ -22,7 +22,7 @@ const session = new SessionManager()
 type CheckInCorner = 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left'
 const preferencesPath = () => join(app.getPath('userData'), 'preferences.json')
 
-async function readPreferences(): Promise<{ checkInCorner: CheckInCorner }> {
+async function readPreferences(): Promise<{ checkInCorner: CheckInCorner; classifier?: Classifier }> {
   try {
     return JSON.parse(await fs.readFile(preferencesPath(), 'utf8'))
   } catch {
@@ -199,7 +199,11 @@ function handleClip(info: ClipInfo): void {
 
 function registerDesktopApi(): void {
   ipcMain.handle('wyd:preferences:get', readPreferences)
-  ipcMain.handle('wyd:preferences:set', (_e, update) => writePreferences(update))
+  ipcMain.handle('wyd:preferences:set', async (_e, update) => {
+    const next = await writePreferences(update)
+    if (update?.classifier) setClassifier(update.classifier)
+    return next
+  })
   ipcMain.handle('wyd:media:request', async () => {
     if (process.platform !== 'darwin') return { camera: true, microphone: true }
     const camera = await systemPreferences.askForMediaAccess('camera')
@@ -278,7 +282,7 @@ function registerDesktopApi(): void {
     stopFacetimeTrigger()
     monitor?.stop()
   })
-  ipcMain.handle('wyd:tracking:start', (_e, ctx: { subject: string; goals: string[]; sites?: string; notes?: string; camera?: string }) => {
+  ipcMain.handle('wyd:tracking:start', async (_e, ctx: { subject: string; goals: string[]; sites?: string; notes?: string; camera?: string }) => {
     const context: SessionContext = {
       subject: ctx.subject,
       goals: ctx.goals ?? [],
@@ -287,11 +291,12 @@ function registerDesktopApi(): void {
     }
     monitor?.setSessionContext(context)
     monitor?.start()
-    // Gemini judges the OCR text against what they said they are doing. Sites/notes are optional extra context.
+    // The classifier (Ollama tev1 by default, or Gemini; Demo menu) judges the OCR text against what they said they are doing. Sites/notes are optional extra context.
     const goalParts = [context.subject, ...context.goals, context.notes].map((part) => part.trim()).filter(Boolean)
     const goal = goalParts.filter((part, index) => goalParts.findIndex((item) => item.toLowerCase() === part.toLowerCase()) === index).join('. ') || 'study'
     const mentioned = [context.sites, context.notes].map((part) => part.trim()).filter(Boolean).join('. ')
-    startFacetimeTrigger(goal, publishFacetime, (offTask) => sendToRenderer('wyd:detector-status', offTask), recordDetectorDebug, handleClip, mentioned, ctx.camera ?? '')
+    const { classifier } = await readPreferences()
+    startFacetimeTrigger(goal, publishFacetime, (offTask) => sendToRenderer('wyd:detector-status', offTask), recordDetectorDebug, handleClip, mentioned, ctx.camera ?? '', classifier === 'gemini' ? 'gemini' : 'ollama')
   })
 
   ipcMain.handle('session:start', async () => {

@@ -14,7 +14,7 @@ Desktop build: `electron.vite.config.ts` (main/preload externalize deps; rendere
 | Use | Model | Where |
 |---|---|---|
 | Desktop judge + onboarding context | `gemini-3.5-flash-lite` | `src/main/claudeJudge.ts` (HTTPS `fetch`; strict subject match; spoken goals condensed) |
-| Screen OCR classification | `gemini-3.5-flash-lite` | `vision/04_screen_monitor.py` |
+| Screen OCR classification | `tev1` via local Ollama ≥ 0.35 (default, `OLLAMA_MODEL`, endpoint `/v1/systemone`); `gemini-3.5-flash-lite` selectable in Demo menu | `vision/04_screen_monitor.py` |
 | Worker judge + categorizer | `gemini-3.5-flash-lite` | `worker/claude.ts` (`fetch`; `MODEL` export) |
 | Planned primary judge | small model on AWS Inferentia | not built |
 
@@ -33,6 +33,7 @@ Desktop build: `electron.vite.config.ts` (main/preload externalize deps; rendere
 | `SPACETIME_URI` (default `wss://maincloud.spacetimedb.com`), `SPACETIME_DB` (default `calhacks-13-wyd`) | desktop main, `src/main/db/stdb.ts` (optional overrides) |
 | `WYD_DEBUG` (`1`/`0`; default on unless packaged) | desktop main, `src/main/db/debugLog.ts`: logs DB connect/subscribe/reducer calls/state changes to the terminal and `~/Library/Application Support/attentionmaxx/logs/stdb.log` |
 | `CARTESIA_API_KEY`, `CARTESIA_AGENT_ID` | `cartesiaAgent.ts` (voice intro; unrouted for now) · `CARTESIA_VOICE_ID` unused |
+| `WYD_CLASSIFIER` (`ollama`\|`gemini`) | Set by `src/main/facetimeTrigger.ts` from the `classifier` preference; default `ollama`. |
 | `GEMINI_API_KEYS` (comma-separated) or `GEMINI_API_KEY` | `vision/04_screen_monitor.py` (screen text → Gemini; env first, then `.env`). Several keys are used round robin; a 429'd key sits out Google's retry delay, else 10 s (the 429 text, naming the quota, goes to stderr); a rejected key 600 s; all unavailable → screen vote `unknown`. Desktop judge and worker read `GEMINI_API_KEY` only (`src/main/claudeJudge.ts`, `worker/claude.ts`). Not read by the renderer. |
 
 ## Commands

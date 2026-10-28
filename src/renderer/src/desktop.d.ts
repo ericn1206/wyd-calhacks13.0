@@ -8,8 +8,8 @@ declare global {
   interface Window {
     wydDesktop?: {
       platform: string
-      getPreferences(): Promise<{ checkInCorner?: CheckInCorner; dockDebug?: boolean }>
-      setPreferences(update: { checkInCorner?: CheckInCorner; dockDebug?: boolean }): Promise<{ checkInCorner: CheckInCorner; dockDebug?: boolean }>
+      getPreferences(): Promise<{ checkInCorner?: CheckInCorner; dockDebug?: boolean; classifier?: 'ollama' | 'gemini' }>
+      setPreferences(update: { checkInCorner?: CheckInCorner; dockDebug?: boolean; classifier?: 'ollama' | 'gemini' }): Promise<{ checkInCorner: CheckInCorner; dockDebug?: boolean; classifier?: 'ollama' | 'gemini' }>
       requestMediaPermissions(): Promise<{ camera: boolean; microphone: boolean }>
       setAlwaysOnTop(enabled: boolean): Promise<void>
       setIgnoreMouseEvents(enabled: boolean): Promise<void>

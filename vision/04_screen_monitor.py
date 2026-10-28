@@ -1,6 +1,6 @@
-"""Screen check for macOS. A local screenshot is OCR'd; Gemini sees the text, not the image.
+"""Screen check for macOS. A local screenshot is OCR'd; the classifier sees the text, not the image.
 
-Set GEMINI_API_KEY. Grant Screen Recording if OCR comes back empty. Press q to close the banner.
+Classifier: Ollama `tev1` (local, default) or Gemini (set GEMINI_API_KEY). Switch with set_classifier(). Grant Screen Recording if OCR comes back empty. Press q to close the banner.
 """
 
 import json
@@ -12,6 +12,8 @@ import tempfile
 import threading
 import time
 import traceback
+import urllib.error
+import urllib.request
 
 import cv2
 import numpy as np
@@ -26,6 +28,14 @@ OCR_BIN = os.path.join(tempfile.gettempdir(), "wyd_macos_vision_ocr")
 
 ui_state = {"is_off_task": False, "reason": "Initializing screen check...", "checking": False}
 
+
+CLASSIFIERS = ("ollama", "gemini")
+classifier = "ollama"
+
+OLLAMA_URL = "http://localhost:11434/v1/systemone"
+OLLAMA_MODEL = "tev1"          # `ollama pull tev1` (4B). tev1:0.8b is smaller and faster, less accurate.
+OLLAMA_TIMEOUT_SEC = 20
+OLLAMA_KEEP_ALIVE = "30m"      # keep the model loaded between 5 s checks
 
 GEMINI_MODEL = "gemini-3.5-flash-lite"
 RATE_LIMIT_COOLDOWN_SEC = 10   # a 429'd key sits out this long, unless Google names a retry delay
@@ -51,6 +61,14 @@ def _env_value(name):
             if key.strip() == name:
                 return val.strip().strip('"').strip("'")
     return ""
+
+
+def set_classifier(name):
+    """Switch the screen-text classifier at runtime ('ollama' or 'gemini'). Unknown names are ignored."""
+    global classifier
+    if name in CLASSIFIERS and name != classifier:
+        classifier = name
+        print(f"classifier: {name}", file=sys.stderr)
 
 
 def gemini_keys():
@@ -79,7 +97,10 @@ def _generate(prompt):
     global _next_key
     from google.api_core import exceptions as gexc
     if not _keys:
-        setup_gemini()
+        try:
+            setup_gemini()
+        except SystemExit as e:  # no key: surface as a readable error instead of killing the monitor
+            raise RuntimeError(str(e))
     limited = 0
     for _ in range(len(_keys)):
         key = _keys[_next_key % len(_keys)]
@@ -141,6 +162,48 @@ def capture_screen_text():
     return proc.stdout.strip()
 
 
+def _prompt_rules(user_goal, context):
+    context_block = f"\nContext: {context}\n" if context else ""
+    rules = f"""Is the text on screen NOT relevant to what the user said they are working on?
+
+User's goal: "{user_goal}"{context_block}
+Answer true when the screen content is not related to the goal or to organizing that work: a clearly different subject, messaging, social media, entertainment, games, shopping, or unrelated browsing.
+Answer false when the content is about the stated goal or a closely related subtopic that supports it (e.g. goal "algorithms" -> data structures, complexity, pseudocode, a specific algorithm article is fine; ancient history is not).
+Planning and organizing the work also counts as on task: calendar, to-do lists, notes, email or course pages about the task.
+Apps and sites the user named are expected, but they are not the only allowed ones: judge by what is on screen, not by which app it is in.
+If the text is too thin or ambiguous to tell, answer false."""
+    return rules
+
+
+def call_ollama_api(user_goal, screen_text, context=""):
+    """Local tev1 decision model: one true/false question. Returns {is_off_task, reason} like call_gemini_api."""
+    body = {
+        "model": OLLAMA_MODEL,
+        "state": screen_text[:1200],
+        "questions": {"is_off_task": {"type": "noul", "instructions": _prompt_rules(user_goal, context)}},
+        "keep_alive": OLLAMA_KEEP_ALIVE,
+    }
+    req = urllib.request.Request(OLLAMA_URL, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=OLLAMA_TIMEOUT_SEC) as resp:
+            data = json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode(errors="replace")[:200]
+        hint = f" Run: ollama pull {OLLAMA_MODEL}" if e.code == 404 else ""
+        raise RuntimeError(f"Ollama {e.code}: {detail}{hint}")
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        raise RuntimeError(f"Ollama not reachable at {OLLAMA_URL} ({e}). Start the Ollama app or `ollama serve`")
+    answer = (data.get("answers") or {}).get("is_off_task")
+    prob = answer.get("noul") if isinstance(answer, dict) else answer  # probability the answer is true
+    if isinstance(prob, dict):
+        prob = prob.get("true", prob.get("probability"))
+    if not isinstance(prob, (int, float)):
+        raise RuntimeError(f"Ollama: unexpected response {str(data)[:160]}")
+    off = prob >= 0.5
+    pct = round((prob if off else 1 - prob) * 100)
+    return {"is_off_task": off, "reason": f"{'Unrelated to goal' if off else 'Related to goal'} ({pct}%)"}
+
+
 def call_gemini_api(user_goal, screen_text, context=""):
     """`context`: front app and the sites/apps the user said they'd use (a guide, not a whitelist)."""
     context_block = f"\nContext: {context}\n" if context else ""
@@ -166,6 +229,13 @@ Return strict JSON with boolean is_off_task and reason (under 8 words).
     return data
 
 
+def classify(user_goal, screen_text, context=""):
+    """Dispatch to the selected classifier."""
+    if classifier == "gemini":
+        return call_gemini_api(user_goal, screen_text, context)
+    return call_ollama_api(user_goal, screen_text, context)
+
+
 def check_once(user_goal, context=""):
     ui_state["checking"] = True
     ui_state["ocr_chars"] = 0
@@ -177,13 +247,13 @@ def check_once(user_goal, context=""):
         if len(text) < 20:
             ui_state["reason"] = "Screen mostly desktop/blank"
             return
-        result = call_gemini_api(user_goal, text, context)
+        result = classify(user_goal, text, context)
         ui_state["is_off_task"] = bool(result.get("is_off_task", False))
         ui_state["reason"] = result.get("reason", "On task")
         print(f" -> {'OFF-TASK' if ui_state['is_off_task'] else 'ON-TASK'}: {ui_state['reason']}")
     except Exception as e:
         traceback.print_exc()
-        # RuntimeError carries a readable reason (e.g. every Gemini key rate-limited); keep it for the debug log.
+        # RuntimeError carries a readable reason (e.g. every Gemini key rate-limited, Ollama not running); keep it for the debug log.
         ui_state["reason"] = f"Error: {e}" if isinstance(e, RuntimeError) else f"Error: {type(e).__name__}"
     finally:
         ui_state["checking"] = False
@@ -211,11 +281,13 @@ def draw_overlay_banner(user_goal):
 
 
 if __name__ == "__main__":
-    setup_gemini()
+    set_classifier(os.environ.get("WYD_CLASSIFIER", "ollama"))
+    if classifier == "gemini":
+        setup_gemini()
     ensure_ocr()
 
     goal = input("What are you working on right now? (e.g. 'circuits'): ").strip() or "circuits"
-    print("Screen text is macOS Vision OCR, then Gemini. Grant Screen Recording if the text is empty. Press q to quit.")
+    print("Screen text is macOS Vision OCR, then the classifier (Ollama tev1 or Gemini). Grant Screen Recording if the text is empty. Press q to quit.")
     threading.Thread(target=worker, args=(goal,), daemon=True).start()
 
     cv2.namedWindow("WYD Monitor", cv2.WINDOW_AUTOSIZE)

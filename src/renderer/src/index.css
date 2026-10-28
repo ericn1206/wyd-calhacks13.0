@@ -419,6 +419,7 @@ input:checked + .fake-check { background: var(--purple); border-color: var(--pur
 .corner-setting small { display: block; margin-bottom: 6px; color: var(--muted); font-size: 8px; text-transform: uppercase; letter-spacing: .08em; }
 .corner-setting > div { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
 .corner-setting button { padding: 6px 0; text-align: center; border: 1px solid var(--line); }
+.corner-setting select { width: 100%; padding: 6px; font: inherit; font-size: 11px; color: inherit; background: #fff; border: 1px solid var(--line); border-radius: 6px; }
 .corner-setting button.active { color: #315f64; background: #dff3ee; border-color: #bcded8; }
 .glass-checkin { position: fixed; z-index: 18; display: flex; align-items: flex-start; flex-wrap: wrap; gap: 9px; max-width: calc(100vw - 48px); pointer-events: none; }
 .glass-checkin.corner-top-right { top: 128px; right: 24px; }

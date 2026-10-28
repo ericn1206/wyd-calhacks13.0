@@ -5,6 +5,9 @@ import { app } from 'electron'
 
 let child: ChildProcess | null = null
 
+/** Which model judges the OCR text: local Ollama `tev1` (default) or the Gemini API. */
+export type Classifier = 'ollama' | 'gemini'
+
 /** One `debug {...}` line from vision/facetime_trigger.py (one per 5 s interval), plus arrival time. */
 export interface DetectorDebug {
   t: number
@@ -55,7 +58,8 @@ export function startFacetimeTrigger(
   onDebug: (entry: DetectorDebug) => void,
   onClip: (info: ClipInfo) => void,
   sites = '',
-  cameraLabel = ''
+  cameraLabel = '',
+  classifier: Classifier = 'ollama'
 ): void {
   stopFacetimeTrigger()
   const root = projectRoot()
@@ -65,13 +69,13 @@ export function startFacetimeTrigger(
     console.error('[facetime] no vision/.venv. Run npm run setup:vision')
     return
   }
-  // Second argument: sites/apps they mentioned. Passed to Gemini as context, not a hard allowlist.
+  // Second argument: sites/apps they mentioned. Passed to the classifier as context, not a hard allowlist.
   const args = [script, goal]
   if (sites.trim()) args.push(sites)
   // stdin stays open: `clip <path>` lines request a session clip (see requestClip).
   // WYD_CAMERA_LABEL: the camera the check-in call uses; the detector (and so the clips) opens the same one.
   // WYD_APP_PID: the detector leaves this app's windows (overlay with the check-in tiles) out of the screen clip.
-  const proc = spawn(python, args, { cwd: root, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, WYD_APP_PID: String(process.pid), WYD_CAMERA_LABEL: cameraLabel } })
+  const proc = spawn(python, args, { cwd: root, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, WYD_APP_PID: String(process.pid), WYD_CAMERA_LABEL: cameraLabel, WYD_CLASSIFIER: classifier } })
   child = proc
   let pending = ''
   proc.stdout?.on('data', (buf: Buffer) => {
@@ -109,6 +113,14 @@ export function startFacetimeTrigger(
     if (child === proc) child = null
     console.log(`[facetime] trigger exited code=${code} signal=${signal}`)
   })
+}
+
+/** Switch the screen classifier of the running trigger (no restart). False when tracking is off. */
+export function setClassifier(classifier: Classifier): boolean {
+  const stdin = child?.stdin
+  if (!stdin || stdin.destroyed) return false
+  stdin.write(`classifier ${classifier}\n`)
+  return true
 }
 
 /** Ask the webcam detector for a 30 s clip (10 s before now, 20 s after) written to `path`. False when tracking is off. */

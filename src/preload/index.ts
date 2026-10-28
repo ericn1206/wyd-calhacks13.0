@@ -9,7 +9,7 @@ type CheckInCorner = 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left'
 contextBridge.exposeInMainWorld('wydDesktop', {
   platform: process.platform,
   getPreferences: () => ipcRenderer.invoke('wyd:preferences:get'),
-  setPreferences: (update: { checkInCorner?: CheckInCorner; dockDebug?: boolean }) => ipcRenderer.invoke('wyd:preferences:set', update),
+  setPreferences: (update: { checkInCorner?: CheckInCorner; dockDebug?: boolean; classifier?: 'ollama' | 'gemini' }) => ipcRenderer.invoke('wyd:preferences:set', update),
   requestMediaPermissions: () => ipcRenderer.invoke('wyd:media:request'),
   setAlwaysOnTop: (enabled: boolean) => ipcRenderer.invoke('wyd:window:always-on-top', enabled),
   setIgnoreMouseEvents: (enabled: boolean) => ipcRenderer.invoke('wyd:window:ignore-mouse', enabled),

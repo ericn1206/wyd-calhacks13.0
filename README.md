@@ -2,7 +2,7 @@
 
 Cal Hacks 13.0 project. An opt-in group focus app: when someone drifts off task for a while, the group gets a short surprise check-in call. Drifting feels social, not shameful. Each person gets a private summary at the end.
 
-The app is a **macOS-only Electron desktop app**. It talks to a hosted SpacetimeDB database (maincloud), uses Gemini to judge what's on your screen, and LiveKit Cloud for check-in calls.
+The app is a **macOS-only Electron desktop app**. It talks to a hosted SpacetimeDB database (maincloud), uses a local Ollama model (`tev1`, or the Gemini API) to judge what's on your screen, and LiveKit Cloud for check-in calls.
 
 ## What runs where
 
@@ -74,13 +74,33 @@ npm run setup:vision    # creates vision/.venv and installs mediapipe, opencv, n
 
 `setup:vision` ends with `vision ready: mediapipe 0.10.21 opencv 4.11.0`. If it says Python 3.12 is missing, run `PYTHON=/path/to/python3.12 npm run setup:vision`.
 
+### Install the on/off-task model (Ollama, default)
+
+Screen text is classified on your Mac by [`tev1`](https://ollama.com/library/tev1), so no API key is needed. Requires Ollama 0.35 or later.
+
+```bash
+brew install ollama        # or download the app from https://ollama.com/download
+ollama --version           # must be 0.35+; upgrade if older
+ollama serve               # skip if the Ollama menu-bar app is already running
+ollama pull tev1           # 4B, ~4.5 GB. Smaller/faster, less accurate: ollama pull tev1:0.8b
+```
+
+Check it responds:
+
+```bash
+curl http://localhost:11434/v1/systemone -d '{"model":"tev1","state":"Watching a cat video on YouTube","questions":{"off":{"type":"noul","instructions":"Is this unrelated to studying circuits?"}}}'
+```
+
+To use `tev1:0.8b`, change `OLLAMA_MODEL` in `vision/04_screen_monitor.py`. In the app, Demo menu → "Off-task classifier" switches between **Ollama (local tev1)** (default) and **Gemini API** (needs `GEMINI_API_KEY`, step 3) while a round is running.
+
 ## 3. Create `.env`
 
 Create `.env` in the repo root (it is gitignored; never commit keys):
 
 ```bash
 cat > .env <<'EOF'
-# Required: Gemini judges your screen text (drift detection + goal summaries)
+# Gemini API: goal summaries, and the screen judge when the Demo menu classifier is set to Gemini.
+# Not needed for the default Ollama classifier (step 2).
 GEMINI_API_KEY=
 
 # Required for check-in calls (LiveKit Cloud project: https://cloud.livekit.io)
@@ -102,7 +122,7 @@ Fill in the values:
 
 | Var | Where to get it | If missing |
 |---|---|---|
-| `GEMINI_API_KEY` | https://aistudio.google.com/apikey | Screen vote is `unknown`; the drift check-in can never fire |
+| `GEMINI_API_KEY` | https://aistudio.google.com/apikey | Gemini classifier selected: screen vote is `unknown`, the drift check-in can never fire. Ollama classifier: unaffected |
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | LiveKit Cloud project → Settings → Keys | Check-in calls fail to connect |
 
 Full env list: `docs/architecture/stack.md`.
@@ -261,7 +281,7 @@ The integration tests (database, compiler, lease) are skipped unless pointed at 
 |---|---|
 | `npm run setup:vision`: "Python 3.12 not found" | `brew install python@3.12` or `PYTHON=/path/to/python3.12 npm run setup:vision` |
 | `mediapipe` fails to install | Python must be 3.12 and the venv must be recreated: `rm -rf vision/.venv && npm run setup:vision` |
-| Drift never triggers | `GEMINI_API_KEY` missing/invalid, or Screen Recording not granted. Use the Demo menu → "Detector log" to see each verdict |
+| Drift never triggers | Ollama not running or `tev1` not pulled (Detector log shows `Error: Ollama …`), or with the Gemini classifier `GEMINI_API_KEY` missing/invalid, or Screen Recording not granted. Use the Demo menu → "Detector log" to see each verdict |
 | Gemini 429s | Add several keys: `GEMINI_API_KEYS=key1,key2` |
 | Camera is off / no webcam vote | Grant Camera to the terminal app, then restart it |
 | Check-in call won't connect | Check the three `LIVEKIT_*` vars; URL must start with `wss://` |
